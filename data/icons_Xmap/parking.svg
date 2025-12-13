@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300" viewBox="0 0 300 300"
+     style="--icon-stroke:#000; --icon-fill:#1976d2;">
+  <rect x="45" y="45" width="210" height="210" rx="26" fill="var(--icon-fill, none)"/>
+  <g fill="none" stroke="var(--icon-stroke, currentColor)" stroke-width="12" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="45" y="45" width="210" height="210" rx="26"/>
+    <path d="M125 230 V90 H170 C200 90 200 150 170 150 H125"/>
+  </g>
+</svg>

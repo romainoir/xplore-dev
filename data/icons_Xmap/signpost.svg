@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300" viewBox="0 0 300 300"
+     style="--icon-stroke:#000; --icon-fill:#1976d2;">
+  <g fill="var(--icon-fill, none)" stroke="none">
+    <path d="M85 85 H210 L250 115 L210 145 H85 Z"/>
+    <path d="M215 155 H90 L50 185 L90 215 H215 Z"/>
+  </g>
+  <g fill="none" stroke="var(--icon-stroke, currentColor)" stroke-width="12" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M150 55 V85"/>
+    <path d="M150 215 V275"/>
+    <path d="M85 85 H210 L250 115 L210 145 H85 Z"/>
+    <path d="M215 155 H90 L50 185 L90 215 H215 Z"/>
+  </g>
+</svg>

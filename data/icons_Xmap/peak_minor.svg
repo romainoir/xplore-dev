@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300" viewBox="0 0 300 300"
+     style="--icon-stroke:#000; --icon-fill:none;">
+  <!-- Fill -->
+  <path d="M35 230 L150 75 L265 230 Z" fill="var(--icon-fill, none)"/>
+
+  <!-- Stroke -->
+  <g fill="none" stroke="var(--icon-stroke, currentColor)" stroke-width="12" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M35 230 L150 75 L265 230 Z"/>
+    <path d="M95 165 L125 135 L150 155 L175 130 L210 160"/>
+  </g>
+</svg>

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300" viewBox="0 0 300 300"
+     style="--icon-stroke:#000; --icon-fill:#1976d2;">
+  <path fill="var(--icon-fill, none)" d="M150 60
+    C195 115 225 155 225 195
+    C225 245 190 270 150 270
+    C110 270 75 245 75 195
+    C75 155 105 115 150 60 Z"/>
+  <path fill="none" stroke="var(--icon-stroke, currentColor)" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"
+        d="M150 60
+           C195 115 225 155 225 195
+           C225 245 190 270 150 270
+           C110 270 75 245 75 195
+           C75 155 105 115 150 60 Z"/>
+</svg>

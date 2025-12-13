@@ -1,0 +1,189 @@
+{
+  "type": "FeatureCollection",
+  "name": "MatterhornOfflineNetwork",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Matterhorn Base Trail",
+        "costMultiplier": 1,
+        "hiking": {
+          "sacScale": "mountain_hiking",
+          "trailVisibility": "good",
+          "surface": "compacted"
+        }
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [7.6395, 45.9705, 1800],
+          [7.646, 45.974, 1850],
+          [7.6515, 45.9775, 1900],
+          [7.6586, 45.9763, 1950],
+          [7.6649, 45.9795, 2050],
+          [7.6712, 45.983, 2150],
+          [7.6775, 45.9875, 2250],
+          [7.6838, 45.9918, 2350],
+          [7.69, 45.996, 2450]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Hörnli Ridge",
+        "costMultiplier": 1.2,
+        "hiking": {
+          "sacScale": "alpine_hiking",
+          "trailVisibility": "intermediate",
+          "surface": "bare_rock"
+        }
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [7.6649, 45.9795, 2050],
+          [7.6695, 45.975, 2300],
+          [7.674, 45.971, 2600],
+          [7.6785, 45.967, 2900],
+          [7.683, 45.963, 3200],
+          [7.6875, 45.959, 3500]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Panorama Traverse",
+        "costMultiplier": 1.1,
+        "hiking": {
+          "sacScale": "demanding_mountain_hiking",
+          "trailVisibility": "intermediate",
+          "surface": "dirt"
+        }
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [7.6515, 45.9775, 1900],
+          [7.653, 45.984, 1950],
+          [7.656, 45.989, 2050],
+          [7.66, 45.994, 2150],
+          [7.665, 45.998, 2250],
+          [7.672, 46.0015, 2350],
+          [7.679, 46.005, 2450]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Glacier Traverse",
+        "costMultiplier": 1.3,
+        "hiking": {
+          "sacScale": "demanding_alpine_hiking",
+          "trailVisibility": "bad",
+          "surface": "glacier"
+        }
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [7.6712, 45.983, 2150],
+          [7.6768, 45.9795, 2250],
+          [7.6824, 45.976, 2350],
+          [7.688, 45.9725, 2450]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Summit Spur",
+        "costMultiplier": 1.4,
+        "hiking": {
+          "sacScale": "difficult_alpine_hiking",
+          "trailVisibility": "no",
+          "surface": "ice"
+        }
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [7.6875, 45.959, 3500],
+          [7.69, 45.955, 3650],
+          [7.6925, 45.9515, 3800],
+          [7.695, 45.948, 3950]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Access Road",
+        "costMultiplier": 0.9,
+        "hiking": {
+          "sacScale": "hiking",
+          "trailVisibility": "excellent",
+          "surface": "asphalt"
+        }
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [7.6395, 45.9705, 1800],
+          [7.645, 45.966, 1750],
+          [7.6505, 45.962, 1720],
+          [7.657, 45.958, 1700],
+          [7.6635, 45.954, 1680],
+          [7.67, 45.95, 1670],
+          [7.6765, 45.946, 1660]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Alpine Connector",
+        "costMultiplier": 1.05,
+        "hiking": {
+          "sacScale": "mountain_hiking",
+          "trailVisibility": "good",
+          "surface": "gravel"
+        }
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [7.6775, 45.9875, 2250],
+          [7.681, 45.991, 2320],
+          [7.685, 45.995, 2390],
+          [7.689, 45.999, 2460],
+          [7.693, 46.003, 2530]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Shoulder Link",
+        "costMultiplier": 1.15,
+        "hiking": {
+          "sacScale": "demanding_mountain_hiking",
+          "trailVisibility": "intermediate",
+          "surface": "rock"
+        }
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [7.6838, 45.9918, 2350],
+          [7.686, 45.988, 2400],
+          [7.6885, 45.984, 2450],
+          [7.691, 45.98, 2500],
+          [7.6935, 45.976, 2550]
+        ]
+      }
+    }
+  ]
+}

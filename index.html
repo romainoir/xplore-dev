@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="fr">
+
+<head>
+  <meta charset="utf-8" />
+  <title>XploreMap</title>
+  <link rel="icon" type="image/png" href="./data/logos/Xplore.png" />
+  <link rel="apple-touch-icon" href="./data/logos/Xplore.png" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+
+  <!-- MapLibre GL JS 5.9.0 -->
+  <link href="https://unpkg.com/maplibre-gl@5.9.0/dist/maplibre-gl.css" rel="stylesheet" />
+  <script src="https://unpkg.com/maplibre-gl@5.9.0/dist/maplibre-gl.js"></script>
+
+  <!-- PMTiles v4 -->
+  <script src="https://unpkg.com/pmtiles@4.3.0/dist/pmtiles.js"></script>
+
+  <!-- Contours (worker) -->
+  <script
+    src="https://unpkg.com/@acalcutt/maplibre-contour-pmtiles@latest/dist/maplibre-contour-pmtiles.min.js"></script>
+
+  <!-- Turf.js for route distance calculations -->
+  <script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script>
+
+  <!-- Google Fonts: Inter (UI) + JetBrains Mono (monospace numbers) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
+    rel="stylesheet">
+
+  <link rel="stylesheet" href="./styles/main.css" />
+  <script src="./maplibre-preload.js"></script>
+</head>
+
+<body>
+  <div id="map"></div>
+  <div class="vignette" aria-hidden="true"></div>
+
+  <!-- UI: View mode toggle -->
+  <div class="ui">
+    <div class="ui__row ui__row--directions">
+      <button id="directionsToggle" class="btn directions-toggle" type="button" aria-controls="directionsControl">
+        <img class="directions-toggle__icon" src="./data/icons_Xmap/route.svg" alt="" aria-hidden="true" loading="lazy"
+          decoding="async" />
+        <span class="sr-only">Plan your next adventure</span>
+      </button>
+    </div>
+  </div>
+
+  <div id="directionsDock" class="directions-dock" aria-hidden="true">
+    <div class="directions-swipe-handle" aria-hidden="true">
+      <span class="directions-swipe-handle__bar"></span>
+    </div>
+    <!-- Routing start tooltip - shown when dock opens with no waypoints -->
+    <div id="routingStartTooltip" class="routing-start-tooltip" aria-hidden="true">
+      <span class="routing-start-tooltip__text">Click on the map to begin routing</span>
+    </div>
+    <div id="directionsControl" class="directions-control" aria-live="polite" aria-hidden="true">
+      <!-- Elevation chart (top - expandable) -->
+      <div id="elevationCard" class="elevation-section elevation-section--collapsed chart-card--collapsed" role="group"
+        aria-label="Route elevation overview">
+        <div id="elevationChartBody" class="elevation-section__body" hidden aria-hidden="true">
+          <div class="elevation-section__chart-wrapper">
+            <div class="elevation-section__y-axis" id="elevationYAxisLabels">
+              <span class="chart-card__y-max"></span>
+              <span class="chart-card__y-min"></span>
+            </div>
+            <div id="elevationChart" class="elevation-chart" aria-hidden="true"></div>
+            <!-- Profile mode controls - positioned on the right side of the chart -->
+            <div class="profile-mode-sidebar" role="radiogroup" aria-label="Profile display mode">
+              <!-- Legend popup (appears on hover when hovering over a mode icon) -->
+              <div id="profileLegend" class="profile-legend" role="group" aria-label="Route overlay legend"
+                aria-hidden="true" data-ready="false"></div>
+              <button type="button" class="profile-mode-sidebar__item" data-profile-mode="slope" role="radio"
+                aria-checked="false" title="Pente">
+                <img src="./data/icons_Xmap/pente.png" alt="" aria-hidden="true" />
+                <span class="sr-only">Pente</span>
+              </button>
+              <button type="button" class="profile-mode-sidebar__item" data-profile-mode="surface" role="radio"
+                aria-checked="false" title="Surface">
+                <img src="./data/icons_Xmap/surface.png" alt="" aria-hidden="true" />
+                <span class="sr-only">Surface</span>
+              </button>
+              <button type="button" class="profile-mode-sidebar__item" data-profile-mode="category" role="radio"
+                aria-checked="false" title="Difficulté">
+                <img src="./data/icons_Xmap/difficulty.png" alt="" aria-hidden="true" />
+                <span class="sr-only">Difficulté</span>
+              </button>
+              <button type="button" class="profile-mode-sidebar__item" data-profile-mode="poi" role="radio"
+                aria-checked="false" title="POI">
+                <img src="./data/icons_Xmap/POI.png" alt="" aria-hidden="true" />
+                <span class="sr-only">POI</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Route stats / Day details (middle) -->
+      <div id="routeStats" class="route-stats" aria-live="polite"></div>
+      <!-- Toolbar buttons (bottom - always visible) -->
+      <div class="directions-header">
+        <div class="transport-modes" role="group" aria-label="Travel mode">
+          <button id="routeModeToggle" class="btn btn--icon btn--icon-only route-mode-toggle" type="button"
+            data-mode="foot-hiking" aria-pressed="true" aria-label="Snap to trails" title="Snap to trails">
+            <img class="route-mode-toggle__icon route-mode-toggle__icon--snap" src="./data/aimant.png" alt=""
+              aria-hidden="true" loading="lazy" decoding="async" />
+            <img class="route-mode-toggle__icon route-mode-toggle__icon--manual" src="./data/line.png" alt=""
+              aria-hidden="true" loading="lazy" decoding="async" />
+            <span class="sr-only">Toggle routing mode</span>
+          </button>
+        </div>
+        <div class="directions-actions">
+          <button id="swapDirectionsButton" class="btn btn--icon btn--icon-only" type="button" aria-label="Swap A and B"
+            title="Swap A and B">
+            <img src="./data/swap.png" alt="" aria-hidden="true" loading="lazy" decoding="async" />
+            <span class="sr-only">Swap A and B</span>
+          </button>
+          <button id="undoDirectionsButton" class="btn btn--icon btn--icon-only" type="button" aria-label="Undo"
+            title="Undo" disabled>
+            <img src="./data/undo.png" alt="" aria-hidden="true" loading="lazy" decoding="async" />
+            <span class="sr-only">Undo</span>
+          </button>
+          <button id="redoDirectionsButton" class="btn btn--icon btn--icon-only" type="button" aria-label="Redo"
+            title="Redo" disabled>
+            <img src="./data/redo.png" alt="" aria-hidden="true" loading="lazy" decoding="async" />
+            <span class="sr-only">Redo</span>
+          </button>
+          <button id="clearDirectionsButton" class="btn btn--icon btn--icon-only" type="button" aria-label="Clear"
+            title="Clear">
+            <img src="./data/clear.png" alt="" aria-hidden="true" loading="lazy" decoding="async" />
+            <span class="sr-only">Clear</span>
+          </button>
+          <button id="gpxImportButton" class="btn btn--icon btn--icon-only" type="button">
+            <img data-icon-id="gpx-import" alt="" aria-hidden="true" loading="lazy" decoding="async" />
+            <span class="sr-only">Import GPX</span>
+          </button>
+          <input id="gpxFileInput" class="sr-only" type="file" accept=".gpx,application/gpx+xml">
+          <button id="gpxExportButton" class="btn btn--icon btn--icon-only" type="button">
+            <img data-icon-id="gpx-export" alt="" aria-hidden="true" loading="lazy" decoding="async" />
+            <span class="sr-only">Export GPX</span>
+          </button>
+          <button id="toggleElevationButton" class="btn btn--icon btn--icon-only elevation-toggle" type="button"
+            aria-expanded="false" aria-controls="elevationChartBody" aria-label="Toggle elevation chart"
+            title="Toggle elevation chart">
+            <svg class="elevation-toggle__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z" fill="none" />
+              <path d="M22 6l-5 5-4-4-7 7H2v2h5l6-6 4 4 6-6v5h2V6z" fill="currentColor" />
+            </svg>
+            <span class="sr-only">Toggle elevation chart</span>
+          </button>
+          <button id="routingModeToggle" class="btn btn--icon btn--icon-only routing-mode-toggle" type="button"
+            data-routing-mode="offline" aria-pressed="true" title="Switch to online routing">
+            <img class="routing-mode-toggle__icon" data-icon-id="routing-offline" alt="" aria-hidden="true"
+              loading="lazy" decoding="async" />
+            <span class="routing-mode-toggle__spinner" aria-hidden="true"></span>
+            <span class="routing-mode-toggle__loading-text sr-only" aria-hidden="true" aria-live="polite">Loading
+              offline routing network…</span>
+            <span class="routing-mode-toggle__text sr-only">Offline routing</span>
+          </button>
+          <label id="debugNetworkControl" class="debug-network-control" hidden aria-hidden="true" role="button"
+            aria-pressed="false">
+            <input id="debugNetworkCheckbox" class="sr-only" type="checkbox"
+              aria-label="Toggle offline routing network debug" />
+            <img data-icon-id="debug-network" alt="" aria-hidden="true" loading="lazy" decoding="async" />
+            <span class="sr-only">Debug network</span>
+          </label>
+          <button id="directionsInfoButton" class="icon-button has-tooltip" type="button"
+            aria-label="Directions information" aria-describedby="directionsHint" title="How to use directions">
+            <svg viewBox="0 0 24 24" role="img" aria-hidden="true" focusable="false">
+              <path
+                d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm0 3.4a1.6 1.6 0 1 1 0 3.2 1.6 1.6 0 0 1 0-3.2Zm2.1 12.2h-4.2v-1.8h1v-3.8h-1V10h3.2v5.8h1z" />
+            </svg>
+            <span id="directionsHint" class="directions-hint" role="tooltip" aria-hidden="true">
+              Cliquez sur la carte pour définir le départ et l'arrivée ou ajouter des points intermédiaires. Clic droit
+              sur l'itinéraire pour découper en étapes. Déplacez les marqueurs pour ajuster ou double-cliquez pour les
+              supprimer.
+            </span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Imagery toggle -->
+  <div class="imagery-panel" id="imageryPanel">
+    <button id="imageryPanelToggle" class="imagery-panel__toggle" type="button" aria-expanded="false"
+      aria-controls="imageryPanelDrawer" aria-haspopup="true" title="Toggle imagery layers">
+      <span class="imagery-panel__toggle-icon" aria-hidden="true">
+        <img src="./data/layers.png" alt="" loading="lazy" decoding="async" />
+      </span>
+      <span class="sr-only">Toggle imagery layers</span>
+    </button>
+    <div class="imagery-panel__drawer" id="imageryPanelDrawer" hidden aria-hidden="true">
+      <div class="imagery-toggle" id="imageryToggle" role="group" aria-label="Imagery layers"></div>
+      <div class="imagery-panel__terrain" role="group" aria-label="Terrain controls">
+        <div class="imagery-panel__terrain-title">Terrain</div>
+        <div class="terrain-controls">
+          <button id="cycleHillshadeMethod" class="btn hillshade-method-button" type="button" title="Toggle hillshade"
+            aria-label="Toggle hillshade" aria-pressed="false">
+            <span class="hillshade-method-button__icon" aria-hidden="true">
+              <img src="./data/style.png" alt="" loading="lazy" decoding="async" />
+            </span>
+            <span class="hillshade-method-button__content">
+              <span class="hillshade-method-button__title">Hillshade</span>
+              <span class="hillshade-method-button__label" aria-live="polite">Method: Igor</span>
+            </span>
+          </button>
+          <button id="toggle3D" class="btn btn--icon-only toggle-3d" type="button" aria-pressed="true"
+            aria-label="Switch to 2D" title="Switch to 2D">
+            <img data-icon-id="view-toggle" alt="" aria-hidden="true" loading="lazy" decoding="async" />
+            <span class="sr-only">Toggle 2D/3D view</span>
+          </button>
+          <button id="terrainHdToggle" class="btn terrain-hd-button" type="button" aria-pressed="true"
+            title="Toggle high detail terrain" aria-label="Toggle high detail terrain">
+            High detail terrain
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="./scripts/main.js"></script>
+</body>
+
+</html>

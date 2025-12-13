@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300" viewBox="0 0 300 300"
+     style="--icon-stroke:#000; --icon-fill:#1976d2;">
+  <!-- Fill -->
+  <g fill="var(--icon-fill, none)" stroke="none">
+    <rect x="45"  y="115" width="95" height="135" rx="44"/>
+    <rect x="160" y="115" width="95" height="135" rx="44"/>
+    <circle cx="90"  cy="205" r="46"/>
+    <circle cx="210" cy="205" r="46"/>
+    <rect x="128" y="140" width="44" height="62" rx="16"/>
+    <circle cx="150" cy="185" r="8"/>
+
+    <!-- Boucles du haut (fermées + remplies) -->
+    <path d="M65 120 C65 85 120 85 120 120 L120 115 L65 115 Z"/>
+    <path d="M180 120 C180 85 235 85 235 120 L235 115 L180 115 Z"/>
+  </g>
+
+  <!-- Stroke -->
+  <g fill="none" stroke="var(--icon-stroke, currentColor)" stroke-width="12" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="45"  y="115" width="95" height="135" rx="44"/>
+    <rect x="160" y="115" width="95" height="135" rx="44"/>
+    <circle cx="90"  cy="205" r="46"/>
+    <circle cx="210" cy="205" r="46"/>
+    <rect x="128" y="140" width="44" height="62" rx="16"/>
+
+    <path d="M65 120 C65 85 120 85 120 120"/>
+    <path d="M180 120 C180 85 235 85 235 120"/>
+
+    <circle cx="150" cy="185" r="8"/>
+    <path d="M68 210 A22 22 0 0 1 88 190"/>
+    <path d="M188 210 A22 22 0 0 1 208 190"/>
+  </g>
+</svg>
