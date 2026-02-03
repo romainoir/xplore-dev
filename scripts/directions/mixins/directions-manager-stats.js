@@ -3980,8 +3980,8 @@ export class DirectionsManagerStatsMixin {
           <defs>
             ${gradientMarkup}
             <linearGradient id="elevation-fade-gradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stop-color="white" stop-opacity="0.8" />
-              <stop offset="100%" stop-color="white" stop-opacity="0.2" />
+              <stop offset="0%" stop-color="white" stop-opacity="1.0" />
+              <stop offset="100%" stop-color="white" stop-opacity="0.1" />
             </linearGradient>
             <mask id="elevation-fade-mask">
               <rect x="0" y="0" width="100" height="100" fill="url(#elevation-fade-gradient)" />
@@ -3991,6 +3991,8 @@ export class DirectionsManagerStatsMixin {
           <path class="elevation-area-fill" d="${areaPaths.fill}" 
                 fill="${gradientMarkup ? `url(#${gradientId})` : areaFillColor}"
                 mask="url(#elevation-fade-mask)" />
+          <path class="elevation-area-stroke" d="${areaPaths.stroke}" 
+                stroke="${gradientMarkup ? `url(#${gradientId})` : areaFillColor}" />
         </svg>
         `
       : '';
