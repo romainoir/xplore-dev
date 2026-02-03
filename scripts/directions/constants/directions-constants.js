@@ -70,6 +70,7 @@ export const POI_CATEGORY_PRIORITY = Object.freeze({
     'signpost': 50,
     'viewpoint': 40,
     'camera': 30,
+    'photo': 30,
     'cabin': 75,
     'shelter': 75,
     'alpine_hut': 75,

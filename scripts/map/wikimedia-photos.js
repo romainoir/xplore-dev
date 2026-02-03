@@ -331,7 +331,7 @@ async function updateThumbnailImages(mapInstance) {
                 }
 
                 if (fileName) {
-                    const url = `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(fileName)}?width=100`;
+                    const url = getPhotoThumbnailUrl(fileName, 200);
                     const imageData = await createCircularThumbnailImage(url);
                     if (!mapInstance.hasImage(imageId)) {
                         mapInstance.addImage(imageId, imageData);
@@ -408,9 +408,8 @@ async function fetchPhotoMetadata(title) {
 
 export function getPhotoThumbnailUrl(fileName, width = 400) {
     if (!fileName) return '';
-    // Remove common prefixes if they exist (File:, Fichier:, etc.)
-    const cleanName = fileName.replace(/^(File|Fichier|Image|Schermata|Datei|Archivio|Archivo|Imagem|Файл):/i, '');
-    return `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(cleanName)}?width=${width}`;
+    const cleanName = (fileName.includes(':') ? fileName.split(':').slice(1).join(':') : fileName).replace(/ /g, '_');
+    return `https://commons.wikimedia.org/w/index.php?title=Special:FilePath&file=${encodeURIComponent(cleanName)}&width=${width}`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

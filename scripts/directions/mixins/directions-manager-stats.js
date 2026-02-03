@@ -3393,15 +3393,15 @@ export class DirectionsManagerStatsMixin {
   }
 
   async refreshRoutePhotos() {
-    if (typeof isWikimediaPhotosVisible === 'function' && !isWikimediaPhotosVisible()) {
-      this.routePhotos = [];
-      return;
-    }
+    // Phase 1: Preparation (Coordinates & Bounds)
     const coordinates = this.routeGeojson?.geometry?.coordinates;
     if (!coordinates || coordinates.length < 2) {
       this.routePhotos = [];
       return;
     }
+
+    // Always fetch photos regardless of map layer state to ensure they are ready 
+    // when the user toggles the elevation sidebar. This matches working BAK behavior.
 
     // Calculate bounds manually
     let minLng = Infinity, maxLng = -Infinity, minLat = Infinity, maxLat = -Infinity;
@@ -3470,7 +3470,7 @@ export class DirectionsManagerStatsMixin {
             lat,
             distanceKm: nearest.properties.location,
             distanceToRouteKm: distKm,
-            thumbnailUrl: getPhotoThumbnailUrl(feature.properties.fileName, 100)
+            thumbnailUrl: getPhotoThumbnailUrl(feature.properties.fileName, 200)
           });
         }
       }
@@ -4047,8 +4047,8 @@ export class DirectionsManagerStatsMixin {
         });
       }
 
-      // Add Photos with smart clustering (only if enabled via sidebar)
-      const photoMarkers = (this.showElevationPhotos && Array.isArray(this.routePhotos)) ? this.routePhotos : [];
+      // Add Photos with smart clustering (always populate, visibility handled by CSS)
+      const photoMarkers = Array.isArray(this.routePhotos) ? this.routePhotos : [];
       if (this.showElevationPhotos) {
         console.log(`[updateElevationProfile] Photo markers enabled: ${photoMarkers.length} candidates.`, {
           hasRoutePhotos: Array.isArray(this.routePhotos),
@@ -4059,10 +4059,11 @@ export class DirectionsManagerStatsMixin {
 
       if (photoMarkers.length > 0) {
         // Smart photo clustering:
-        // 1. Cluster photos that are close together (within PHOTO_CLUSTER_PROXIMITY_KM)
+        // 1. Cluster photos that are close together (within 1km max or dynamic scale)
         // 2. Limit total clusters displayed to MAX_PHOTO_CLUSTERS
         // 3. Create consolidated cluster items with count badges
 
+        const totalDistance = Number(this.routeProfile?.totalDistanceKm) || 0;
         const PHOTO_CLUSTER_PROXIMITY_KM = Math.min(1.0, totalDistance / 15); // Dynamic: ~15 clusters max, but max 1km gap
         const MAX_PHOTO_CLUSTERS = 12;
 
@@ -4117,13 +4118,15 @@ export class DirectionsManagerStatsMixin {
         }
 
         // Create consolidated photo cluster items
+        // Important: We always add these to allMarkers to populate the DOM, 
+        // regardless of showElevationPhotos. Visibility is managed via CSS in updateElevationMarkerPositions.
         for (const cluster of photoClusters) {
           const mainPhoto = cluster[0];
           const clusterCount = cluster.length;
 
           allMarkers.push({
             type: 'photo',
-            categoryKey: 'camera', // Use 'camera' for better priority (30) from constants
+            categoryKey: 'photo', // Match BAK key
             distanceKm: mainPhoto.distanceKm,
             data: {
               ...mainPhoto,
@@ -4354,15 +4357,12 @@ export class DirectionsManagerStatsMixin {
                   const zIndex = 10 - (idx + 1);
 
                   if (stackItem.data && stackItem.data.thumbnailUrl) {
-                    stackMarkup += `<img src="${stackItem.data.thumbnailUrl}" class="elevation-marker__icon elevation-marker__icon--photo-stack" aria-hidden="true" style="position: absolute; top: 0; left: 0; width: 100%; max-height: 60px; border-radius: 6px; border: 2px solid white; z-index: ${zIndex}; transform: translate(${offsetX}px, ${offsetY}px) rotate(${rotation}deg); box-shadow: 0 2px 4px rgba(0,0,0,0.25);" />`;
+                    stackMarkup += `<div class="elevation-marker__icon elevation-marker__icon--photo-stack" aria-hidden="true" style="position: absolute; top: 0; left: 0; width: 100%; height: 35px; border-radius: 6px; border: 2px solid white; z-index: ${zIndex}; transform: translate(${offsetX}px, ${offsetY}px) rotate(${rotation}deg); box-shadow: 0 2px 4px rgba(0,0,0,0.25); background-image: url('${stackItem.data.thumbnailUrl}'); background-size: cover; background-position: center;"></div>`;
                   }
                 });
               }
 
-              // Main image on top - allow natural aspect ratio
-              // Removed loading="lazy" because markers are already filtered by view range and lazy loading 
-              // sometimes fails to trigger within high-frequency DOM updates/transforms of the chart.
-              const mainImg = `<img src="${poi.thumbnailUrl}" class="elevation-marker__icon elevation-marker__icon--photo" alt="${safeTitle}" style="position: relative; width: 100%; max-height: 60px; border-radius: 6px; border: 2px solid white; display: block; z-index: 20; box-shadow: 0 2px 6px rgba(0,0,0,0.3);" />`;
+              const mainImg = `<div class="elevation-marker__icon elevation-marker__icon--photo" style="position: relative; width: 100%; height: 35px; border-radius: 6px; border: 2px solid white; display: block; z-index: 20; box-shadow: 0 2px 6px rgba(0,0,0,0.3); background-image: url('${poi.thumbnailUrl}'); background-size: cover; background-position: center;"></div>`;
 
               // Count badge for clusters
               const countBadge = clusterCount > 1
