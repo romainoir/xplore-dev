@@ -901,7 +901,8 @@ async function init() {
     antialias: dprEnabled, // Performance: Disable MSAA if HD is off
     fadeDuration: TILE_FADE_DURATION,
     maxTileCacheSize: 1000, // Performance: Large cache for Omni-Lookup neighbors
-    refreshExpiredTiles: false // Performance: Prevent cyclical reloads for short TTL tiles
+    refreshExpiredTiles: false, // Performance: Prevent cyclical reloads for short TTL tiles
+    attributionControl: false
   });
 
   // Store map globally for access from UI controls
@@ -935,6 +936,7 @@ async function init() {
 
   // Add FPS control
   map.addControl(new MapboxFPS.FPSControl(), 'bottom-left');
+
 
   // Initialize Wikimedia Commons geotagged photos layer
   const wikimediaConfig = IMAGERY_OPTIONS.find(o => o.id === 'wikimedia-photos');
@@ -1912,6 +1914,8 @@ async function init() {
   // Functions removed as they are no longer needed for the consolidated bar
 
   map.on('load', async () => {
+    // Manually add AttributionControl in compact mode after load
+    map.addControl(new maplibregl.AttributionControl({ compact: true }));
     try {
       directionsManager = new DirectionsManager(map, [
         directionsToggle,
@@ -2664,8 +2668,15 @@ async function init() {
   let imageryOrder = [];
   const processedIds = new Set();
 
+  const SHADOW_TOOLBOX_IDS = ['shadow', 'detail-shading'];
+  const TERRAIN_TOOLBOX_IDS = ['aspect', 'slope', 'avalanche', 'normalmap', 'color-relief'];
+  const SNOW_TOOLBOX_IDS = ['snow', 'snow-depth'];
+
   IMAGERY_OPTIONS.forEach((option) => {
     if (processedIds.has(option.id)) return; // Already added via group expansion
+    if (TERRAIN_TOOLBOX_IDS.includes(option.id)) return; // Skip toolbox members in main panel order
+    if (SNOW_TOOLBOX_IDS.includes(option.id)) return;
+    if (SHADOW_TOOLBOX_IDS.includes(option.id)) return;
 
     // Filter out debug layers if not in debug mode
     const group = LAYER_GROUP_BY_MEMBER_ID.get(option.id);
@@ -2676,7 +2687,7 @@ async function init() {
     if (group) {
       // This is a group member - add all group members together
       group.members.forEach(memberId => {
-        if (!processedIds.has(memberId)) {
+        if (!processedIds.has(memberId) && !TERRAIN_TOOLBOX_IDS.includes(memberId) && !SNOW_TOOLBOX_IDS.includes(memberId) && !SHADOW_TOOLBOX_IDS.includes(memberId)) {
           imageryOrder.push(memberId);
           processedIds.add(memberId);
         }
@@ -2944,6 +2955,14 @@ async function init() {
   function setImageryPanelOpen(isOpen) {
     if (!imageryPanelDrawer) return;
     const open = Boolean(isOpen);
+
+    // If opening imagery panel, close toolboxes
+    if (open) {
+      if (typeof setTerrainToolboxOpen === 'function') setTerrainToolboxOpen(false);
+      if (typeof setSnowToolboxOpen === 'function') setSnowToolboxOpen(false);
+      if (typeof setShadowToolboxOpen === 'function') setShadowToolboxOpen(false);
+    }
+
     imageryPanelDrawer.classList.toggle('imagery-panel__drawer--open', open);
     if (imageryPanelToggle) {
       imageryPanelToggle.classList.toggle('active', open);
@@ -2958,6 +2977,7 @@ async function init() {
   }
 
   function updateImageryControlStates() {
+    if (!imageryToggle && !terrainToolbox) return;
     // Track which groups have at least one active member
     const activeGroupIds = new Set();
 
@@ -3129,13 +3149,118 @@ async function init() {
     updateActionsBarVisibility();
   }
 
+  // 8. Terrain Toolbox Logic
+  const terrainToolboxToggle = document.getElementById('terrainToolboxToggle');
+  const terrainToolbox = document.getElementById('terrainToolbox');
+
+  const setTerrainToolboxOpen = (open) => {
+    if (!terrainToolbox || !terrainToolboxToggle) return;
+    terrainToolbox.classList.toggle('visible', open);
+    terrainToolbox.setAttribute('aria-hidden', String(!open));
+    terrainToolboxToggle.setAttribute('aria-expanded', String(open));
+    terrainToolboxToggle.classList.toggle('active', open);
+    if (open) {
+      if (typeof setSnowToolboxOpen === 'function') setSnowToolboxOpen(false);
+      if (typeof setShadowToolboxOpen === 'function') setShadowToolboxOpen(false);
+    }
+  };
+
+  if (terrainToolboxToggle && terrainToolbox) {
+    terrainToolboxToggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isOpen = terrainToolbox.classList.contains('visible');
+      // Close imagery panel if open
+      if (!isOpen) setImageryPanelOpen(false);
+      setTerrainToolboxOpen(!isOpen);
+    });
+
+    // Close on outside click
+    document.addEventListener('click', (event) => {
+      if (!terrainToolbox.classList.contains('visible')) return;
+      if (terrainToolboxToggle.contains(event.target) || terrainToolbox.contains(event.target)) return;
+      setTerrainToolboxOpen(false);
+    });
+  }
+
+  // 9. Snow Toolbox Logic
+  const snowToolboxToggle = document.getElementById('snowToolboxToggle');
+  const snowToolbox = document.getElementById('snowToolbox');
+
+  const setSnowToolboxOpen = (open) => {
+    if (!snowToolbox || !snowToolboxToggle) return;
+    snowToolbox.classList.toggle('visible', open);
+    snowToolbox.setAttribute('aria-hidden', String(!open));
+    snowToolboxToggle.setAttribute('aria-expanded', String(open));
+    snowToolboxToggle.classList.toggle('active', open);
+    if (open) {
+      if (typeof setTerrainToolboxOpen === 'function') setTerrainToolboxOpen(false);
+      if (typeof setShadowToolboxOpen === 'function') setShadowToolboxOpen(false);
+    }
+  };
+
+  if (snowToolboxToggle && snowToolbox) {
+    snowToolboxToggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isOpen = snowToolbox.classList.contains('visible');
+      // Close imagery panel if open
+      if (!isOpen) setImageryPanelOpen(false);
+      setSnowToolboxOpen(!isOpen);
+    });
+
+    // Close on outside click
+    document.addEventListener('click', (event) => {
+      if (!snowToolbox.classList.contains('visible')) return;
+      if (snowToolboxToggle.contains(event.target) || snowToolbox.contains(event.target)) return;
+      setSnowToolboxOpen(false);
+    });
+  }
+
+  // 10. Shadow Toolbox Logic
+  const shadowToolboxToggle = document.getElementById('shadowToolboxToggle');
+  const shadowToolbox = document.getElementById('shadowToolbox');
+
+  const setShadowToolboxOpen = (open) => {
+    if (!shadowToolbox || !shadowToolboxToggle) return;
+    shadowToolbox.classList.toggle('visible', open);
+    shadowToolbox.setAttribute('aria-hidden', String(!open));
+    shadowToolboxToggle.setAttribute('aria-expanded', String(open));
+    shadowToolboxToggle.classList.toggle('active', open);
+    if (open) {
+      if (typeof setTerrainToolboxOpen === 'function') setTerrainToolboxOpen(false);
+      if (typeof setSnowToolboxOpen === 'function') setSnowToolboxOpen(false);
+    }
+  };
+
+  if (shadowToolboxToggle && shadowToolbox) {
+    shadowToolboxToggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isOpen = shadowToolbox.classList.contains('visible');
+      // Close imagery panel if open
+      if (!isOpen) setImageryPanelOpen(false);
+      setShadowToolboxOpen(!isOpen);
+    });
+
+    // Close on outside click
+    document.addEventListener('click', (event) => {
+      if (!shadowToolbox.classList.contains('visible')) return;
+      if (shadowToolboxToggle.contains(event.target) || shadowToolbox.contains(event.target)) return;
+      setShadowToolboxOpen(false);
+    });
+  }
+
   // Sync with DirectionsManager mode
   if (directionsManager) {
     // Initial sync of active state handled by DirectionsManager.setTransportMode
   }
 
   if (imageryToggle) {
-    imageryToggle.textContent = '';
+    const SHADOW_TOOLBOX_IDS = ['shadow', 'detail-shading'];
+    const TERRAIN_TOOLBOX_IDS = ['aspect', 'slope', 'avalanche', 'normalmap', 'color-relief'];
+    const SNOW_TOOLBOX_IDS = ['snow', 'snow-depth'];
+    if (terrainToolbox) terrainToolbox.textContent = '';
+    if (snowToolbox) snowToolbox.textContent = '';
+    if (shadowToolbox) shadowToolbox.textContent = '';
+
     if (!IMAGERY_OPTIONS.length) {
       imageryToggle.setAttribute('hidden', 'true');
       imageryToggle.setAttribute('aria-hidden', 'true');
@@ -3152,8 +3277,86 @@ async function init() {
         if (option.hiddenControl) {
           return;
         }
+
+        const isTerrainToolboxMember = TERRAIN_TOOLBOX_IDS.includes(option.id);
+        const isSnowToolboxMember = SNOW_TOOLBOX_IDS.includes(option.id);
+        const isShadowToolboxMember = SHADOW_TOOLBOX_IDS.includes(option.id);
         const state = imageryState.get(option.id) ?? { enabled: false, opacity: 0 };
         const group = LAYER_GROUP_BY_MEMBER_ID.get(option.id);
+
+        if (isTerrainToolboxMember || isSnowToolboxMember || isShadowToolboxMember) {
+          // Special rendering for Toolboxes: Streamlined circular buttons
+          const toggleButton = document.createElement('button');
+          toggleButton.type = 'button';
+          let btnClass = 'btn terrain-toolbox__toggle';
+          if (isSnowToolboxMember) btnClass = 'btn snow-toolbox__toggle';
+          if (isShadowToolboxMember) btnClass = 'btn shadow-toolbox__toggle';
+          toggleButton.className = btnClass;
+          toggleButton.dataset.imageryId = option.id;
+          toggleButton.setAttribute('aria-pressed', 'false');
+          toggleButton.setAttribute('title', option.label);
+          toggleButton.setAttribute('aria-label', option.label);
+
+          const previewUrl = typeof option.previewImage === 'string' && option.previewImage.length
+            ? option.previewImage
+            : createTilePreviewUrl(option.tileTemplate);
+
+          if (previewUrl) {
+            const img = document.createElement('img');
+            img.src = previewUrl;
+            img.alt = '';
+            img.loading = 'lazy';
+            img.decoding = 'async';
+            img.draggable = false;
+            toggleButton.appendChild(img);
+          }
+
+          const srLabel = document.createElement('span');
+          srLabel.className = 'sr-only';
+          srLabel.textContent = option.label;
+          toggleButton.appendChild(srLabel);
+
+          toggleButton.addEventListener('click', () => {
+            toggleButton.blur();
+            const current = imageryState.get(option.id);
+            if (!current) return;
+            const currentlyActive = Boolean(current.enabled && current.opacity > 0);
+            const nextEnabled = !currentlyActive;
+
+            // Handle exclusive group behavior
+            if (group && group.exclusive && nextEnabled) {
+              group.members.forEach(memberId => {
+                if (memberId !== option.id) {
+                  const memberState = imageryState.get(memberId);
+                  if (memberState) memberState.enabled = false;
+                }
+              });
+            }
+
+            current.enabled = nextEnabled;
+            if (nextEnabled && current.opacity <= 0) {
+              current.opacity = typeof option.defaultOpacity === 'number' ? option.defaultOpacity : 1.0;
+            }
+
+            applyImageryState();
+            updateImageryControlStates();
+            applyImageryLayerOrder();
+          });
+
+          let targetToolbox = terrainToolbox;
+          if (isSnowToolboxMember) targetToolbox = snowToolbox;
+          if (isShadowToolboxMember) targetToolbox = shadowToolbox;
+          if (targetToolbox) targetToolbox.appendChild(toggleButton);
+
+          imageryControls.set(option.id, {
+            container: toggleButton,
+            button: toggleButton,
+            slider: null,
+            sliderWrapper: null,
+            isGroupMember: false
+          });
+          return; // Skip standard rendering
+        }
 
         // Filter out debug layers if not in debug mode
         if (group && group.id === 'debug' && !window.XploreDebug) {

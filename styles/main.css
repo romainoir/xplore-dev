@@ -255,6 +255,115 @@ body {
   transform: scale(1) translateY(0);
 }
 
+/* Terrain Toolbox (Right Sidebar) */
+.imagery-panel__control-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+}
+
+.terrain-toolbox,
+.snow-toolbox,
+.shadow-toolbox {
+  position: absolute;
+  top: calc(100% + 12px);
+  left: 50%;
+  transform: translateX(-50%) scale(0.95) translateY(-10px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  background: var(--glass-surface-strong);
+  backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+  border-radius: 20px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  pointer-events: auto;
+  z-index: 100;
+
+  /* Animation properties matched with directions-actions-bar */
+  opacity: 0;
+  visibility: hidden;
+  max-height: 0;
+  padding: 0 4px;
+  overflow: hidden;
+  transition: opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1),
+    transform 0.6s cubic-bezier(0.4, 0, 0.2, 1),
+    max-height 0.7s cubic-bezier(0.4, 0, 0.2, 1),
+    padding 0.7s cubic-bezier(0.4, 0, 0.2, 1),
+    visibility 0.6s;
+}
+
+.terrain-toolbox.visible,
+.snow-toolbox.visible,
+.shadow-toolbox.visible {
+  opacity: 1;
+  visibility: visible;
+  max-height: 800px;
+  padding: 10px 4px;
+  transform: translateX(-50%) scale(1) translateY(0);
+}
+
+/* Toolbox Active States - Standardized Glow */
+.terrain-toolbox-toggle.active,
+.snow-toolbox-toggle.active,
+.shadow-toolbox-toggle.active {
+  background: var(--glass-surface-strong) !important;
+  border-color: rgba(39, 174, 96, 0.6) !important;
+  box-shadow: 0 0 15px rgba(39, 174, 96, 0.35), 0 4px 15px rgba(0, 0, 0, 0.4) !important;
+}
+
+.terrain-toolbox .btn.terrain-toolbox__toggle,
+.snow-toolbox .btn.snow-toolbox__toggle,
+.shadow-toolbox .btn.shadow-toolbox__toggle {
+  width: 44px !important;
+  height: 44px !important;
+  border-radius: 50% !important;
+  padding: 0 !important;
+  margin: 2px 0 !important;
+  background: var(--glass-surface-strong) !important;
+  border: 1px solid var(--glass-border) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.2s ease, background 0.2s ease !important;
+  cursor: pointer !important;
+  flex-shrink: 0 !important;
+  overflow: hidden !important;
+  /* Ensure thumbnail doesn't overflow circular button */
+}
+
+.terrain-toolbox .btn.terrain-toolbox__toggle:hover,
+.snow-toolbox .btn.snow-toolbox__toggle:hover,
+.shadow-toolbox .btn.shadow-toolbox__toggle:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+  border-color: rgba(255, 255, 255, 0.3) !important;
+  transform: scale(1.08) !important;
+}
+
+.terrain-toolbox .btn.terrain-toolbox__toggle.active,
+.snow-toolbox .btn.snow-toolbox__toggle.active,
+.shadow-toolbox .btn.shadow-toolbox__toggle.active {
+  background: rgba(39, 174, 96, 0.25) !important;
+  border-color: rgba(39, 174, 96, 0.6) !important;
+  box-shadow: 0 0 12px rgba(39, 174, 96, 0.4) !important;
+}
+
+.terrain-toolbox .btn.terrain-toolbox__toggle img,
+.snow-toolbox .btn.snow-toolbox__toggle img,
+.shadow-toolbox .btn.shadow-toolbox__toggle img {
+  width: 100% !important;
+  /* Fill the button for thumbnails */
+  height: 100% !important;
+  filter: none !important;
+  /* Show original colors for thumbnails */
+  object-fit: cover !important;
+  display: block !important;
+}
+
+/* Toolbox Toggles handled in Premium Map Controls section */
+
 .directions-actions-bar__separator {
   width: 24px;
   height: 1px;
@@ -3614,6 +3723,9 @@ body {
 .maplibregl-ctrl-top-right button,
 .imagery-panel__toggle,
 .imagery-panel__buttons .toggle-3d,
+.terrain-toolbox-toggle,
+.snow-toolbox-toggle,
+.shadow-toolbox-toggle,
 .directions-toggle {
   width: 48px !important;
   height: 48px !important;
@@ -3635,6 +3747,9 @@ body {
 .maplibregl-ctrl-top-right button:hover,
 .imagery-panel__toggle:hover,
 .imagery-panel__buttons .toggle-3d:hover,
+.terrain-toolbox-toggle:hover,
+.snow-toolbox-toggle:hover,
+.shadow-toolbox-toggle:hover,
 .directions-toggle:hover {
   transform: scale(1.08);
   background: rgba(255, 255, 255, 0.1) !important;
@@ -3656,7 +3771,10 @@ body {
 
 /* Standardize icons (Imagery panel) - Inverted for dark theme */
 .imagery-panel__toggle-icon img,
-.imagery-panel__buttons .toggle-3d img {
+.imagery-panel__buttons .toggle-3d img,
+.terrain-toolbox-toggle img,
+.snow-toolbox-toggle img,
+.shadow-toolbox-toggle img {
   width: 24px !important;
   height: 24px !important;
   filter: brightness(0) invert(1) opacity(0.9) !important;
@@ -4770,4 +4888,67 @@ body {
 .shadow-time-control__btn:hover {
   background: rgba(114, 140, 108, 0.5);
   border-color: rgba(114, 140, 108, 0.5);
+}
+
+/* Attribution Control - Force Collapsed by Default */
+.maplibregl-ctrl-bottom-right,
+.maplibregl-ctrl-bottom-right .maplibregl-ctrl {
+  margin: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+}
+
+.maplibregl-ctrl-attrib {
+  background-color: transparent !important;
+  border-radius: 50% !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  min-height: 24px !important;
+  min-width: 24px !important;
+  position: absolute !important;
+  bottom: 0 !important;
+  right: 0 !important;
+  border: none !important;
+  box-shadow: none !important;
+  overflow: visible !important;
+}
+
+/* Style the button as a clean circular icon */
+.maplibregl-ctrl-attrib .maplibregl-ctrl-attrib-button {
+  width: 24px !important;
+  height: 24px !important;
+  background-color: rgba(255, 255, 255, 0.7) !important;
+  border-radius: 50% !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  cursor: pointer !important;
+  position: absolute !important;
+  bottom: 0 !important;
+  right: 0 !important;
+  list-style: none !important;
+  outline: none !important;
+}
+
+.maplibregl-ctrl-attrib .maplibregl-ctrl-attrib-button::-webkit-details-marker {
+  display: none !important;
+}
+
+/* Hide the attribution text by default - only show the button */
+.maplibregl-ctrl-attrib .maplibregl-ctrl-attrib-inner {
+  display: none !important;
+}
+
+/* Show content ONLY when user hovers over the control */
+.maplibregl-ctrl-attrib:hover {
+  background-color: rgba(255, 255, 255, 0.85) !important;
+  border-radius: 12px !important;
+  padding: 4px 8px !important;
+}
+
+.maplibregl-ctrl-attrib:hover .maplibregl-ctrl-attrib-inner,
+.maplibregl-ctrl-attrib:focus-within .maplibregl-ctrl-attrib-inner {
+  display: block !important;
 }

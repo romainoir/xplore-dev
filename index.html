@@ -327,6 +327,42 @@
         <span class="toggle-3d__label">3D</span>
         <span class="sr-only">Toggle 2D/3D view</span>
       </button>
+      <div class="imagery-panel__control-group">
+        <button id="shadowToolboxToggle" class="btn shadow-toolbox-toggle" type="button" aria-expanded="false"
+          aria-controls="shadowToolbox" title="Shadow Analysis">
+          <img src="./data/sun.png" alt="" loading="lazy" decoding="async" />
+          <span class="sr-only">Shadow Analysis</span>
+        </button>
+
+        <div id="shadowToolbox" class="shadow-toolbox" aria-hidden="true">
+          <!-- Content populated by JS -->
+        </div>
+      </div>
+
+      <div class="imagery-panel__control-group">
+        <button id="terrainToolboxToggle" class="btn terrain-toolbox-toggle" type="button" aria-expanded="false"
+          aria-controls="terrainToolbox" title="Terrain Analysis">
+          <img src="./data/terrain.png" alt="" loading="lazy" decoding="async" />
+          <span class="sr-only">Terrain Analysis</span>
+        </button>
+
+        <div id="terrainToolbox" class="terrain-toolbox" aria-hidden="true">
+          <!-- Content populated by JS -->
+        </div>
+      </div>
+
+      <div class="imagery-panel__control-group">
+        <button id="snowToolboxToggle" class="btn snow-toolbox-toggle" type="button" aria-expanded="false"
+          aria-controls="snowToolbox" title="Snow Analysis">
+          <img src="./data/snowflake.png" alt="" loading="lazy" decoding="async" />
+          <span class="sr-only">Snow Analysis</span>
+        </button>
+
+        <div id="snowToolbox" class="snow-toolbox" aria-hidden="true">
+          <!-- Content populated by JS -->
+        </div>
+      </div>
+
       <button id="imageryPanelToggle" class="imagery-panel__toggle" type="button" aria-expanded="false"
         aria-controls="imageryPanelDrawer" aria-haspopup="true" title="Toggle imagery layers">
         <span class="imagery-panel__toggle-icon" aria-hidden="true">
