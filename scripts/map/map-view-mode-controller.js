@@ -128,6 +128,11 @@ export function createViewModeController(map, options = {}) {
     toggleButton.setAttribute('aria-pressed', String(is3D));
     toggleButton.setAttribute('aria-label', nextLabel);
     toggleButton.setAttribute('title', nextLabel);
+
+    const label = toggleButton.querySelector('.toggle-3d__label');
+    if (label) {
+      label.textContent = is3D ? '2D' : '3D';
+    }
   }
 
   function updateVignette() {

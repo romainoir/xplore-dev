@@ -3117,36 +3117,9 @@ body {
   gap: 8px;
 }
 
-.imagery-panel__buttons .toggle-3d {
-  width: 44px;
-  height: 44px;
-  padding: 10px;
-  border-radius: var(--glass-radius);
-  border: 1px solid var(--glass-border);
-  background: var(--glass-surface);
-  box-shadow: inset 0 1px 0 var(--glass-highlight), var(--glass-shadow);
-  backdrop-filter: blur(var(--glass-blur));
-}
-
 .imagery-panel__buttons .toggle-3d img {
   width: 24px;
   height: 24px;
-}
-
-.imagery-panel__toggle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 46px;
-  height: 46px;
-  border-radius: var(--glass-radius);
-  border: 1px solid var(--glass-border);
-  background: var(--glass-surface-strong);
-  color: #fff;
-  box-shadow: inset 0 1px 0 var(--glass-highlight), var(--glass-shadow);
-  cursor: pointer;
-  transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, color 0.2s ease;
-  backdrop-filter: blur(var(--glass-blur));
 }
 
 .imagery-panel__toggle:hover,
@@ -3645,6 +3618,124 @@ body {
   .geocoder-container--top-center {
     top: calc(12px + env(safe-area-inset-top, 0px));
   }
+}
+
+/* Offset MapLibre controls to avoid overlap with header and imagery panel */
+/* Premium Circular Map Controls - Robust Implementation */
+.maplibregl-ctrl-top-right {
+  top: clamp(140px, 18vh, 160px) !important;
+  right: calc(16px + env(safe-area-inset-right, 0px)) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 12px !important;
+  pointer-events: none !important;
+}
+
+.maplibregl-ctrl-top-right>*,
+.imagery-panel__buttons {
+  pointer-events: auto !important;
+  background: none !important;
+  border: none !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  margin: 0 !important;
+}
+
+/* Base style for all circular map buttons */
+.maplibregl-ctrl-top-right button,
+.imagery-panel__toggle,
+.imagery-panel__buttons .toggle-3d {
+  width: 48px !important;
+  height: 48px !important;
+  background: #ffffff !important;
+  border: none !important;
+  border-radius: 50% !important;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.22) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+  transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.2s ease !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: visible !important;
+}
+
+.maplibregl-ctrl-top-right button:hover,
+.imagery-panel__toggle:hover,
+.imagery-panel__buttons .toggle-3d:hover {
+  transform: scale(1.08);
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3) !important;
+  z-index: 10 !important;
+}
+
+/* 3D Button Text */
+.toggle-3d__label {
+  font-family: var(--font-ui);
+  font-size: 15px;
+  font-weight: 800;
+  color: #133540 !important;
+  letter-spacing: -0.5px;
+  user-select: none;
+  line-height: 1;
+}
+
+/* Standardize icons (Imagery panel) */
+.imagery-panel__toggle-icon img,
+.imagery-panel__buttons .toggle-3d img {
+  width: 24px !important;
+  height: 24px !important;
+  filter: brightness(0) saturate(100%) invert(15%) sepia(30%) saturate(600%) hue-rotate(185deg) brightness(95%) contrast(90%) !important;
+}
+
+/* Robust Compass Design - Final Correct Targeting */
+.maplibregl-ctrl-compass .maplibregl-ctrl-icon {
+  background-image: none !important;
+  width: 32px !important;
+  height: 32px !important;
+  display: block !important;
+  position: relative !important;
+  margin: 0 !important;
+}
+
+/* The Needle Base */
+.maplibregl-ctrl-compass .maplibregl-ctrl-icon::before,
+.maplibregl-ctrl-compass .maplibregl-ctrl-icon::after {
+  content: '' !important;
+  position: absolute !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  width: 0 !important;
+  height: 0 !important;
+  border-left: 7px solid transparent !important;
+  border-right: 7px solid transparent !important;
+}
+
+/* North Needle (Red) */
+.maplibregl-ctrl-compass .maplibregl-ctrl-icon::before {
+  bottom: 50% !important;
+  border-bottom: 14px solid #f03e3e !important;
+}
+
+/* South Needle (Black) */
+.maplibregl-ctrl-compass .maplibregl-ctrl-icon::after {
+  top: 50% !important;
+  border-top: 14px solid #2d3436 !important;
+}
+
+/* Robust Geolocate Icon (Blue target) */
+.maplibregl-ctrl-geolocate .maplibregl-ctrl-icon {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='8' fill='%230984e3' fill-opacity='0.15'/%3E%3Ccircle cx='12' cy='12' r='4' fill='%230984e3'/%3E%3Cpath d='M12 2L15 6H9L12 2Z' fill='%230984e3'/%3E%3C/svg%3E") !important;
+  background-size: 30px !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+  width: 32px !important;
+  height: 32px !important;
+  display: block !important;
+}
+
+.maplibregl-ctrl-geolocate.maplibregl-ctrl-geolocate-active .maplibregl-ctrl-icon {
+  filter: drop-shadow(0 0 4px rgba(9, 132, 227, 0.4)) !important;
 }
 
 .maplibregl-ctrl-geocoder {

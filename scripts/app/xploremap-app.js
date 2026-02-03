@@ -917,6 +917,15 @@ async function init() {
   // Initialize geocoder control (top-center for visibility)
   initializeGeocoder(map, { position: 'top-center' });
 
+  // Add Geolocate Control
+  map.addControl(new maplibregl.GeolocateControl({
+    positionOptions: {
+      enableHighAccuracy: true
+    },
+    trackUserLocation: true,
+    showUserHeading: true
+  }), 'top-right');
+
   // Add standard Navigation Control (zoom/compass)
   map.addControl(new maplibregl.NavigationControl({
     showCompass: true,
