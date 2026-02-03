@@ -265,20 +265,21 @@ body {
 .directions-actions-bar .btn {
   width: 40px !important;
   height: 40px !important;
-  border-radius: 10px !important;
-  padding: 8px !important;
-  background: var(--glass-surface);
-  border: 1px solid var(--glass-border);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s ease;
+  border-radius: 50% !important;
+  padding: 0 !important;
+  background: var(--glass-surface-strong) !important;
+  border: 1px solid var(--glass-border) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.2s ease, background 0.2s ease !important;
+  cursor: pointer !important;
 }
 
 .directions-actions-bar .btn:hover:not(:disabled) {
-  background: var(--glass-surface-strong);
-  border-color: rgba(255, 255, 255, 0.3);
-  transform: translateY(-1px);
+  background: rgba(255, 255, 255, 0.1) !important;
+  border-color: rgba(255, 255, 255, 0.3) !important;
+  transform: scale(1.08) !important;
 }
 
 .directions-actions-bar .btn:disabled {
@@ -414,8 +415,8 @@ body {
 
 .ui {
   position: absolute;
-  top: calc((24px + 64px + env(safe-area-inset-top, 0px)) / var(--ui-scale));
-  left: calc((24px + env(safe-area-inset-left, 0px)) / var(--ui-scale));
+  top: clamp(66px, 8vh, 80px);
+  left: calc(16px + env(safe-area-inset-left, 0px));
   bottom: auto;
   z-index: 2;
   display: flex;
@@ -523,50 +524,18 @@ body {
   flex: 0 0 auto;
 }
 
-.directions-toggle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 46px;
-  height: 46px;
-  padding: 0;
-  border-radius: var(--glass-radius);
-  gap: 0;
-  border: 1px solid var(--glass-border);
-  background: var(--glass-surface-strong);
-  box-shadow: inset 0 1px 0 var(--glass-highlight), var(--glass-shadow);
-  backdrop-filter: blur(var(--glass-blur));
-  cursor: pointer;
-  transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
-}
-
-.directions-toggle:hover,
-.directions-toggle:focus-visible {
-  background: rgba(17, 34, 48, 0.08);
-  border-color: rgba(17, 34, 48, 0.28);
-  outline: none;
-}
-
-.directions-toggle:focus-visible {
-  box-shadow: 0 0 0 3px rgba(114, 140, 108, 0.55), inset 0 1px 0 var(--glass-highlight), var(--glass-shadow);
-}
-
-.directions-toggle:active {
-  transform: translateY(1px) scale(0.98);
-}
-
 .directions-toggle.active {
-  background: #27ae60;
-  border-color: #2ecc71;
-  box-shadow: 0 0 12px rgba(39, 174, 96, 0.4);
+  background: rgba(39, 174, 96, 0.25) !important;
+  border-color: rgba(39, 174, 96, 0.6) !important;
+  box-shadow: 0 0 15px rgba(39, 174, 96, 0.35), 0 4px 15px rgba(0, 0, 0, 0.4) !important;
 }
 
 .directions-toggle__icon {
-  width: 24px;
-  height: 24px;
+  width: 24px !important;
+  height: 24px !important;
   display: block;
   object-fit: contain;
-  filter: brightness(0) invert(1);
+  filter: brightness(0) invert(1) opacity(0.9) !important;
 }
 
 
@@ -3644,18 +3613,20 @@ body {
 /* Base style for all circular map buttons */
 .maplibregl-ctrl-top-right button,
 .imagery-panel__toggle,
-.imagery-panel__buttons .toggle-3d {
+.imagery-panel__buttons .toggle-3d,
+.directions-toggle {
   width: 48px !important;
   height: 48px !important;
-  background: #ffffff !important;
-  border: none !important;
+  background: var(--glass-surface-strong) !important;
+  backdrop-filter: blur(var(--glass-blur)) !important;
+  border: 1px solid var(--glass-border) !important;
   border-radius: 50% !important;
-  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.22) !important;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4) !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
   cursor: pointer !important;
-  transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.2s ease !important;
+  transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.2s ease, background 0.2s ease !important;
   margin: 0 !important;
   padding: 0 !important;
   overflow: visible !important;
@@ -3663,9 +3634,11 @@ body {
 
 .maplibregl-ctrl-top-right button:hover,
 .imagery-panel__toggle:hover,
-.imagery-panel__buttons .toggle-3d:hover {
+.imagery-panel__buttons .toggle-3d:hover,
+.directions-toggle:hover {
   transform: scale(1.08);
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3) !important;
+  background: rgba(255, 255, 255, 0.1) !important;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.5) !important;
   z-index: 10 !important;
 }
 
@@ -3674,18 +3647,19 @@ body {
   font-family: var(--font-ui);
   font-size: 15px;
   font-weight: 800;
-  color: #133540 !important;
+  color: #ffffff !important;
   letter-spacing: -0.5px;
   user-select: none;
   line-height: 1;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
 }
 
-/* Standardize icons (Imagery panel) */
+/* Standardize icons (Imagery panel) - Inverted for dark theme */
 .imagery-panel__toggle-icon img,
 .imagery-panel__buttons .toggle-3d img {
   width: 24px !important;
   height: 24px !important;
-  filter: brightness(0) saturate(100%) invert(15%) sepia(30%) saturate(600%) hue-rotate(185deg) brightness(95%) contrast(90%) !important;
+  filter: brightness(0) invert(1) opacity(0.9) !important;
 }
 
 /* Robust Compass Design - Final Correct Targeting */
@@ -3714,18 +3688,20 @@ body {
 /* North Needle (Red) */
 .maplibregl-ctrl-compass .maplibregl-ctrl-icon::before {
   bottom: 50% !important;
-  border-bottom: 14px solid #f03e3e !important;
+  border-bottom: 14px solid #ff4757 !important;
+  /* Brighter red for dark background */
 }
 
-/* South Needle (Black) */
+/* South Needle (Light Gray/White) */
 .maplibregl-ctrl-compass .maplibregl-ctrl-icon::after {
   top: 50% !important;
-  border-top: 14px solid #2d3436 !important;
+  border-top: 14px solid #dee2e6 !important;
+  /* High contrast light gray */
 }
 
-/* Robust Geolocate Icon (Blue target) */
+/* Robust Geolocate Icon (Blue target with better dark mode contrast) */
 .maplibregl-ctrl-geolocate .maplibregl-ctrl-icon {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='8' fill='%230984e3' fill-opacity='0.15'/%3E%3Ccircle cx='12' cy='12' r='4' fill='%230984e3'/%3E%3Cpath d='M12 2L15 6H9L12 2Z' fill='%230984e3'/%3E%3C/svg%3E") !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='8' fill='%2300d2ff' fill-opacity='0.2'/%3E%3Ccircle cx='12' cy='12' r='4' fill='%2300d2ff'/%3E%3Cpath d='M12 2L15 6H9L12 2Z' fill='%23ffffff'/%3E%3C/svg%3E") !important;
   background-size: 30px !important;
   background-position: center !important;
   background-repeat: no-repeat !important;
@@ -3735,7 +3711,7 @@ body {
 }
 
 .maplibregl-ctrl-geolocate.maplibregl-ctrl-geolocate-active .maplibregl-ctrl-icon {
-  filter: drop-shadow(0 0 4px rgba(9, 132, 227, 0.4)) !important;
+  filter: drop-shadow(0 0 6px rgba(0, 210, 255, 0.6)) !important;
 }
 
 .maplibregl-ctrl-geocoder {
