@@ -3,14 +3,15 @@
 
 <head>
   <meta charset="utf-8" />
-  <title>XploreMap</title>
+  <title>XploreMap v4.19</title>
   <link rel="icon" type="image/png" href="./data/logos/Xplore.png" />
   <link rel="apple-touch-icon" href="./data/logos/Xplore.png" />
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
 
-  <!-- MapLibre GL JS 5.9.0 -->
-  <link href="https://unpkg.com/maplibre-gl@5.9.0/dist/maplibre-gl.css" rel="stylesheet" />
-  <script src="https://unpkg.com/maplibre-gl@5.9.0/dist/maplibre-gl.js"></script>
+  <!-- MapLibre GL JS - FORKED LOCAL BUILD -->
+  <!-- Original: https://unpkg.com/maplibre-gl@5.15.0/dist/maplibre-gl.js -->
+  <link href="https://unpkg.com/maplibre-gl@5.15.0/dist/maplibre-gl.css" rel="stylesheet" />
+  <script src="./libs/maplibre-gl.js?v=1737468312"></script>
 
   <!-- PMTiles v4 -->
   <script src="https://unpkg.com/pmtiles@4.3.0/dist/pmtiles.js"></script>
@@ -22,6 +23,13 @@
   <!-- Turf.js for route distance calculations -->
   <script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script>
 
+  <!-- MapLibre GL Geocoder for address search -->
+  <script src="https://unpkg.com/@maplibre/maplibre-gl-geocoder@1.5.0/dist/maplibre-gl-geocoder.min.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/@maplibre/maplibre-gl-geocoder@1.5.0/dist/maplibre-gl-geocoder.css" />
+
+  <!-- FPS Counter -->
+  <script src="https://unpkg.com/mapbox-gl-fps@1.0.1/lib/MapboxFPS.min.js"></script>
+
   <!-- Google Fonts: Inter (UI) + JetBrains Mono (monospace numbers) -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -29,15 +37,53 @@
     href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
     rel="stylesheet">
 
+
   <link rel="stylesheet" href="./styles/main.css" />
   <script src="./maplibre-preload.js"></script>
+
+  <!-- SunCalc library for accurate sun position -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.8.0/suncalc.min.js"></script>
+
+  <!-- Stars Layer for Globe Mode -->
+  <script src="./scripts/map/stars-layer.js"></script>
+
+  <style>
+    .fps-control {
+      color: #fff !important;
+      font-family: 'JetBrains Mono', monospace !important;
+      font-size: 16px !important;
+      font-weight: 600 !important;
+      padding: 4px 8px !important;
+      background: rgba(0, 0, 0, 0.4) !important;
+      border: 1px solid rgba(255, 255, 255, 0.2) !important;
+      border-radius: 4px !important;
+      pointer-events: none;
+      user-select: none;
+    }
+  </style>
 </head>
 
 <body>
   <div id="map"></div>
+  <header class="app-header">
+    <div class="app-header__left">
+      <div class="app-header__logo">
+        <img src="./data/logos/Xplore.png" alt="Xplore logo" class="app-header__logo-img" />
+        <span class="app-header__logo-text">Xplore</span>
+      </div>
+    </div>
+    <div class="app-header__center">
+      <div id="headerGeocoder" class="header-geocoder"></div>
+    </div>
+    <div class="app-header__right">
+      <!-- Routing settings moved to sidebar -->
+    </div>
+  </header>
   <div class="vignette" aria-hidden="true"></div>
+  <!-- DISABLED: CSS Fog overlay - not working well -->
+  <!-- <div id="fogOverlay" class="fog-overlay" aria-hidden="true"></div> -->
 
-  <!-- UI: View mode toggle -->
+  <!-- UI: View mode sidebar -->
   <div class="ui">
     <div class="ui__row ui__row--directions">
       <button id="directionsToggle" class="btn directions-toggle" type="button" aria-controls="directionsControl">
@@ -45,6 +91,176 @@
           decoding="async" />
         <span class="sr-only">Plan your next adventure</span>
       </button>
+
+      <!-- Consolidated Actions Bar -->
+      <div id="directionsActionsBar" class="directions-actions-bar" aria-hidden="true">
+        <!-- Routing modes -->
+        <button id="routeModeSnap" class="btn btn--icon btn--icon-only route-mode-btn" type="button"
+          data-mode="foot-hiking" aria-pressed="true" aria-label="Snap to trails" title="Snap to trails">
+          <img src="./data/aimant.png" alt="" aria-hidden="true" loading="lazy" decoding="async" />
+        </button>
+        <button id="routeModeManual" class="btn btn--icon btn--icon-only route-mode-btn" type="button"
+          data-mode="manual" aria-pressed="false" aria-label="Manual line" title="Manual line">
+          <img src="./data/line.png" alt="" aria-hidden="true" loading="lazy" decoding="async" />
+        </button>
+        <button id="routingModeToggle" class="btn btn--icon btn--icon-only routing-mode-toggle" type="button"
+          data-routing-mode="offline" aria-pressed="true" title="Switch to online routing">
+          <img class="routing-mode-toggle__icon" data-icon-id="routing-offline" alt="" aria-hidden="true" loading="lazy"
+            decoding="async" />
+          <span class="routing-mode-toggle__spinner" aria-hidden="true"></span>
+        </button>
+
+        <div class="directions-actions-bar__separator"></div>
+
+        <!-- Actions -->
+        <button id="swapDirectionsButton" class="btn btn--icon btn--icon-only" type="button" aria-label="Swap A and B"
+          title="Swap A and B">
+          <img src="./data/swap.png" alt="" aria-hidden="true" loading="lazy" decoding="async" />
+        </button>
+        <button id="undoDirectionsButton" class="btn btn--icon btn--icon-only" type="button" aria-label="Undo"
+          title="Undo" disabled>
+          <img src="./data/undo.png" alt="" aria-hidden="true" loading="lazy" decoding="async" />
+        </button>
+        <button id="redoDirectionsButton" class="btn btn--icon btn--icon-only" type="button" aria-label="Redo"
+          title="Redo" disabled>
+          <img src="./data/redo.png" alt="" aria-hidden="true" loading="lazy" decoding="async" />
+        </button>
+        <button id="clearDirectionsButton" class="btn btn--icon btn--icon-only" type="button" aria-label="Clear"
+          title="Clear">
+          <img src="./data/clear.png" alt="" aria-hidden="true" loading="lazy" decoding="async" />
+        </button>
+
+        <div class="directions-actions-bar__separator"></div>
+
+        <!-- GPX and Elevation -->
+        <button id="gpxImportButton" class="btn btn--icon btn--icon-only" type="button" title="Import GPX">
+          <img data-icon-id="gpx-import" alt="" aria-hidden="true" loading="lazy" decoding="async" />
+          <span class="sr-only">Import GPX</span>
+        </button>
+        <input id="gpxFileInput" class="sr-only" type="file" accept=".gpx,application/gpx+xml">
+        <button id="gpxExportButton" class="btn btn--icon btn--icon-only" type="button" title="Export GPX">
+          <img data-icon-id="gpx-export" alt="" aria-hidden="true" loading="lazy" decoding="async" />
+          <span class="sr-only">Export GPX</span>
+        </button>
+
+        <!-- Debug -->
+        <div id="debugNetworkControlWrapper" style="display: none;">
+          <label id="debugNetworkControl" class="debug-network-control" role="button" aria-pressed="false">
+            <input id="debugNetworkCheckbox" class="sr-only" type="checkbox"
+              aria-label="Toggle offline routing network debug" />
+            <img data-icon-id="debug-network" alt="" aria-hidden="true" loading="lazy" decoding="async" />
+          </label>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Shadow Time Control - shown when shadow/daylight layer is active -->
+  <div id="shadowTimeControl" class="shadow-time-control" style="display: none;">
+    <div class="shadow-time-control__header">
+      <span class="shadow-time-control__title">☀️ Sun Position</span>
+      <button id="shadowTimeClose" class="shadow-time-control__close" type="button">&times;</button>
+    </div>
+    <div class="shadow-time-control__body">
+      <div class="shadow-time-control__row">
+        <label for="shadowDate">Date:</label>
+        <input type="date" id="shadowDate" class="shadow-time-control__input" />
+      </div>
+      <div class="shadow-time-control__row">
+        <label for="shadowTime">Time:</label>
+        <input type="range" id="shadowTime" class="shadow-time-control__slider" min="0" max="1440" step="1"
+          value="720" />
+        <span id="shadowTimeLabel" class="shadow-time-control__label">12:00</span>
+      </div>
+      <div class="shadow-time-control__row" style="gap: 8px;">
+        <button id="shadowTimeNow" class="shadow-time-control__btn" type="button" style="flex: 1;">Now</button>
+        <button id="shadowSkyToggle" class="shadow-time-control__btn" type="button"
+          style="flex: 1.5; background: #e67e22;" data-enabled="true">Sky ON</button>
+        <button id="shadowDebugToggle" class="shadow-time-control__btn shadow-time-control__btn--debug" type="button"
+          style="flex: 1;" data-debug="false">Debug</button>
+      </div>
+      <!-- Fog Controls (uses setSky fog properties) -->
+      <div id="fogDebugControls"
+        style="border-top: 1px solid rgba(255,255,255,0.2); margin-top: 8px; padding-top: 8px;">
+        <div class="shadow-time-control__row">
+          <label for="fogGroundBlendSlider">Fog Ground:</label>
+          <input type="range" id="fogGroundBlendSlider" class="shadow-time-control__slider" min="-5" max="5" step="0.01"
+            value="0.1" />
+          <span id="fogGroundBlendLabel" class="shadow-time-control__label">0.10</span>
+        </div>
+        <div class="shadow-time-control__row">
+          <label for="horizonFogBlendSlider">Horizon Fog:</label>
+          <input type="range" id="horizonFogBlendSlider" class="shadow-time-control__slider" min="-1" max="5"
+            step="0.01" value="0.5" />
+          <span id="horizonFogBlendLabel" class="shadow-time-control__label">0.50</span>
+        </div>
+        <div class="shadow-time-control__row">
+          <label for="skyHorizonBlendSlider">Sky Horizon:</label>
+          <input type="range" id="skyHorizonBlendSlider" class="shadow-time-control__slider" min="-1" max="5"
+            step="0.01" value="0.5" />
+          <span id="skyHorizonBlendLabel" class="shadow-time-control__label">0.50</span>
+        </div>
+        <div class="shadow-time-control__row">
+          <button id="fogAutoBtn" class="shadow-time-control__btn" type="button" style="background: #4a6;">Auto</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  </div>
+
+  <!-- Snow Controls - shown when snow layer is active -->
+  <div id="snowControls" class="shadow-time-control" style="display: none;">
+    <div class="shadow-time-control__header">
+      <span class="shadow-time-control__title">❄️ Snow Settings</span>
+      <button id="snowControlsClose" class="shadow-time-control__close" type="button">&times;</button>
+    </div>
+    <div class="shadow-time-control__body">
+      <div class="shadow-time-control__row">
+        <label for="snowAltitude">Altitude (m):</label>
+        <input type="range" id="snowAltitude" class="shadow-time-control__slider" min="0" max="5000" step="50"
+          value="1000" />
+        <span id="snowAltitudeLabel" class="shadow-time-control__label">1000m</span>
+      </div>
+      <div class="shadow-time-control__row">
+        <label for="snowSlope">Max Slope (°):</label>
+        <input type="range" id="snowSlope" class="shadow-time-control__slider" min="0" max="90" step="1" value="35" />
+        <span id="snowSlopeLabel" class="shadow-time-control__label">35°</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- FOV & LOD Controls - for performance tuning (shown when 3D terrain is active) -->
+  <div id="fovControls" class="shadow-time-control" style="display: none;">
+    <div class="shadow-time-control__header">
+      <span class="shadow-time-control__title">⚙️ Performance</span>
+      <button id="fovControlsClose" class="shadow-time-control__close" type="button">&times;</button>
+    </div>
+    <div class="shadow-time-control__body">
+      <div class="shadow-time-control__row">
+        <label for="fovSlider">Vertical FOV (°):</label>
+        <input type="range" id="fovSlider" class="shadow-time-control__slider" min="5" max="90" step="1" value="37" />
+        <span id="fovLabel" class="shadow-time-control__label">37°</span>
+      </div>
+      <div class="shadow-time-control__row">
+        <label for="lodMaxZoomSlider">Max Zoom Levels:</label>
+        <input type="range" id="lodMaxZoomSlider" class="shadow-time-control__slider" min="1" max="11" step="1"
+          value="5" />
+        <span id="lodMaxZoomLabel" class="shadow-time-control__label">5</span>
+      </div>
+      <div class="shadow-time-control__row">
+        <label for="lodTileRatioSlider">Tile Count Ratio:</label>
+        <input type="range" id="lodTileRatioSlider" class="shadow-time-control__slider" min="1" max="10" step="0.5"
+          value="2" />
+        <span id="lodTileRatioLabel" class="shadow-time-control__label">2.0</span>
+      </div>
+      <div class="shadow-time-control__row">
+        <label for="dprToggle">Retina Resolution (HD):</label>
+        <input type="checkbox" id="dprToggle" checked style="width: 20px; height: 20px; cursor: pointer;" />
+      </div>
+      <div class="shadow-time-control__row">
+        <label for="overdrawToggle">Debug Overdraw:</label>
+        <input type="checkbox" id="overdrawToggle" style="width: 20px; height: 20px; cursor: pointer;" />
+      </div>
     </div>
   </div>
 
@@ -96,131 +312,38 @@
           </div>
         </div>
       </div>
-      <!-- Route stats / Day details (middle) -->
+      <!-- Route stats area -->
+      <div id="routeTimeline" class="route-timeline"></div>
       <div id="routeStats" class="route-stats" aria-live="polite"></div>
-      <!-- Toolbar buttons (bottom - always visible) -->
-      <div class="directions-header">
-        <div class="transport-modes" role="group" aria-label="Travel mode">
-          <button id="routeModeToggle" class="btn btn--icon btn--icon-only route-mode-toggle" type="button"
-            data-mode="foot-hiking" aria-pressed="true" aria-label="Snap to trails" title="Snap to trails">
-            <img class="route-mode-toggle__icon route-mode-toggle__icon--snap" src="./data/aimant.png" alt=""
-              aria-hidden="true" loading="lazy" decoding="async" />
-            <img class="route-mode-toggle__icon route-mode-toggle__icon--manual" src="./data/line.png" alt=""
-              aria-hidden="true" loading="lazy" decoding="async" />
-            <span class="sr-only">Toggle routing mode</span>
-          </button>
-        </div>
-        <div class="directions-actions">
-          <button id="swapDirectionsButton" class="btn btn--icon btn--icon-only" type="button" aria-label="Swap A and B"
-            title="Swap A and B">
-            <img src="./data/swap.png" alt="" aria-hidden="true" loading="lazy" decoding="async" />
-            <span class="sr-only">Swap A and B</span>
-          </button>
-          <button id="undoDirectionsButton" class="btn btn--icon btn--icon-only" type="button" aria-label="Undo"
-            title="Undo" disabled>
-            <img src="./data/undo.png" alt="" aria-hidden="true" loading="lazy" decoding="async" />
-            <span class="sr-only">Undo</span>
-          </button>
-          <button id="redoDirectionsButton" class="btn btn--icon btn--icon-only" type="button" aria-label="Redo"
-            title="Redo" disabled>
-            <img src="./data/redo.png" alt="" aria-hidden="true" loading="lazy" decoding="async" />
-            <span class="sr-only">Redo</span>
-          </button>
-          <button id="clearDirectionsButton" class="btn btn--icon btn--icon-only" type="button" aria-label="Clear"
-            title="Clear">
-            <img src="./data/clear.png" alt="" aria-hidden="true" loading="lazy" decoding="async" />
-            <span class="sr-only">Clear</span>
-          </button>
-          <button id="gpxImportButton" class="btn btn--icon btn--icon-only" type="button">
-            <img data-icon-id="gpx-import" alt="" aria-hidden="true" loading="lazy" decoding="async" />
-            <span class="sr-only">Import GPX</span>
-          </button>
-          <input id="gpxFileInput" class="sr-only" type="file" accept=".gpx,application/gpx+xml">
-          <button id="gpxExportButton" class="btn btn--icon btn--icon-only" type="button">
-            <img data-icon-id="gpx-export" alt="" aria-hidden="true" loading="lazy" decoding="async" />
-            <span class="sr-only">Export GPX</span>
-          </button>
-          <button id="toggleElevationButton" class="btn btn--icon btn--icon-only elevation-toggle" type="button"
-            aria-expanded="false" aria-controls="elevationChartBody" aria-label="Toggle elevation chart"
-            title="Toggle elevation chart">
-            <svg class="elevation-toggle__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z" fill="none" />
-              <path d="M22 6l-5 5-4-4-7 7H2v2h5l6-6 4 4 6-6v5h2V6z" fill="currentColor" />
-            </svg>
-            <span class="sr-only">Toggle elevation chart</span>
-          </button>
-          <button id="routingModeToggle" class="btn btn--icon btn--icon-only routing-mode-toggle" type="button"
-            data-routing-mode="offline" aria-pressed="true" title="Switch to online routing">
-            <img class="routing-mode-toggle__icon" data-icon-id="routing-offline" alt="" aria-hidden="true"
-              loading="lazy" decoding="async" />
-            <span class="routing-mode-toggle__spinner" aria-hidden="true"></span>
-            <span class="routing-mode-toggle__loading-text sr-only" aria-hidden="true" aria-live="polite">Loading
-              offline routing network…</span>
-            <span class="routing-mode-toggle__text sr-only">Offline routing</span>
-          </button>
-          <label id="debugNetworkControl" class="debug-network-control" hidden aria-hidden="true" role="button"
-            aria-pressed="false">
-            <input id="debugNetworkCheckbox" class="sr-only" type="checkbox"
-              aria-label="Toggle offline routing network debug" />
-            <img data-icon-id="debug-network" alt="" aria-hidden="true" loading="lazy" decoding="async" />
-            <span class="sr-only">Debug network</span>
-          </label>
-          <button id="directionsInfoButton" class="icon-button has-tooltip" type="button"
-            aria-label="Directions information" aria-describedby="directionsHint" title="How to use directions">
-            <svg viewBox="0 0 24 24" role="img" aria-hidden="true" focusable="false">
-              <path
-                d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm0 3.4a1.6 1.6 0 1 1 0 3.2 1.6 1.6 0 0 1 0-3.2Zm2.1 12.2h-4.2v-1.8h1v-3.8h-1V10h3.2v5.8h1z" />
-            </svg>
-            <span id="directionsHint" class="directions-hint" role="tooltip" aria-hidden="true">
-              Cliquez sur la carte pour définir le départ et l'arrivée ou ajouter des points intermédiaires. Clic droit
-              sur l'itinéraire pour découper en étapes. Déplacez les marqueurs pour ajuster ou double-cliquez pour les
-              supprimer.
-            </span>
-          </button>
-        </div>
-      </div>
+      <!-- Actions moved to sidebar bar -->
     </div>
   </div>
 
   <!-- Imagery toggle -->
   <div class="imagery-panel" id="imageryPanel">
-    <button id="imageryPanelToggle" class="imagery-panel__toggle" type="button" aria-expanded="false"
-      aria-controls="imageryPanelDrawer" aria-haspopup="true" title="Toggle imagery layers">
-      <span class="imagery-panel__toggle-icon" aria-hidden="true">
-        <img src="./data/layers.png" alt="" loading="lazy" decoding="async" />
-      </span>
-      <span class="sr-only">Toggle imagery layers</span>
-    </button>
+    <div class="imagery-panel__buttons">
+      <button id="toggle3D" class="btn btn--icon-only toggle-3d" type="button" aria-pressed="true"
+        aria-label="Switch to 2D" title="Switch to 2D">
+        <img data-icon-id="view-toggle" alt="" aria-hidden="true" loading="lazy" decoding="async" />
+        <span class="sr-only">Toggle 2D/3D view</span>
+      </button>
+      <button id="imageryPanelToggle" class="imagery-panel__toggle" type="button" aria-expanded="false"
+        aria-controls="imageryPanelDrawer" aria-haspopup="true" title="Toggle imagery layers">
+        <span class="imagery-panel__toggle-icon" aria-hidden="true">
+          <img src="./data/layers.png" alt="" loading="lazy" decoding="async" />
+        </span>
+        <span class="sr-only">Toggle imagery layers</span>
+      </button>
+    </div>
     <div class="imagery-panel__drawer" id="imageryPanelDrawer" hidden aria-hidden="true">
       <div class="imagery-toggle" id="imageryToggle" role="group" aria-label="Imagery layers"></div>
-      <div class="imagery-panel__terrain" role="group" aria-label="Terrain controls">
-        <div class="imagery-panel__terrain-title">Terrain</div>
-        <div class="terrain-controls">
-          <button id="cycleHillshadeMethod" class="btn hillshade-method-button" type="button" title="Toggle hillshade"
-            aria-label="Toggle hillshade" aria-pressed="false">
-            <span class="hillshade-method-button__icon" aria-hidden="true">
-              <img src="./data/style.png" alt="" loading="lazy" decoding="async" />
-            </span>
-            <span class="hillshade-method-button__content">
-              <span class="hillshade-method-button__title">Hillshade</span>
-              <span class="hillshade-method-button__label" aria-live="polite">Method: Igor</span>
-            </span>
-          </button>
-          <button id="toggle3D" class="btn btn--icon-only toggle-3d" type="button" aria-pressed="true"
-            aria-label="Switch to 2D" title="Switch to 2D">
-            <img data-icon-id="view-toggle" alt="" aria-hidden="true" loading="lazy" decoding="async" />
-            <span class="sr-only">Toggle 2D/3D view</span>
-          </button>
-          <button id="terrainHdToggle" class="btn terrain-hd-button" type="button" aria-pressed="true"
-            title="Toggle high detail terrain" aria-label="Toggle high detail terrain">
-            High detail terrain
-          </button>
-        </div>
-      </div>
     </div>
   </div>
 
-  <script type="module" src="./scripts/main.js"></script>
+
+
+  <script src="./scripts/debug/shadow-tuner.js"></script>
+  <script type="module" src="./scripts/app/xploremap-app.js"></script>
 </body>
 
 </html>

@@ -24,13 +24,29 @@
       const logoWrapper = document.createElement('div');
       logoWrapper.className = 'maplibre-preload__logo';
 
-      const logo = document.createElement('img');
-      logo.src = options.logoSrc;
-      logo.alt = options.logoAlt || '';
-      logo.loading = 'eager';
-      logo.decoding = 'async';
+      // Check if it's a video file
+      const isVideo = /\.(mp4|webm|ogg)$/i.test(options.logoSrc);
 
-      logoWrapper.appendChild(logo);
+      if (isVideo) {
+        const video = document.createElement('video');
+        video.src = options.logoSrc;
+        video.autoplay = true;
+        video.loop = true;
+        video.muted = true;
+        video.playsInline = true;
+        video.setAttribute('playsinline', ''); // iOS support
+        video.style.maxWidth = '100%';
+        video.style.maxHeight = '100%';
+        logoWrapper.appendChild(video);
+      } else {
+        const logo = document.createElement('img');
+        logo.src = options.logoSrc;
+        logo.alt = options.logoAlt || '';
+        logo.loading = 'eager';
+        logo.decoding = 'async';
+        logoWrapper.appendChild(logo);
+      }
+
       content.appendChild(logoWrapper);
     }
 
@@ -42,7 +58,7 @@
     }
 
     overlay.appendChild(content);
-    container.appendChild(overlay);
+    document.body.appendChild(overlay);
     return overlay;
   }
 
