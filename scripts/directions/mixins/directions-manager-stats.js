@@ -3977,9 +3977,20 @@ export class DirectionsManagerStatsMixin {
     const areaSvg = areaPaths.fill
       ? `
         <svg class="elevation-area" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-          ${gradientMarkup}
+          <defs>
+            ${gradientMarkup}
+            <linearGradient id="elevation-fade-gradient" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="white" stop-opacity="0.8" />
+              <stop offset="100%" stop-color="white" stop-opacity="0.2" />
+            </linearGradient>
+            <mask id="elevation-fade-mask">
+              <rect x="0" y="0" width="100" height="100" fill="url(#elevation-fade-gradient)" />
+            </mask>
+          </defs>
           ${gridLinesMarkup}
-      <path class="elevation-area-fill" d="${areaPaths.fill}" fill="${gradientMarkup ? `url(#${gradientId})` : areaFillColor}" />
+          <path class="elevation-area-fill" d="${areaPaths.fill}" 
+                fill="${gradientMarkup ? `url(#${gradientId})` : areaFillColor}"
+                mask="url(#elevation-fade-mask)" />
         </svg>
         `
       : '';
