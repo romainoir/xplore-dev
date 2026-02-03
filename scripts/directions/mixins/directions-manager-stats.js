@@ -3414,11 +3414,12 @@ export class DirectionsManagerStatsMixin {
       }
     });
 
+    const padding = 0.01;
     const bounds = {
-      getNorth: () => maxLat,
-      getSouth: () => minLat,
-      getEast: () => maxLng,
-      getWest: () => minLng
+      getNorth: () => maxLat + padding,
+      getSouth: () => minLat - padding,
+      getEast: () => maxLng + padding,
+      getWest: () => minLng - padding
     };
 
     try {
@@ -3431,17 +3432,19 @@ export class DirectionsManagerStatsMixin {
       const line = turfApi.lineString(coordinates);
       const photos = [];
       const seen = new Set();
-      const MAX_DIST_KM = 0.02; // 20m - only show photos very close to the route
+      const MAX_DIST_KM = 0.1; // 100m - broader threshold for better coverage
 
       // Performance Optimization: Downsample coordinates for distance matching 
       // Turf.nearestPointOnLine is O(N) where N is number of coordinates.
-      // For a 100km route with 10k points, this is very expensive for each photo.
-      const downsampleFactor = Math.max(1, Math.ceil(coordinates.length / 300));
+      // Increased resolution to 1000 points for better accuracy.
+      const downsampleFactor = Math.max(1, Math.ceil(coordinates.length / 1000));
       const simplifiedCoords = coordinates.filter((_, i) => i % downsampleFactor === 0);
       if (simplifiedCoords[simplifiedCoords.length - 1] !== coordinates[coordinates.length - 1]) {
         simplifiedCoords.push(coordinates[coordinates.length - 1]);
       }
       const simplifiedLine = turfApi.lineString(simplifiedCoords);
+
+      console.log(`[refreshRoutePhotos] Fetched ${collection.features.length} photos. Processing with ${simplifiedCoords.length} route points...`);
 
       for (const feature of collection.features) {
         const [lng, lat] = feature.geometry.coordinates;
@@ -3472,6 +3475,7 @@ export class DirectionsManagerStatsMixin {
       }
 
       this.routePhotos = photos.sort((a, b) => a.distanceKm - b.distanceKm);
+      console.log(`[refreshRoutePhotos] Success: ${this.routePhotos.length} photos assigned to route profile.`);
 
       // Trigger chart update if we have photos and the chart is already rendered
       if (this.routePhotos.length > 0 && this.elevationChartContainer) {
