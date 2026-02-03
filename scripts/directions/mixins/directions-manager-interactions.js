@@ -266,16 +266,21 @@ export class DirectionsManagerInteractionsMixin {
   setElevationCollapsed(collapsed) {
     this.isElevationCollapsed = Boolean(collapsed);
 
-    // Update toggle button in stats if it exists
-    const toggle = this.routeStats?.querySelector('#routeStatsToggle');
-    if (toggle) {
+    // Update toggle button and container classes in stats if it exists
+    if (this.routeStats) {
       const isExpanded = !this.isElevationCollapsed;
-      toggle.classList.toggle('is-active', isExpanded);
-      toggle.setAttribute('aria-expanded', isExpanded);
-      toggle.title = isExpanded ? 'Réduire' : 'Développer';
-      const expandIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>';
-      const retractIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 14 10 14 10 20"></polyline><polyline points="20 10 14 10 14 4"></polyline><line x1="14" y1="10" x2="21" y2="3"></line><line x1="10" y1="14" x2="3" y2="21"></line></svg>';
-      toggle.innerHTML = isExpanded ? retractIcon : expandIcon;
+      this.routeStats.classList.toggle('is-expanded', isExpanded);
+      this.routeStats.classList.toggle('is-collapsed', !isExpanded);
+
+      const toggle = this.routeStats.querySelector('#routeStatsToggle');
+      if (toggle) {
+        toggle.classList.toggle('is-active', isExpanded);
+        toggle.setAttribute('aria-expanded', isExpanded);
+        toggle.title = isExpanded ? 'Réduire' : 'Développer';
+        const expandIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>';
+        const retractIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 14 10 14 10 20"></polyline><polyline points="20 10 14 10 14 4"></polyline><line x1="14" y1="10" x2="21" y2="3"></line><line x1="10" y1="14" x2="3" y2="21"></line></svg>';
+        toggle.innerHTML = isExpanded ? retractIcon : expandIcon;
+      }
     }
 
     this.updateElevationVisibilityState();

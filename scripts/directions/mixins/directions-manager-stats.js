@@ -1880,33 +1880,36 @@ export class DirectionsManagerStatsMixin {
     const toggleIcon = isExpanded ? retractIcon : expandIcon;
 
     // Use same format as multi-day for consistency
+    this.routeStats.classList.toggle('is-expanded', isExpanded);
+    this.routeStats.classList.toggle('is-collapsed', !isExpanded);
+
     this.routeStats.innerHTML = `
       <div class="route-stats__sparkline"></div>
       <div class="route-stats__content">
         <div class="day-details is-visible is-compact">
-          <div class="day-details__metrics">
-            <div class="day-details__metric">
-              <span class="day-details__metric-label">Distance :</span>
-              <span class="day-details__metric-value">${escapeHtml(distanceLabel)} km</span>
+          <div class="day-details__grid">
+            <div class="day-details__item">
+              <span class="day-details__item-label">Distance :</span>
+              <span class="day-details__item-value">${escapeHtml(distanceLabel)} km</span>
             </div>
-            <div class="day-details__metric">
-              <span class="day-details__metric-label">Dénivelé :</span>
-              <span class="day-details__metric-value">+${ascent} m / -${descent} m</span>
+            <div class="day-details__item">
+              <span class="day-details__item-label">Dénivelé :</span>
+              <span class="day-details__item-value">+${ascent} m / -${descent} m</span>
             </div>
-            <div class="day-details__metric">
-              <span class="day-details__metric-label">Temps :</span>
-              <span class="day-details__metric-value">${timeRange}</span>
+            <div class="day-details__item">
+              <span class="day-details__item-label">Temps :</span>
+              <span class="day-details__item-value">${timeRange}</span>
             </div>
-            <div class="day-details__metric">
-              <span class="day-details__metric-label">Difficulté :</span>
-              <span class="day-details__metric-value">
+            <div class="day-details__item">
+              <span class="day-details__item-label">Difficulté :</span>
+              <span class="day-details__item-value">
                 <span class="difficulty-indicator">${difficultyBars}</span>
                 ${difficulty.level}
               </span>
             </div>
-            <div class="day-details__metric">
-              <span class="day-details__metric-label">Météo :</span>
-              <span class="day-details__metric-value weather-container" data-weather-target="route">
+            <div class="day-details__item">
+              <span class="day-details__item-label">Météo :</span>
+              <span class="day-details__item-value weather-container" data-weather-target="route">
                 <span class="weather-loading">...</span>
               </span>
             </div>
@@ -2031,7 +2034,7 @@ export class DirectionsManagerStatsMixin {
       ).join('');
 
       dayDetailsHtml = `
-        <div class="day-details is-visible">
+        <div class="day-details is-visible is-compact">
           <div class="day-details__grid">
             <div class="day-details__item">
               <span class="day-details__item-label">Distance :</span>
@@ -2053,15 +2056,15 @@ export class DirectionsManagerStatsMixin {
               </span>
             </div>
             <div class="day-details__item">
-              <span class="day-details__item-label">Points d'intérêt :</span>
-              <span class="day-details__item-value">${escapeHtml(waypointsText)}</span>
-            </div>
-            <div class="day-details__item">
               <span class="day-details__item-label">Météo :</span>
               <span class="day-details__item-value weather-container" data-weather-target="day">
                 <span class="weather-loading">Chargement...</span>
               </span>
             </div>
+          </div>
+          <div class="day-details__poi-row">
+            <span class="day-details__item-label">Points d'intérêt :</span>
+            <span class="day-details__item-value">${escapeHtml(waypointsText)}</span>
           </div>
         </div>
       `;
@@ -2092,7 +2095,7 @@ export class DirectionsManagerStatsMixin {
       ).join('');
 
       dayDetailsHtml = `
-        <div class="day-details is-visible">
+        <div class="day-details is-visible is-compact">
           <div class="day-details__grid">
             <div class="day-details__item">
               <span class="day-details__item-label">Distance :</span>
@@ -2114,15 +2117,15 @@ export class DirectionsManagerStatsMixin {
               </span>
             </div>
             <div class="day-details__item">
-              <span class="day-details__item-label">Points d'intérêt :</span>
-              <span class="day-details__item-value">${escapeHtml(waypointsText)}</span>
-            </div>
-            <div class="day-details__item">
               <span class="day-details__item-label">Météo :</span>
               <span class="day-details__item-value weather-container" data-weather-target="route">
                 <span class="weather-loading">Chargement...</span>
               </span>
             </div>
+          </div>
+          <div class="day-details__poi-row">
+            <span class="day-details__item-label">Points d'intérêt :</span>
+            <span class="day-details__item-value">${escapeHtml(waypointsText)}</span>
           </div>
         </div>
       `;
@@ -2136,6 +2139,9 @@ export class DirectionsManagerStatsMixin {
     const expandIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>';
     const retractIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 14 10 14 10 20"></polyline><polyline points="20 10 14 10 14 4"></polyline><line x1="14" y1="10" x2="21" y2="3"></line><line x1="10" y1="14" x2="3" y2="21"></line></svg>';
     const toggleIcon = isExpanded ? retractIcon : expandIcon;
+
+    this.routeStats.classList.toggle('is-expanded', isExpanded);
+    this.routeStats.classList.toggle('is-collapsed', !isExpanded);
 
     this.routeStats.innerHTML = `
       <div class="route-stats__sparkline"></div>
@@ -2773,7 +2779,14 @@ export class DirectionsManagerStatsMixin {
     xAxisContainer.innerHTML = '';
     const span = xAxis.max - xAxis.min || 1;
 
-    xAxis.ticks.forEach((tick) => {
+    // Filter out intermediate ticks that are too close to the start or end to prevent label overlap
+    const minProximity = span * 0.12;
+    const finalTicks = xAxis.ticks.filter((tick, idx) => {
+      if (idx === 0 || idx === xAxis.ticks.length - 1) return true;
+      return Math.abs(tick - xAxis.min) > minProximity && Math.abs(tick - xAxis.max) > minProximity;
+    });
+
+    finalTicks.forEach((tick) => {
       const ratio = (tick - xAxis.min) / span;
       const percent = Math.max(0, Math.min(100, ratio * 100));
       const label = document.createElement('span');
@@ -3866,7 +3879,18 @@ export class DirectionsManagerStatsMixin {
     ensureTick(xMin);
     ensureTick(xMax);
     xTickValues.sort((a, b) => a - b);
-    const xAxisLabels = xTickValues
+
+    // Filter out intermediate ticks that are too close to the start or end to prevent label overlap
+    // Use a 12% of total span threshold as a safe buffer for label width
+    const minProximity = safeXSpan * 0.12;
+    const finalTicks = xTickValues.filter((tick, idx) => {
+      if (idx === 0 || idx === xTickValues.length - 1) return true; // Always keep absolute min/max
+      const distToStart = Math.abs(tick - xMin);
+      const distToEnd = Math.abs(tick - xMax);
+      return distToStart > minProximity && distToEnd > minProximity;
+    });
+
+    const xAxisLabels = finalTicks
       .map((value) => {
         const clampedValue = Math.min(xMax, Math.max(xMin, value));
         const ratio = rawXSpan === 0
@@ -5180,8 +5204,8 @@ export class DirectionsManagerStatsMixin {
       const gradId = `sparkline-grad-${idx}-${Math.floor(Math.random() * 1000)}`;
       defsContent += `
         <linearGradient id="${gradId}" x1="0%" y1="0%" x2="0%" y2="100%">
-          <stop offset="0%" style="stop-color:${color}; stop-opacity:0.4" />
-          <stop offset="100%" style="stop-color:${color}; stop-opacity:0.05" />
+          <stop offset="0%" style="stop-color:${color}; stop-opacity:0.7" />
+          <stop offset="100%" style="stop-color:${color}; stop-opacity:0.2" />
         </linearGradient>
       `;
       pathsContent += `
