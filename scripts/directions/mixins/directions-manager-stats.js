@@ -3423,6 +3423,7 @@ export class DirectionsManagerStatsMixin {
     };
 
     try {
+      console.log(`[refreshRoutePhotos] Fetching photos for bounds: N=${bounds.getNorth().toFixed(4)}, S=${bounds.getSouth().toFixed(4)}, E=${bounds.getEast().toFixed(4)}, W=${bounds.getWest().toFixed(4)}`);
       const collection = await fetchWikimediaPhotosInBounds(bounds);
       if (!collection || !collection.features) {
         this.routePhotos = [];
@@ -3432,7 +3433,7 @@ export class DirectionsManagerStatsMixin {
       const line = turfApi.lineString(coordinates);
       const photos = [];
       const seen = new Set();
-      const MAX_DIST_KM = 0.1; // 100m - broader threshold for better coverage
+      const MAX_DIST_KM = 0.3; // 300m - very relaxed threshold to ensure mountain photos appear
 
       // Performance Optimization: Downsample coordinates for distance matching 
       // Turf.nearestPointOnLine is O(N) where N is number of coordinates.
@@ -3475,7 +3476,7 @@ export class DirectionsManagerStatsMixin {
       }
 
       this.routePhotos = photos.sort((a, b) => a.distanceKm - b.distanceKm);
-      console.log(`[refreshRoutePhotos] Success: ${this.routePhotos.length} photos assigned to route profile.`);
+      console.log(`[refreshRoutePhotos] Success: ${this.routePhotos.length} photos assigned to route. Samples:`, this.routePhotos.slice(0, 3));
 
       // Trigger chart update if we have photos and the chart is already rendered
       if (this.routePhotos.length > 0 && this.elevationChartContainer) {
@@ -3537,6 +3538,7 @@ export class DirectionsManagerStatsMixin {
       // Add event listener
       photoBtn.addEventListener('click', () => {
         this.showElevationPhotos = !this.showElevationPhotos;
+        console.log(`[elevationPhotoToggle] Toggled to: ${this.showElevationPhotos}`);
         this.updateProfileLegend(true); // Update state
 
         // Redraw to show/hide photo markers
@@ -4047,7 +4049,13 @@ export class DirectionsManagerStatsMixin {
 
       // Add Photos with smart clustering (only if enabled via sidebar)
       const photoMarkers = (this.showElevationPhotos && Array.isArray(this.routePhotos)) ? this.routePhotos : [];
-      console.log('[updateElevationProfile] Photo markers to add:', photoMarkers.length);
+      if (this.showElevationPhotos) {
+        console.log(`[updateElevationProfile] Photo markers enabled: ${photoMarkers.length} candidates.`, {
+          hasRoutePhotos: Array.isArray(this.routePhotos),
+          routePhotosCount: this.routePhotos?.length,
+          showElevationPhotos: this.showElevationPhotos
+        });
+      }
 
       if (photoMarkers.length > 0) {
         // Smart photo clustering:
@@ -4055,7 +4063,7 @@ export class DirectionsManagerStatsMixin {
         // 2. Limit total clusters displayed to MAX_PHOTO_CLUSTERS
         // 3. Create consolidated cluster items with count badges
 
-        const PHOTO_CLUSTER_PROXIMITY_KM = totalDistance / 15; // Dynamic: ~15 clusters max based on route length
+        const PHOTO_CLUSTER_PROXIMITY_KM = Math.min(1.0, totalDistance / 15); // Dynamic: ~15 clusters max, but max 1km gap
         const MAX_PHOTO_CLUSTERS = 12;
 
         // Sort photos by distance
@@ -4115,7 +4123,7 @@ export class DirectionsManagerStatsMixin {
 
           allMarkers.push({
             type: 'photo',
-            categoryKey: 'photo',
+            categoryKey: 'camera', // Use 'camera' for better priority (30) from constants
             distanceKm: mainPhoto.distanceKm,
             data: {
               ...mainPhoto,
@@ -4128,6 +4136,7 @@ export class DirectionsManagerStatsMixin {
             stackItems: clusterCount > 1 ? cluster.slice(1, 3).map(p => ({ data: p })) : []
           });
         }
+        console.log(`[updateElevationProfile] Added ${photoClusters.length} photo clusters to allMarkers.`);
       }
 
       // 2. Sort all markers by distance
@@ -4706,8 +4715,8 @@ export class DirectionsManagerStatsMixin {
             }
           } else if (isPhotoMarker) {
             // Photos should never go below the X axis
-            // Max height is 60px + margin, so we need at least 65px to clear the axis
-            const PHOTO_MIN_BOTTOM = '65px';
+            // Max height is 60px + margin, so we need a bit of clearance
+            const PHOTO_MIN_BOTTOM = '40px';
             if (offsetPx !== 0) {
               marker.style.bottom = `max(${PHOTO_MIN_BOTTOM}, calc(${elevationPercent.toFixed(6)}% + ${offsetPx}px))`;
             } else {
