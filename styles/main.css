@@ -1597,7 +1597,7 @@ body {
   background: transparent;
   backdrop-filter: none;
   border: none;
-  border-radius: 12px;
+  border-radius: 0 0 24px 24px;
   overflow: hidden;
   box-shadow: none;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -1632,8 +1632,8 @@ body {
 
 .route-stats__toggle {
   position: absolute;
-  bottom: 10px;
-  right: 10px;
+  bottom: 8px;
+  right: 8px;
   z-index: 10;
   width: 32px;
   height: 32px;
