@@ -293,7 +293,9 @@ export class RouteLibraryUI {
             ${sparklineHtml}
 
             <div class="route-actions" style="margin-top: 8px; display: flex; justify-content: flex-end; gap: 8px;">
-                <button class="btn btn--outline btn--sm action-load" data-id="${route.id}" style="flex: 1; color: white; border-color: rgba(255,255,255,0.4); background: rgba(0,0,0,0.2);">Load</button>
+                <button class="btn btn--outline btn--sm action-load" data-id="${route.id}" title="Load" style="flex: 1; color: white; border-color: rgba(255,255,255,0.4); background: rgba(0,0,0,0.2); display: flex; align-items: center; justify-content: center;">
+                    <img src="./data/edit.png" width="16" height="16" alt="Load" style="opacity: 0.9; filter: brightness(0) invert(1);">
+                </button>
                 <button class="btn btn--text btn--sm action-export" data-id="${route.id}" title="Export GPX" style="color: white;">
                     <img src="./data/downloads.png" width="16" height="16" alt="Export" style="opacity: 0.9; filter: brightness(0) invert(1);">
                 </button>
