@@ -679,36 +679,12 @@ export class DirectionsManagerStatsMixin {
     this.ensurePanelVisible();
     this.waypoints = waypoints.map((coord) => coord.slice());
 
-    const routeFeature = {
-      type: 'Feature',
-      properties: {
-        ...(candidate.properties || {}),
-        source: candidate.properties?.source || 'imported-route',
-        name: candidate.properties?.name || options.name || null
-      },
-      geometry: {
-        type: 'LineString',
-        coordinates: candidate.coordinates.map((coord) => coord.slice())
-      }
-    };
-
-    this.applyRoute(routeFeature);
-    this.updateWaypoints();
-    this.updateModeAvailability();
-
-    // Explicitly update Elevation Profile and Stats immediately 
-    // to ensure UI is populated even if prepareNetwork is delayed/skipped
-    if (candidate.coordinates && candidate.coordinates.length > 0) {
-      this.updateElevationProfile(candidate.coordinates);
-      this.updateStats(routeFeature);
-    }
-
-    // Restore Bivouacs (Segments) if available
+    // 1. Prepare Bivouacs/Cuts BEFORE applying the route
+    // This allows applyRoute to preserve and project them onto the new geometry correctly
     if (candidate.points && candidate.points.length > 0) {
       const bivouacs = candidate.points.filter(p => p.properties && p.properties.marker_type === 'bivouac');
       if (bivouacs.length > 0) {
         const cuts = [];
-        // We need to map these points to distances on the new route
         const line = turfApi.lineString(candidate.coordinates);
 
         bivouacs.forEach(b => {
@@ -729,18 +705,36 @@ export class DirectionsManagerStatsMixin {
               distanceKm: distKm,
               lng: b.coordinates[0],
               lat: b.coordinates[1],
-              source: 'restored-bivouac'
+              source: 'imported-bivouac'
             });
           }
         });
 
         if (cuts.length > 0) {
           this.setRouteCutDistances(cuts);
-          // Force update of cuts
-          setTimeout(() => this.updateCutDisplays(), 100);
         }
       }
     }
+
+    const routeFeature = {
+      type: 'Feature',
+      properties: {
+        ...(candidate.properties || {}),
+        source: candidate.properties?.source || 'imported-route',
+        name: candidate.properties?.name || options.name || null
+      },
+      geometry: {
+        type: 'LineString',
+        coordinates: candidate.coordinates.map((coord) => coord.slice())
+      }
+    };
+
+    // 2. Apply the route - this now sees the restored cuts and projects them
+    this.applyRoute(routeFeature);
+
+    // updateWaypoints triggers updateSegmentMarkers
+    this.updateWaypoints();
+    this.updateModeAvailability();
 
     this.prepareNetwork({ reason: 'imported-route' }).catch(() => { });
     return true;

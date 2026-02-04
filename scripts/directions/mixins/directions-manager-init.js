@@ -642,7 +642,7 @@ export class DirectionsManagerInitMixin {
       'route-poi',
       'route-poi-icon',
       'route-poi-label',
-      'segment-marker-layer',
+      'segment-markers',
       'waypoints',
       'waypoint-hover-drag',
       'route-hover-point',
