@@ -297,6 +297,15 @@ export class DirectionsManagerInteractionsMixin {
       }
     }
 
+    if (!this.isElevationCollapsed && this.routeProfile) {
+      if (typeof this.updateElevationProfile === 'function') {
+        const coords = Array.isArray(this.routeProfile.coordinates) ? this.routeProfile.coordinates : [];
+        if (coords.length) {
+          this.updateElevationProfile(coords);
+        }
+      }
+    }
+
     this.updateElevationVisibilityState();
   }
 
@@ -2374,6 +2383,7 @@ export class DirectionsManagerInteractionsMixin {
     // Use densified sequence for elevation sampling and metric computation
     const processingSequence = densified;
 
+    let terrainSampleCount = 0;
     for (let index = 0; index < processingSequence.length; index += 1) {
       const coord = processingSequence[index];
       let elevation = Number.isFinite(coord[2]) ? coord[2] : null;
@@ -2381,6 +2391,7 @@ export class DirectionsManagerInteractionsMixin {
         const terrainElevation = this.queryTerrainElevationValue(coord);
         if (Number.isFinite(terrainElevation)) {
           elevation = terrainElevation;
+          terrainSampleCount++;
         }
       }
       coord[2] = elevation;
@@ -2412,9 +2423,10 @@ export class DirectionsManagerInteractionsMixin {
         processingSequence[i][2] = lastEle;
       }
     }
-    // If NO valid elevations were found at all, default to 0 to avoid breaking charts
+    // If NO valid elevations were found at all, leave as null to avoid breaking 
+    // metric fallbacks (calculateRouteMetrics ignores nulls but would count 0s as stable ground)
     if (firstValidIdx === -1) {
-      for (let i = 0; i < processingSequence.length; i++) processingSequence[i][2] = 0;
+      for (let i = 0; i < processingSequence.length; i++) processingSequence[i][2] = null;
     }
 
     const cumulativeDistances = new Array(processingSequence.length).fill(0);
@@ -2435,7 +2447,8 @@ export class DirectionsManagerInteractionsMixin {
       coordinates: processingSequence,
       cumulativeDistances,
       totalDistanceKm: totalDistance,
-      elevations
+      elevations,
+      terrainSampleCount
     };
   }
 

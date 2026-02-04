@@ -969,6 +969,13 @@ export class DirectionsManagerInitMixin {
     this.map.on('dblclick', 'waypoints-hit-area', this.handleWaypointDoubleClick);
     this.map.on('contextmenu', 'waypoints-hit-area', this.handleWaypointContextMenu);
     this.map.on('contextmenu', this.handleRouteContextMenu);
+
+    // Refresh elevation profile when map becomes idle (terrain tiles likely loaded)
+    this.map.on('idle', () => {
+      if (this._elevationRefreshPending) {
+        this.refreshElevationProfile();
+      }
+    });
   }
 
   getProfileModeDefinition(mode) {
