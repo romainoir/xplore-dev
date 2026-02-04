@@ -138,8 +138,6 @@ body {
   background: none;
   box-shadow: none;
   pointer-events: auto;
-  transform: scale(var(--ui-scale));
-  transform-origin: center;
 }
 
 /* App Header */
@@ -536,8 +534,6 @@ body {
   background: none;
   box-shadow: none;
   font: 13px/1.2 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-  transform: scale(var(--ui-scale));
-  transform-origin: top left;
   gap: 12px;
 }
 
@@ -1205,8 +1201,9 @@ body {
   gap: 8px;
   /* Add top padding for the tooltip that floats above the chart */
   padding-top: 50px;
-  /* Reduced right padding to maximize horizontal space */
-  padding-right: 12px;
+  /* Balanced inner horizontal padding for a maximized look */
+  padding-left: 16px;
+  padding-right: 16px;
   box-sizing: border-box;
 }
 
@@ -1609,7 +1606,7 @@ body {
 
 .route-stats__sparkline {
   position: absolute;
-  inset: 0 16px 0 16px;
+  inset: 0 16px;
   z-index: 0;
   opacity: 0.5;
   pointer-events: none;
@@ -1627,7 +1624,7 @@ body {
   position: relative;
   z-index: 1;
   flex: 1;
-  padding: 6px 16px 6px 44px;
+  padding: 8px 16px;
 }
 
 .route-stats__toggle {
@@ -3136,8 +3133,8 @@ body {
 }
 
 .imagery-panel__buttons .toggle-3d img {
-  width: 24px;
-  height: 24px;
+  width: 22px !important;
+  height: 22px !important;
 }
 
 .imagery-panel__toggle:hover,
@@ -4703,8 +4700,6 @@ body {
   box-shadow: var(--glass-shadow);
   backdrop-filter: blur(var(--glass-blur));
   font-family: var(--font-ui);
-  transform: scale(var(--ui-scale));
-  transform-origin: top left;
 }
 
 #snowControls {
