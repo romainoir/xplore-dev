@@ -498,6 +498,7 @@ export class DirectionsManagerStatsMixin {
 
       let segmentModes = [];
       let coordinateMetadata = [];
+      let segmentColors = [];
       segments.forEach(seg => {
         this.appendCoordinates(mergedCoordinates, seg.coordinates);
         if (Array.isArray(seg.properties?.segment_modes)) {
@@ -506,11 +507,13 @@ export class DirectionsManagerStatsMixin {
         if (Array.isArray(seg.properties?.coordinate_metadata)) {
           coordinateMetadata = [...coordinateMetadata, ...seg.properties.coordinate_metadata];
         }
+        segmentColors.push(seg.properties?.color || null);
       });
       primaryProperties = {
         ...segments[0].properties,
         segment_modes: segmentModes,
-        coordinate_metadata: coordinateMetadata
+        coordinate_metadata: coordinateMetadata,
+        segment_colors: segmentColors
       };
 
     } else if (segments.length > 1) {
@@ -560,6 +563,7 @@ export class DirectionsManagerStatsMixin {
 
       let segmentModes = candidates[0].properties.segment_modes || [];
       let coordinateMetadata = candidates[0].properties.coordinate_metadata || [];
+      let segmentColors = [candidates[0].properties.color || null];
 
       for (let i = 1; i < candidates.length; i++) {
         const prev = mergedCoordinates[mergedCoordinates.length - 1];
@@ -583,6 +587,7 @@ export class DirectionsManagerStatsMixin {
           if (Array.isArray(candidates[i].properties.coordinate_metadata)) {
             coordinateMetadata = [...coordinateMetadata, ...candidates[i].properties.coordinate_metadata];
           }
+          segmentColors.push(candidates[i].properties.color || null);
         } else {
           // Not continuous, we stop merging
           break;
@@ -592,7 +597,8 @@ export class DirectionsManagerStatsMixin {
       primaryProperties = {
         ...candidates[0].properties,
         segment_modes: segmentModes,
-        coordinate_metadata: coordinateMetadata
+        coordinate_metadata: coordinateMetadata,
+        segment_colors: segmentColors
       };
 
       // If we detected automatic cuts (from separate tracks) and no explicit bivouacs were found,
@@ -630,7 +636,8 @@ export class DirectionsManagerStatsMixin {
     const first = source[0];
 
     // If identically same coordinates (floating point tol), skip first
-    const isSame = Math.abs(last[0] - first[0]) < 1e-6 && Math.abs(last[1] - first[1]) < 1e-6;
+    // Using a slightly wider tolerance (1e-5 ~ 1 meter) to handle GPX rounding/jitter at junctions
+    const isSame = Math.abs(last[0] - first[0]) < 1e-5 && Math.abs(last[1] - first[1]) < 1e-5;
 
     for (let i = (isSame ? 1 : 0); i < source.length; i++) {
       target.push(source[i]);

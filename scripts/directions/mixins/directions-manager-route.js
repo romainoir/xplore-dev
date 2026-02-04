@@ -374,39 +374,34 @@ export class DirectionsManagerRouteMixin {
     return this.interpolateSegmentCoordinate(segment, t, distanceKm);
   }
 
-  extractCoordinatesBetween(startKm, endKm) {
+  extractRouteRangeData(startKm, endKm) {
     if (!this.routeProfile || !Array.isArray(this.routeProfile.coordinates)) {
-      return [];
+      return null;
     }
 
     const coordinates = this.routeProfile.coordinates;
     const distances = this.routeProfile.cumulativeDistances ?? [];
-    const result = [];
+    const fullMetadata = this.routeGeojson?.properties?.coordinate_metadata || [];
+    const waypointDistances = this.getWaypointDistances();
+    const fullModes = this.routeGeojson?.properties?.segment_modes || [];
+
+    const resCoords = [];
+    const resMetadata = [];
     const tolerance = 1e-6;
 
-    const pushUnique = (coord) => {
-      if (!Array.isArray(coord) || coord.length < 2) {
-        return;
+    // Helper to push with unique check
+    const pushUnique = (coord, metadata) => {
+      if (!Array.isArray(coord) || coord.length < 2) return;
+      if (resCoords.length > 0) {
+        const last = resCoords[resCoords.length - 1];
+        if (Math.abs(last[0] - coord[0]) <= COORD_EPSILON && Math.abs(last[1] - coord[1]) <= COORD_EPSILON) {
+          return;
+        }
       }
-      const clone = coord.slice();
-      if (!result.length) {
-        result.push(clone);
-        return;
-      }
-
-      const last = result[result.length - 1];
-      const lngDelta = Math.abs((last?.[0] ?? 0) - (clone?.[0] ?? 0));
-      const latDelta = Math.abs((last?.[1] ?? 0) - (clone?.[1] ?? 0));
-      const withinCoordinateEpsilon = lngDelta <= COORD_EPSILON && latDelta <= COORD_EPSILON;
-
-      let withinDistanceTolerance = false;
-      if (!withinCoordinateEpsilon) {
-        const separationKm = this.computeDistanceKm(last, clone);
-        withinDistanceTolerance = Number.isFinite(separationKm) && separationKm <= 0.0005;
-      }
-
-      if (!withinCoordinateEpsilon && !withinDistanceTolerance) {
-        result.push(clone);
+      resCoords.push(coord.slice());
+      if (metadata) resMetadata.push(JSON.parse(JSON.stringify(metadata)));
+      else if (fullMetadata.length === coordinates.length) {
+        // Fallback: if we are at a point that exists in the original array, take its metadata
       }
     };
 
@@ -415,13 +410,10 @@ export class DirectionsManagerRouteMixin {
       pushUnique(startCoord);
     }
 
-    for (let index = 0; index < coordinates.length; index += 1) {
-      const distance = Number(distances[index]);
-      if (!Number.isFinite(distance)) {
-        continue;
-      }
-      if (distance > startKm + tolerance && distance < endKm - tolerance) {
-        pushUnique(coordinates[index]);
+    for (let i = 0; i < coordinates.length; i++) {
+      const d = distances[i];
+      if (d > startKm + tolerance && d < endKm - tolerance) {
+        pushUnique(coordinates[i], fullMetadata[i]);
       }
     }
 
@@ -430,7 +422,21 @@ export class DirectionsManagerRouteMixin {
       pushUnique(endCoord);
     }
 
-    return result;
+    // Partition modes by leg midpoint
+    const modes = [];
+    for (let i = 0; i < waypointDistances.length - 1; i++) {
+      const mid = (waypointDistances[i] + waypointDistances[i + 1]) / 2;
+      if (mid >= startKm && mid <= endKm) {
+        if (fullModes[i]) modes.push(fullModes[i]);
+      }
+    }
+
+    return { coordinates: resCoords, metadata: resMetadata, modes };
+  }
+
+  extractCoordinatesBetween(startKm, endKm) {
+    const res = this.extractRouteRangeData(startKm, endKm);
+    return res ? res.coordinates : [];
   }
 
   updateRouteCutSegments() {
@@ -454,8 +460,8 @@ export class DirectionsManagerRouteMixin {
       if (!Number.isFinite(startKm) || !Number.isFinite(endKm) || endKm - startKm <= 1e-6) {
         continue;
       }
-      const coords = this.extractCoordinatesBetween(startKm, endKm);
-      if (!Array.isArray(coords) || coords.length < 2) {
+      const rangeData = this.extractRouteRangeData(startKm, endKm);
+      if (!rangeData || rangeData.coordinates.length < 2) {
         continue;
       }
       const segmentIndex = segments.length;
@@ -464,7 +470,9 @@ export class DirectionsManagerRouteMixin {
         startKm,
         endKm,
         distanceKm: endKm - startKm,
-        coordinates: coords,
+        coordinates: rangeData.coordinates,
+        segment_modes: rangeData.modes,
+        coordinate_metadata: rangeData.metadata,
         color: this.getSegmentColor(segmentIndex),
         name: `Segment ${segmentIndex + 1}`
       });
@@ -581,6 +589,8 @@ export class DirectionsManagerRouteMixin {
             end_km: Number.isFinite(endKm) ? Number(endKm.toFixed(3)) : 0,
             distance_km: Number.isFinite(distanceKm) ? Number(distanceKm.toFixed(3)) : 0,
             color: segment.color ?? null,
+            segment_modes: segment.segment_modes ?? null,
+            coordinate_metadata: segment.coordinate_metadata ?? null,
             source: 'track'
           },
           geometry: {

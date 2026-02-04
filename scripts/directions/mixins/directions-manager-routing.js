@@ -347,6 +347,14 @@ export class DirectionsManagerRoutingMixin {
     if (!Number.isInteger(index) || index < 0) {
       return this.modeColors[this.currentMode];
     }
+
+    // Check if we have specifically stored colors for this route (e.g. from GPX import)
+    if (this.routeGeojson?.properties?.segment_colors && Array.isArray(this.routeGeojson.properties.segment_colors)) {
+      if (this.routeGeojson.properties.segment_colors[index]) {
+        return this.routeGeojson.properties.segment_colors[index];
+      }
+    }
+
     if (index === 0) {
       return this.modeColors[this.currentMode];
     }
