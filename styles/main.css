@@ -594,8 +594,8 @@ body {
 }
 
 .directions-toggle__icon {
-  width: 20px !important;
-  height: 20px !important;
+  width: 22px !important;
+  height: 22px !important;
   display: block;
   object-fit: contain;
   filter: brightness(0) invert(1) opacity(0.9) !important;
@@ -603,8 +603,8 @@ body {
 
 
 .ui .btn img {
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   object-fit: contain;
 }
 
@@ -987,7 +987,7 @@ body {
   visibility: visible;
   max-height: 65vh;
   transform: translateY(0);
-  padding: 12px 18px 14px;
+  padding: 12px 0 14px;
   margin-bottom: 12px;
   pointer-events: auto;
   overflow: visible;
@@ -1609,7 +1609,7 @@ body {
 
 .route-stats__sparkline {
   position: absolute;
-  inset: 0 16px 0 44px;
+  inset: 0 16px 0 16px;
   z-index: 0;
   opacity: 0.5;
   pointer-events: none;
@@ -1627,7 +1627,7 @@ body {
   position: relative;
   z-index: 1;
   flex: 1;
-  padding: 8px 16px 8px 44px;
+  padding: 8px 16px;
 }
 
 .route-stats__toggle {
@@ -3662,10 +3662,10 @@ body {
 /* Base style for all circular map buttons */
 .map-action-btn,
 .maplibregl-ctrl-top-right button {
-  width: 36px !important;
-  height: 36px !important;
-  min-width: 36px !important;
-  min-height: 36px !important;
+  width: 44px !important;
+  height: 44px !important;
+  min-width: 44px !important;
+  min-height: 44px !important;
   box-sizing: border-box !important;
   padding: 0 !important;
   margin: 0 !important;
@@ -3693,7 +3693,7 @@ body {
 /* 3D Button Text */
 .toggle-3d__label {
   font-family: var(--font-ui);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 800;
   color: #ffffff !important;
   letter-spacing: -0.5px;
@@ -3708,8 +3708,8 @@ body {
 .terrain-toolbox-toggle img,
 .snow-toolbox-toggle img,
 .shadow-toolbox-toggle img {
-  width: 20px !important;
-  height: 20px !important;
+  width: 22px !important;
+  height: 22px !important;
   filter: brightness(0) invert(1) opacity(0.9) !important;
 }
 
@@ -5090,8 +5090,8 @@ body {
 
 /* Sidebar Toggle Icon fixes */
 .library-toggle__icon {
-  width: 20px !important;
-  height: 20px !important;
+  width: 22px !important;
+  height: 22px !important;
   display: block;
   object-fit: contain;
   filter: brightness(0) invert(1) opacity(0.9) !important;
