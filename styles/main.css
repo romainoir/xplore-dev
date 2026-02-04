@@ -1206,7 +1206,7 @@ body {
   /* Add top padding for the tooltip that floats above the chart */
   padding-top: 50px;
   /* Reduced right padding to maximize horizontal space */
-  padding-right: 16px;
+  padding-right: 12px;
   box-sizing: border-box;
 }
 
@@ -1627,7 +1627,7 @@ body {
   position: relative;
   z-index: 1;
   flex: 1;
-  padding: 8px 16px;
+  padding: 6px 16px 6px 44px;
 }
 
 .route-stats__toggle {
@@ -3666,6 +3666,7 @@ body {
   height: 44px !important;
   min-width: 44px !important;
   min-height: 44px !important;
+  flex: 0 0 44px !important;
   box-sizing: border-box !important;
   padding: 0 !important;
   margin: 0 !important;
