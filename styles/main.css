@@ -984,7 +984,8 @@ body {
   visibility: visible;
   max-height: 65vh;
   transform: translateY(0);
-  padding: 12px 0 14px;
+  padding: 12px 0 0;
+  /* Removed 14px bottom padding to allow flush button alignment */
   margin-bottom: 12px;
   pointer-events: auto;
   overflow: visible;
@@ -1598,7 +1599,7 @@ body {
   backdrop-filter: none;
   border: none;
   border-radius: 0 0 24px 24px;
-  overflow: hidden;
+  /* Removed overflow: hidden to allow button to be flush with bottom border */
   box-shadow: none;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -1627,7 +1628,8 @@ body {
   position: relative;
   z-index: 1;
   flex: 1;
-  padding: 8px 32px;
+  padding: 8px 32px 14px 32px;
+  /* Moved bottom padding here */
 }
 
 .route-stats__toggle {
