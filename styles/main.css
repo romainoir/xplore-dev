@@ -585,8 +585,8 @@ body {
 }
 
 /* Shared Active State for Primary Toggles */
-.directions-toggle.active,
-.library-toggle.active,
+/* Shared Active State for Primary Toggles */
+.map-action-btn.active,
 .toggle-3d.active {
   background: rgba(39, 174, 96, 0.4) !important;
   border-color: rgba(39, 174, 96, 0.7) !important;
@@ -3660,13 +3660,7 @@ body {
 }
 
 /* Base style for all circular map buttons */
-.directions-toggle,
-.library-toggle,
-.toggle-3d,
-.terrain-toolbox-toggle,
-.snow-toolbox-toggle,
-.shadow-toolbox-toggle,
-.imagery-panel__toggle,
+.map-action-btn,
 .maplibregl-ctrl-top-right button {
   width: 48px !important;
   height: 48px !important;
@@ -3688,14 +3682,8 @@ body {
   overflow: visible !important;
 }
 
-.maplibregl-ctrl-top-right button:hover,
-.imagery-panel__toggle:hover,
-.imagery-panel__buttons .toggle-3d:hover,
-.terrain-toolbox-toggle:hover,
-.snow-toolbox-toggle:hover,
-.shadow-toolbox-toggle:hover,
-.library-toggle:hover,
-.directions-toggle:hover {
+.map-action-btn:hover,
+.maplibregl-ctrl-top-right button:hover {
   transform: scale(1.08);
   background: rgba(255, 255, 255, 0.1) !important;
   box-shadow: 0 8px 25px rgba(0, 0, 0, 0.5) !important;

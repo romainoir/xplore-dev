@@ -86,11 +86,11 @@
   <!-- UI: View mode sidebar -->
   <div class="ui">
     <div class="ui__row ui__row--directions">
-      <button id="directionsToggle" class="btn btn--icon toggle-3d directions-toggle"
+      <button id="directionsToggle" class="btn btn--icon map-action-btn directions-toggle"
         aria-label="Toggle functionality panel" aria-expanded="false" title="Directions & Analysis">
         <img class="directions-toggle__icon" src="./data/edit.png" alt="" aria-hidden="true" />
       </button>
-      <button id="libraryToggle" class="btn btn--icon toggle-3d library-toggle" aria-label="Toggle Route Library"
+      <button id="libraryToggle" class="btn btn--icon map-action-btn library-toggle" aria-label="Toggle Route Library"
         aria-expanded="false" title="Route Library">
         <img class="library-toggle__icon" src="./data/folder.png" alt="" aria-hidden="true" />
       </button>
@@ -351,14 +351,14 @@
   <!-- Imagery toggle -->
   <div class="imagery-panel" id="imageryPanel">
     <div class="imagery-panel__buttons">
-      <button id="toggle3D" class="btn btn--icon-only toggle-3d" type="button" aria-pressed="true"
+      <button id="toggle3D" class="btn btn--icon-only map-action-btn toggle-3d" type="button" aria-pressed="true"
         aria-label="Switch to 2D" title="Switch to 2D">
         <span class="toggle-3d__label">3D</span>
         <span class="sr-only">Toggle 2D/3D view</span>
       </button>
       <div class="imagery-panel__control-group">
-        <button id="shadowToolboxToggle" class="btn shadow-toolbox-toggle" type="button" aria-expanded="false"
-          aria-controls="shadowToolbox" title="Shadow Analysis">
+        <button id="shadowToolboxToggle" class="btn map-action-btn shadow-toolbox-toggle" type="button"
+          aria-expanded="false" aria-controls="shadowToolbox" title="Shadow Analysis">
           <img src="./data/sun.png" alt="" loading="lazy" decoding="async" />
           <span class="sr-only">Shadow Analysis</span>
         </button>
@@ -369,8 +369,8 @@
       </div>
 
       <div class="imagery-panel__control-group">
-        <button id="terrainToolboxToggle" class="btn terrain-toolbox-toggle" type="button" aria-expanded="false"
-          aria-controls="terrainToolbox" title="Terrain Analysis">
+        <button id="terrainToolboxToggle" class="btn map-action-btn terrain-toolbox-toggle" type="button"
+          aria-expanded="false" aria-controls="terrainToolbox" title="Terrain Analysis">
           <img src="./data/terrain.png" alt="" loading="lazy" decoding="async" />
           <span class="sr-only">Terrain Analysis</span>
         </button>
@@ -381,8 +381,8 @@
       </div>
 
       <div class="imagery-panel__control-group">
-        <button id="snowToolboxToggle" class="btn snow-toolbox-toggle" type="button" aria-expanded="false"
-          aria-controls="snowToolbox" title="Snow Analysis">
+        <button id="snowToolboxToggle" class="btn map-action-btn snow-toolbox-toggle" type="button"
+          aria-expanded="false" aria-controls="snowToolbox" title="Snow Analysis">
           <img src="./data/snowflake.png" alt="" loading="lazy" decoding="async" />
           <span class="sr-only">Snow Analysis</span>
         </button>
@@ -392,7 +392,7 @@
         </div>
       </div>
 
-      <button id="imageryPanelToggle" class="imagery-panel__toggle" type="button" aria-expanded="false"
+      <button id="imageryPanelToggle" class="map-action-btn imagery-panel__toggle" type="button" aria-expanded="false"
         aria-controls="imageryPanelDrawer" aria-haspopup="true" title="Toggle imagery layers">
         <span class="imagery-panel__toggle-icon" aria-hidden="true">
           <img src="./data/layers.png" alt="" loading="lazy" decoding="async" />
