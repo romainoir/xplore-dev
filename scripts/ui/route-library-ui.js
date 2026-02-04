@@ -2,6 +2,7 @@
 import { RouteLibraryManager } from '../storage/route-library-manager.js';
 import { geojsonToGpx, parseGpxToGeoJson, zoomToGeojson } from '../gpx/gpx-io.js';
 import { haversineDistanceMeters } from '../directions/utils/directions-utils.js';
+import { fetchWikimediaPhotosInBounds, getPhotoThumbnailUrl } from '../map/wikimedia-photos.js';
 
 export class RouteLibraryUI {
     constructor(manager, directionsManager) {
@@ -243,9 +244,11 @@ export class RouteLibraryUI {
             `;
         }
 
+        const backgroundImageStyle = stats.imageUrl ? `background-image: linear-gradient(rgba(0,0,0,0.4), rgba(0,0,0,0.6)), url('${stats.imageUrl}'); background-size: cover; background-position: center;` : '';
+
         return `
-      <div class="route-card" data-id="${route.id}" style="color: white; border-left: none;">
-        <div class="route-card__header" style="flex-direction: column; align-items: stretch;">
+      <div class="route-card" data-id="${route.id}" style="color: white; border-left: none; position: relative; overflow: hidden; ${backgroundImageStyle}">
+        <div class="route-card__header" style="flex-direction: column; align-items: stretch; position: relative; z-index: 1;">
             <div class="route-header" style="display: flex; align-items: center; margin-bottom: 8px;">
                  <h3 class="route-title" style="margin: 0; font-size: 15px; font-weight: 600; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; color: white;" title="${this.escapeHtml(route.name)}">${this.escapeHtml(route.name)}</h3>
                  ${days}
@@ -253,15 +256,15 @@ export class RouteLibraryUI {
 
             <div class="route-stats-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; font-size: 13px;">
                  <div style="display: flex; flex-direction: column;">
-                    <span style="opacity: 0.6; font-size: 11px;">Distance</span>
+                    <span style="opacity: 0.8; font-size: 11px;">Distance</span>
                     <span style="font-weight: 500;">${validDistance} km</span>
                  </div>
                  <div style="display: flex; flex-direction: column;">
-                    <span style="opacity: 0.6; font-size: 11px;">Dénivelé</span>
+                    <span style="opacity: 0.8; font-size: 11px;">Dénivelé</span>
                     <span style="font-weight: 500;">+${validAscent} / -${validDescent} m</span>
                  </div>
                  <div style="display: flex; flex-direction: column;">
-                    <span style="opacity: 0.6; font-size: 11px;">Temps</span>
+                    <span style="opacity: 0.8; font-size: 11px;">Temps</span>
                     <span style="font-weight: 500;">${validDuration}</span>
                  </div>
             </div>
@@ -271,12 +274,12 @@ export class RouteLibraryUI {
             ${sparklineHtml}
 
             <div class="route-actions" style="margin-top: 8px; display: flex; justify-content: flex-end; gap: 8px;">
-                <button class="btn btn--outline btn--sm action-load" data-id="${route.id}" style="flex: 1; color: white; border-color: rgba(255,255,255,0.3);">Load</button>
+                <button class="btn btn--outline btn--sm action-load" data-id="${route.id}" style="flex: 1; color: white; border-color: rgba(255,255,255,0.4); background: rgba(0,0,0,0.2);">Load</button>
                 <button class="btn btn--text btn--sm action-export" data-id="${route.id}" title="Export GPX" style="color: white;">
-                    <img src="./data/download.png" width="16" height="16" alt="Export" style="opacity: 0.7; filter: brightness(0) invert(1);">
+                    <img src="./data/download.png" width="16" height="16" alt="Export" style="opacity: 0.9; filter: brightness(0) invert(1);">
                 </button>
                 <button class="btn btn--text btn--sm action-delete" data-id="${route.id}" title="Delete" style="color: white;">
-                        <img src="./data/trash.svg" width="16" height="16" alt="Delete" style="filter: brightness(0) invert(1);">
+                        <img src="./data/trash.svg" width="16" height="16" alt="Delete" style="opacity: 0.9; filter: brightness(0) invert(1);">
                 </button>
             </div>
         </div>
@@ -401,6 +404,56 @@ export class RouteLibraryUI {
                 },
                 tags: ['imported']
             };
+
+            // Find highest point and fetch photo (optional but nice for imports)
+            try {
+                const allPoints = [];
+                geojson.features.forEach(f => {
+                    if (f.geometry.type === 'LineString') {
+                        allPoints.push(...f.geometry.coordinates);
+                    } else if (f.geometry.type === 'MultiLineString') {
+                        f.geometry.coordinates.forEach(coords => allPoints.push(...coords));
+                    }
+                });
+
+                if (allPoints.length > 0) {
+                    let maxEle = -Infinity;
+                    let highestPoint = null;
+                    for (const p of allPoints) {
+                        if (Array.isArray(p) && p.length > 2 && p[2] > maxEle) {
+                            maxEle = p[2];
+                            highestPoint = p;
+                        }
+                    }
+
+                    if (highestPoint) {
+                        const lat = highestPoint[1];
+                        const lon = highestPoint[0];
+                        const delta = 0.05; // ~5km radius
+                        const bounds = {
+                            getNorth: () => lat + delta,
+                            getSouth: () => lat - delta,
+                            getEast: () => lon + delta,
+                            getWest: () => lon - delta
+                        };
+
+                        const photos = await fetchWikimediaPhotosInBounds(bounds);
+                        if (photos?.features?.length > 0) {
+                            // Pick closest to the peak
+                            const sorted = photos.features
+                                .map(f => {
+                                    const d = haversineDistanceMeters([lon, lat], f.geometry.coordinates);
+                                    return { ...f, distance: d };
+                                })
+                                .sort((a, b) => a.distance - b.distance);
+
+                            routeData.stats.imageUrl = getPhotoThumbnailUrl(sorted[0].properties.fileName, 600);
+                        }
+                    }
+                }
+            } catch (err) {
+                console.warn("Failed to find photo for imported route", err);
+            }
 
             await this.manager.saveRoute(routeData);
 

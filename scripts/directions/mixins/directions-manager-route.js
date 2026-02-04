@@ -179,7 +179,7 @@ import {
   OVERPASS_ENDPOINT,
   OVERPASS_ENDPOINT as OVERPASS_INTERPRETER_ENDPOINT
 } from '../../routing/overpass-network-fetcher.js';
-
+import { fetchWikimediaPhotosInBounds, getPhotoThumbnailUrl } from '../../map/wikimedia-photos.js';
 
 export class DirectionsManagerRouteMixin {
   setRoutePointsOfInterest(pois) {
@@ -675,6 +675,60 @@ export class DirectionsManagerRouteMixin {
       },
       segments // Save segments for coloring
     };
+
+    // Find highest point and fetch a Wikimedia Photo for the background
+    try {
+      let maxEle = -Infinity;
+      let highestPoint = null;
+
+      // Use the geojson features we already built to find the highest point
+      geojson.features.forEach(f => {
+        const processCoords = (coords) => {
+          for (const c of coords) {
+            if (Array.isArray(c) && c.length > 2 && c[2] > maxEle) {
+              maxEle = c[2];
+              highestPoint = c;
+            }
+          }
+        };
+
+        if (f.geometry.type === 'LineString') {
+          processCoords(f.geometry.coordinates);
+        } else if (f.geometry.type === 'MultiLineString') {
+          f.geometry.coordinates.forEach(processCoords);
+        }
+      });
+
+      if (highestPoint) {
+        // Fetch photos around highest point (bbox ~5km for better chance of finding one)
+        const lat = highestPoint[1];
+        const lon = highestPoint[0];
+        const delta = 0.05; // approx 5km radius
+        const bounds = {
+          getNorth: () => lat + delta,
+          getSouth: () => lat - delta,
+          getEast: () => lon + delta,
+          getWest: () => lon - delta
+        };
+
+        const photoCollection = await fetchWikimediaPhotosInBounds(bounds);
+        if (photoCollection?.features?.length > 0) {
+          // Sort by distance to highest point to get the closest one
+          const photos = photoCollection.features
+            .map(f => {
+              const d = haversineDistanceMeters([lon, lat], f.geometry.coordinates);
+              return { ...f, distance: d };
+            })
+            .sort((a, b) => a.distance - b.distance);
+
+          const photo = photos[0];
+          stats.imageUrl = getPhotoThumbnailUrl(photo.properties.fileName, 600);
+          console.log(`Found background photo for route near highest point: ${photo.properties.title}`);
+        }
+      }
+    } catch (photoErr) {
+      console.warn("Failed to fetch route background photo", photoErr);
+    }
 
     // Generate simplified profile for sparkline
     let elevationProfile = [];
