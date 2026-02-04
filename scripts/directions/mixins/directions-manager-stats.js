@@ -3015,13 +3015,21 @@ export class DirectionsManagerStatsMixin {
       return Math.abs(tick - xAxis.min) > minProximity && Math.abs(tick - xAxis.max) > minProximity;
     });
 
-    finalTicks.forEach((tick) => {
+    finalTicks.forEach((tick, idx) => {
       const ratio = (tick - xAxis.min) / span;
       const percent = Math.max(0, Math.min(100, ratio * 100));
       const label = document.createElement('span');
       // Show "km" on all ticks, use 0.5 discretization
       label.textContent = `${this.formatAxisDistance(tick)} km`;
-      label.style.left = `${percent}% `;
+      label.style.left = `${percent}%`;
+
+      // Justify first and last labels to stay within the chart area
+      if (idx === 0) {
+        label.style.transform = 'none';
+      } else if (idx === finalTicks.length - 1) {
+        label.style.transform = 'translateX(-100%)';
+      }
+
       xAxisContainer.appendChild(label);
     });
   }

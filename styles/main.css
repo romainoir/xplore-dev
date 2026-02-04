@@ -2733,6 +2733,14 @@ body {
   transform: translateX(-50%);
 }
 
+.elevation-x-axis span:first-child {
+  transform: none !important;
+}
+
+.elevation-x-axis span:last-child {
+  transform: translateX(-100%) !important;
+}
+
 .icon-button.has-tooltip {
   position: relative;
 }
