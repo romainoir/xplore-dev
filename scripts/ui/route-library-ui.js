@@ -298,7 +298,7 @@ export class RouteLibraryUI {
                     <img src="./data/download.png" width="16" height="16" alt="Export" style="opacity: 0.9; filter: brightness(0) invert(1);">
                 </button>
                 <button class="btn btn--text btn--sm action-delete" data-id="${route.id}" title="Delete" style="color: white;">
-                        <img src="./data/trash.svg" width="16" height="16" alt="Delete" style="opacity: 0.9; filter: brightness(0) invert(1);">
+                        <img src="./data/clear.png" width="16" height="16" alt="Delete" style="opacity: 0.9; filter: brightness(0) invert(1);">
                 </button>
             </div>
         </div>
