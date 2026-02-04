@@ -634,10 +634,11 @@ body {
 }
 
 .directions-toggle.active,
-.library-toggle.active {
-  background: rgba(39, 174, 96, 0.25) !important;
-  border-color: rgba(39, 174, 96, 0.6) !important;
-  box-shadow: 0 0 15px rgba(39, 174, 96, 0.35), 0 4px 15px rgba(0, 0, 0, 0.4) !important;
+.library-toggle.active,
+.toggle-3d.active {
+  background: rgba(39, 174, 96, 0.4) !important;
+  border-color: rgba(39, 174, 96, 0.7) !important;
+  box-shadow: 0 0 15px rgba(39, 174, 96, 0.4), 0 4px 15px rgba(0, 0, 0, 0.4) !important;
 }
 
 .directions-toggle__icon {
@@ -1259,11 +1260,10 @@ body {
   display: flex;
   align-items: stretch;
   gap: 8px;
-  width: 100%;
   /* Add top padding for the tooltip that floats above the chart */
   padding-top: 50px;
-  /* Add right padding matching Y-axis width for symmetry */
-  padding-right: 48px;
+  /* Add right padding matching Y-axis (48+8=56) for symmetry */
+  padding-right: 56px;
   box-sizing: border-box;
 }
 
@@ -1666,9 +1666,9 @@ body {
 
 .route-stats__sparkline {
   position: absolute;
-  inset: 0;
+  inset: 0 56px;
   z-index: 0;
-  opacity: 0.6;
+  opacity: 0.5;
   pointer-events: none;
   mask-image: linear-gradient(to bottom, black 20%, transparent 95%);
   -webkit-mask-image: linear-gradient(to bottom, black 20%, transparent 95%);
@@ -1684,7 +1684,7 @@ body {
   position: relative;
   z-index: 1;
   flex: 1;
-  padding: 12px 48px 12px 56px;
+  padding: 12px 56px;
 }
 
 .route-stats__toggle {
@@ -3717,16 +3717,19 @@ body {
 }
 
 /* Base style for all circular map buttons */
-.maplibregl-ctrl-top-right button,
-.imagery-panel__toggle,
-.imagery-panel__buttons .toggle-3d,
+.directions-toggle,
+.library-toggle,
+.toggle-3d,
 .terrain-toolbox-toggle,
 .snow-toolbox-toggle,
 .shadow-toolbox-toggle,
-.library-toggle,
-.directions-toggle {
+.imagery-panel__toggle,
+.maplibregl-ctrl-top-right button {
   width: 48px !important;
   height: 48px !important;
+  min-width: 48px !important;
+  min-height: 48px !important;
+  box-sizing: border-box !important;
   background: var(--glass-surface-strong) !important;
   backdrop-filter: blur(var(--glass-blur)) !important;
   border: 1px solid var(--glass-border) !important;
