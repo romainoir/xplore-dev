@@ -3142,17 +3142,32 @@ async function init() {
   const directionsActionsBar = document.getElementById('directionsActionsBar');
 
   const updateActionsBarVisibility = () => {
-    if (!directionsActionsBar) return;
-    const isDirectionsOpen = directionsDock?.getAttribute('aria-hidden') === 'false';
+    if (!directionsActionsBar || !directionsControl) return;
+    const isDirectionsOpen = directionsControl.classList.contains('visible');
     directionsActionsBar.classList.toggle('visible', isDirectionsOpen);
     directionsActionsBar.setAttribute('aria-hidden', String(!isDirectionsOpen));
   };
 
-  if (directionsToggle && directionsActionsBar) {
-    directionsToggle.addEventListener('click', () => {
-      // Small delay to let DirectionsManager update the dock state
-      setTimeout(updateActionsBarVisibility, 10);
+  if (directionsDock && directionsActionsBar) {
+    // Observe visibility changes on directionsControl to sync toolbox
+    // Using MutationObserver on classList is more reliable for internal state changes
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (mutation.attributeName === 'class') {
+          updateActionsBarVisibility();
+        }
+      });
     });
+    if (directionsControl) {
+      observer.observe(directionsControl, { attributes: true, attributeFilter: ['class'] });
+    }
+
+    // Handle toggle click specifically as well for immediate feel if needed
+    if (directionsToggle) {
+      directionsToggle.addEventListener('click', () => {
+        setTimeout(updateActionsBarVisibility, 10);
+      });
+    }
     // Initial sync
     updateActionsBarVisibility();
   }

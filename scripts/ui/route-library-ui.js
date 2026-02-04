@@ -122,10 +122,10 @@ export class RouteLibraryUI {
         this.toggleBtn.setAttribute('aria-expanded', this.isVisible);
 
         if (this.isVisible) {
-            // Close directions dock if separate (optional, based on UX preference)
-            // const directionsDock = document.getElementById('directionsDock');
-            // directionsDock.classList.remove('visible');
-            // document.getElementById('directionsToggle').classList.remove('active');
+            // Close directions dock if separate (mutual exclusivity)
+            if (this.directionsManager && typeof this.directionsManager.setPanelVisible === 'function') {
+                this.directionsManager.setPanelVisible(false);
+            }
 
             await this.loadRoutes();
         }
@@ -350,8 +350,8 @@ export class RouteLibraryUI {
                     alert("Loading routes is not supported in this version.");
                 }
 
-                // Close library on small screens
-                if (window.innerWidth < 1024) {
+                // Close the library as we are now switching to the directions panel (handled by importRouteFromGeojson -> ensurePanelVisible)
+                if (this.isVisible) {
                     this.toggleDock();
                 }
             }

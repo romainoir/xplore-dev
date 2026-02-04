@@ -271,80 +271,80 @@
     </div>
   </div>
 
-  <div id="directionsDock" class="directions-dock" aria-label="Directions Panel" aria-hidden="true">
-    <!-- Directions panel content will be injected here -->
+  <div id="directionsDock" class="directions-dock" aria-label="Directions Panel">
+    <!-- Route Library Dock -->
+    <div id="routeLibraryDock" class="route-library-dock" aria-label="Route Library Panel" aria-hidden="true">
+      <div class="library-header">
+        <h2 class="library-title">Saved Routes</h2>
+        <div class="library-actions">
+          <div class="search-container">
+            <input type="text" id="librarySearchInput" placeholder="Search routes..." aria-label="Search routes">
+          </div>
+          <button id="libraryImportBtn" class="btn btn--sm" title="Import GPX">
+            <img src="./data/upload.png" alt="Import" width="16" height="16">
+          </button>
+          <input type="file" id="libraryGpxInput" accept=".gpx,application/gpx+xml" multiple style="display: none;"
+            aria-hidden="true">
+        </div>
+      </div>
+      <div class="library-content">
+        <div id="routeList" class="route-list">
+          <!-- Route cards will be injected here -->
+          <div class="empty-state">No saved routes yet.</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="directionsControl" class="directions-control" aria-live="polite" aria-hidden="true">
+      <!-- Elevation chart (top - expandable) -->
+      <div id="elevationCard" class="elevation-section elevation-section--collapsed chart-card--collapsed" role="group"
+        aria-label="Route elevation overview">
+        <div id="elevationChartBody" class="elevation-section__body" hidden aria-hidden="true">
+          <div class="elevation-section__chart-wrapper">
+            <div class="elevation-section__y-axis" id="elevationYAxisLabels">
+              <span class="chart-card__y-max"></span>
+              <span class="chart-card__y-min"></span>
+            </div>
+            <div id="elevationChart" class="elevation-chart" aria-hidden="true"></div>
+            <!-- Profile mode controls - positioned on the right side of the chart -->
+            <div class="profile-mode-sidebar" role="radiogroup" aria-label="Profile display mode">
+              <!-- Legend popup (appears on hover when hovering over a mode icon) -->
+              <div id="profileLegend" class="profile-legend" role="group" aria-label="Route overlay legend"
+                aria-hidden="true" data-ready="false"></div>
+              <button type="button" class="profile-mode-sidebar__item" data-profile-mode="slope" role="radio"
+                aria-checked="false" title="Pente">
+                <img src="./data/icons_Xmap/pente.png" alt="" aria-hidden="true" />
+                <span class="sr-only">Pente</span>
+              </button>
+              <button type="button" class="profile-mode-sidebar__item" data-profile-mode="surface" role="radio"
+                aria-checked="false" title="Surface">
+                <img src="./data/icons_Xmap/surface.png" alt="" aria-hidden="true" />
+                <span class="sr-only">Surface</span>
+              </button>
+              <button type="button" class="profile-mode-sidebar__item" data-profile-mode="category" role="radio"
+                aria-checked="false" title="Difficulté">
+                <img src="./data/icons_Xmap/difficulty.png" alt="" aria-hidden="true" />
+                <span class="sr-only">Difficulté</span>
+              </button>
+              <button type="button" class="profile-mode-sidebar__item" data-profile-mode="poi" role="radio"
+                aria-checked="false" title="POI">
+                <img src="./data/icons_Xmap/POI.png" alt="" aria-hidden="true" />
+                <span class="sr-only">POI</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Route stats area -->
+      <div id="routeTimeline" class="route-timeline"></div>
+      <div id="routeStats" class="route-stats" aria-live="polite"></div>
+      <!-- Actions moved to sidebar bar -->
+    </div>
   </div>
 
-  <!-- Route Library Dock -->
-  <div id="routeLibraryDock" class="route-library-dock" aria-label="Route Library Panel" aria-hidden="true">
-    <div class="library-header">
-      <h2 class="library-title">Saved Routes</h2>
-      <div class="library-actions">
-        <div class="search-container">
-          <input type="text" id="librarySearchInput" placeholder="Search routes..." aria-label="Search routes">
-        </div>
-        <button id="libraryImportBtn" class="btn btn--sm" title="Import GPX">
-          <img src="./data/upload.png" alt="Import" width="16" height="16">
-        </button>
-        <input type="file" id="libraryGpxInput" accept=".gpx,application/gpx+xml" multiple style="display: none;"
-          aria-hidden="true">
-      </div>
-    </div>
-    <div class="library-content">
-      <div id="routeList" class="route-list">
-        <!-- Route cards will be injected here -->
-        <div class="empty-state">No saved routes yet.</div>
-      </div>
-    </div>
-  </div>
   <!-- Routing start tooltip - shown when dock opens with no waypoints -->
   <div id="routingStartTooltip" class="routing-start-tooltip" aria-hidden="true">
     <span class="routing-start-tooltip__text">Click on the map to begin routing</span>
-  </div>
-  <div id="directionsControl" class="directions-control" aria-live="polite" aria-hidden="true">
-    <!-- Elevation chart (top - expandable) -->
-    <div id="elevationCard" class="elevation-section elevation-section--collapsed chart-card--collapsed" role="group"
-      aria-label="Route elevation overview">
-      <div id="elevationChartBody" class="elevation-section__body" hidden aria-hidden="true">
-        <div class="elevation-section__chart-wrapper">
-          <div class="elevation-section__y-axis" id="elevationYAxisLabels">
-            <span class="chart-card__y-max"></span>
-            <span class="chart-card__y-min"></span>
-          </div>
-          <div id="elevationChart" class="elevation-chart" aria-hidden="true"></div>
-          <!-- Profile mode controls - positioned on the right side of the chart -->
-          <div class="profile-mode-sidebar" role="radiogroup" aria-label="Profile display mode">
-            <!-- Legend popup (appears on hover when hovering over a mode icon) -->
-            <div id="profileLegend" class="profile-legend" role="group" aria-label="Route overlay legend"
-              aria-hidden="true" data-ready="false"></div>
-            <button type="button" class="profile-mode-sidebar__item" data-profile-mode="slope" role="radio"
-              aria-checked="false" title="Pente">
-              <img src="./data/icons_Xmap/pente.png" alt="" aria-hidden="true" />
-              <span class="sr-only">Pente</span>
-            </button>
-            <button type="button" class="profile-mode-sidebar__item" data-profile-mode="surface" role="radio"
-              aria-checked="false" title="Surface">
-              <img src="./data/icons_Xmap/surface.png" alt="" aria-hidden="true" />
-              <span class="sr-only">Surface</span>
-            </button>
-            <button type="button" class="profile-mode-sidebar__item" data-profile-mode="category" role="radio"
-              aria-checked="false" title="Difficulté">
-              <img src="./data/icons_Xmap/difficulty.png" alt="" aria-hidden="true" />
-              <span class="sr-only">Difficulté</span>
-            </button>
-            <button type="button" class="profile-mode-sidebar__item" data-profile-mode="poi" role="radio"
-              aria-checked="false" title="POI">
-              <img src="./data/icons_Xmap/POI.png" alt="" aria-hidden="true" />
-              <span class="sr-only">POI</span>
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-    <!-- Route stats area -->
-    <div id="routeTimeline" class="route-timeline"></div>
-    <div id="routeStats" class="route-stats" aria-live="polite"></div>
-    <!-- Actions moved to sidebar bar -->
   </div>
   </div>
 

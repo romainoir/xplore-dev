@@ -199,6 +199,23 @@ export class DirectionsManagerInteractionsMixin {
     if (this.directionsToggle) {
       this.directionsToggle.classList.toggle('active', visible);
     }
+
+    // Mutual exclusivity: if directions panel is opening, close the library
+    if (visible && this.routeLibraryManager) {
+      // Find the RouteLibraryUI instance or just use a custom event if we don't have direct access
+      // Given the architecture, we know RouteLibraryUI is likely registered or we can just trigger the close logic
+      const libraryDock = document.getElementById('routeLibraryDock');
+      const libraryToggle = document.getElementById('libraryToggle');
+      if (libraryDock && libraryDock.classList.contains('visible')) {
+        libraryDock.classList.remove('visible');
+        libraryDock.setAttribute('aria-hidden', 'true');
+        if (libraryToggle) {
+          libraryToggle.classList.remove('active');
+          libraryToggle.setAttribute('aria-expanded', 'false');
+        }
+      }
+    }
+
     this.updatePanelVisibilityState();
 
     // Show/hide routing start tooltip based on visibility and waypoints
@@ -220,9 +237,6 @@ export class DirectionsManagerInteractionsMixin {
     }
     if (this.directionsControl) {
       this.directionsControl.setAttribute('aria-hidden', isVisible ? 'false' : 'true');
-    }
-    if (this.directionsDock) {
-      this.directionsDock.setAttribute('aria-hidden', isVisible ? 'false' : 'true');
     }
     if (this.routeStats) {
       this.routeStats.setAttribute('aria-hidden', isVisible ? 'false' : 'true');
