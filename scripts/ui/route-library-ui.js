@@ -487,6 +487,7 @@ export class RouteLibraryUI {
         let distanceMeters = 0;
         let elevationGain = 0;
         let elevationLoss = 0;
+        let lastPoint = null;
         const ptsWithDist = [];
         const segments = [];
 
@@ -501,19 +502,19 @@ export class RouteLibraryUI {
                 const curr = coords[i];
                 const ele = curr.length > 2 ? curr[2] : 0;
 
-                if (i > 0) {
-                    const prev = coords[i - 1];
-                    const step = haversineDistanceMeters(prev, curr) || 0;
+                if (lastPoint) {
+                    const step = haversineDistanceMeters(lastPoint, curr) || 0;
                     distanceMeters += step;
 
-                    if (prev.length > 2 && curr.length > 2) {
-                        const diff = curr[2] - prev[2];
+                    if (lastPoint.length > 2 && curr.length > 2) {
+                        const diff = curr[2] - lastPoint[2];
                         if (diff > 0) elevationGain += diff;
                         else elevationLoss += Math.abs(diff);
                     }
                 }
 
                 ptsWithDist.push({ d: distanceMeters, ele });
+                lastPoint = curr;
             }
 
             segments.push({
