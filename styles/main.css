@@ -594,8 +594,8 @@ body {
 }
 
 .directions-toggle__icon {
-  width: 24px !important;
-  height: 24px !important;
+  width: 20px !important;
+  height: 20px !important;
   display: block;
   object-fit: contain;
   filter: brightness(0) invert(1) opacity(0.9) !important;
@@ -603,8 +603,8 @@ body {
 
 
 .ui .btn img {
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
   object-fit: contain;
 }
 
@@ -1205,8 +1205,8 @@ body {
   gap: 8px;
   /* Add top padding for the tooltip that floats above the chart */
   padding-top: 50px;
-  /* Add right padding matching Y-axis (48+8=56) for symmetry */
-  padding-right: 56px;
+  /* Reduced right padding to maximize horizontal space */
+  padding-right: 16px;
   box-sizing: border-box;
 }
 
@@ -1609,7 +1609,7 @@ body {
 
 .route-stats__sparkline {
   position: absolute;
-  inset: 0 56px;
+  inset: 0 16px 0 44px;
   z-index: 0;
   opacity: 0.5;
   pointer-events: none;
@@ -1627,7 +1627,7 @@ body {
   position: relative;
   z-index: 1;
   flex: 1;
-  padding: 8px 56px;
+  padding: 8px 16px 8px 44px;
 }
 
 .route-stats__toggle {
@@ -3662,10 +3662,10 @@ body {
 /* Base style for all circular map buttons */
 .map-action-btn,
 .maplibregl-ctrl-top-right button {
-  width: 48px !important;
-  height: 48px !important;
-  min-width: 48px !important;
-  min-height: 48px !important;
+  width: 36px !important;
+  height: 36px !important;
+  min-width: 36px !important;
+  min-height: 36px !important;
   box-sizing: border-box !important;
   padding: 0 !important;
   margin: 0 !important;
@@ -3693,7 +3693,7 @@ body {
 /* 3D Button Text */
 .toggle-3d__label {
   font-family: var(--font-ui);
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 800;
   color: #ffffff !important;
   letter-spacing: -0.5px;
@@ -3708,8 +3708,8 @@ body {
 .terrain-toolbox-toggle img,
 .snow-toolbox-toggle img,
 .shadow-toolbox-toggle img {
-  width: 24px !important;
-  height: 24px !important;
+  width: 20px !important;
+  height: 20px !important;
   filter: brightness(0) invert(1) opacity(0.9) !important;
 }
 
@@ -5090,8 +5090,8 @@ body {
 
 /* Sidebar Toggle Icon fixes */
 .library-toggle__icon {
-  width: 24px !important;
-  height: 24px !important;
+  width: 20px !important;
+  height: 20px !important;
   display: block;
   object-fit: contain;
   filter: brightness(0) invert(1) opacity(0.9) !important;
