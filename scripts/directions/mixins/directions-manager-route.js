@@ -1362,6 +1362,10 @@ export class DirectionsManagerRouteMixin {
       && this.routeLineGradientExpression.length > 4
       && this.routeLineGradientData?.features?.length;
 
+    if (shouldUseGradient) {
+      this.setRouteLineGradient();
+    }
+
     const targetData = shouldUseGradient ? this.routeLineGradientData : this.routeLineFallbackData;
 
     // Time the MapLibre setData call
