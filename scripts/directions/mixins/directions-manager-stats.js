@@ -501,8 +501,23 @@ export class DirectionsManagerStatsMixin {
       let segmentColors = [];
       let totalMergedDist = 0;
 
+      const autoCuts = [];
       segments.forEach((seg, i) => {
         const segmentDist = this.estimateSequenceDistanceKm(seg.coordinates);
+
+        if (i > 0) {
+          const prevSeg = segments[i - 1];
+          const prevLast = prevSeg.coordinates[prevSeg.coordinates.length - 1];
+          const currFirst = seg.coordinates[0];
+          if (prevLast && currFirst && this.computeDistanceKm(prevLast, currFirst) < 0.1) {
+            autoCuts.push({
+              distanceKm: totalMergedDist,
+              lng: prevLast[0],
+              lat: prevLast[1]
+            });
+          }
+        }
+
         this.appendCoordinates(mergedCoordinates, seg.coordinates);
         totalMergedDist += segmentDist;
 
@@ -514,6 +529,18 @@ export class DirectionsManagerStatsMixin {
         }
         segmentColors.push(seg.properties?.color || null);
       });
+
+      // Inject automatic bivouacs if no explicit ones were found at those locations
+      autoCuts.forEach((cut, i) => {
+        const isDuplicate = points.some(p => p.properties?.marker_type === 'bivouac' && this.computeDistanceKm(p.coordinates, [cut.lng, cut.lat]) < 0.05);
+        if (!isDuplicate) {
+          points.push({
+            coordinates: [cut.lng, cut.lat],
+            properties: { marker_type: 'bivouac', source: 'auto-split', segmentIndex: i + 1 }
+          });
+        }
+      });
+
       primaryProperties = {
         ...segments[0].properties,
         segment_modes: segmentModes,
