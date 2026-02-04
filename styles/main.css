@@ -1200,11 +1200,10 @@ body {
   display: flex;
   align-items: stretch;
   gap: 8px;
-  /* Add top padding for the tooltip that floats above the chart */
+  /* Increased side gutters to prevent overlap with sidebar buttons */
   padding-top: 50px;
-  /* Consistent margins to maximize horizontal content space */
-  padding-left: 18px;
-  padding-right: 18px;
+  padding-left: 32px;
+  padding-right: 32px;
   gap: 4px;
   box-sizing: border-box;
 }
@@ -1610,7 +1609,7 @@ body {
 
 .route-stats__sparkline {
   position: absolute;
-  inset: 0 18px;
+  inset: 0 32px;
   z-index: 0;
   opacity: 0.5;
   pointer-events: none;
@@ -1628,7 +1627,7 @@ body {
   position: relative;
   z-index: 1;
   flex: 1;
-  padding: 8px 18px;
+  padding: 8px 32px;
 }
 
 .route-stats__toggle {
