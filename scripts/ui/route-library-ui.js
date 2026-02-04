@@ -295,7 +295,7 @@ export class RouteLibraryUI {
             <div class="route-actions" style="margin-top: 8px; display: flex; justify-content: flex-end; gap: 8px;">
                 <button class="btn btn--outline btn--sm action-load" data-id="${route.id}" style="flex: 1; color: white; border-color: rgba(255,255,255,0.4); background: rgba(0,0,0,0.2);">Load</button>
                 <button class="btn btn--text btn--sm action-export" data-id="${route.id}" title="Export GPX" style="color: white;">
-                    <img src="./data/download.png" width="16" height="16" alt="Export" style="opacity: 0.9; filter: brightness(0) invert(1);">
+                    <img src="./data/downloads.png" width="16" height="16" alt="Export" style="opacity: 0.9; filter: brightness(0) invert(1);">
                 </button>
                 <button class="btn btn--text btn--sm action-delete" data-id="${route.id}" title="Delete" style="color: white;">
                         <img src="./data/clear.png" width="16" height="16" alt="Delete" style="opacity: 0.9; filter: brightness(0) invert(1);">
