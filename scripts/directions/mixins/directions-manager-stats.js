@@ -499,8 +499,24 @@ export class DirectionsManagerStatsMixin {
       let segmentModes = [];
       let coordinateMetadata = [];
       let segmentColors = [];
-      segments.forEach(seg => {
+      let totalMergedDist = 0;
+
+      segments.forEach((seg, i) => {
+        if (i > 0) {
+          // Add a junction bivouac for indexed segments (day splits)
+          const lastCoord = mergedCoordinates[mergedCoordinates.length - 1];
+          if (lastCoord) {
+            points.push({
+              geometry: { type: 'Point', coordinates: [lastCoord[0], lastCoord[1]] },
+              properties: { marker_type: 'bivouac', source: 'junction', segmentIndex: i }
+            });
+          }
+        }
+
+        const segmentDist = this.estimateSequenceDistanceKm(seg.coordinates);
         this.appendCoordinates(mergedCoordinates, seg.coordinates);
+        totalMergedDist += segmentDist;
+
         if (Array.isArray(seg.properties?.segment_modes)) {
           segmentModes = [...segmentModes, ...seg.properties.segment_modes];
         }
@@ -603,14 +619,16 @@ export class DirectionsManagerStatsMixin {
 
       // If we detected automatic cuts (from separate tracks) and no explicit bivouacs were found,
       // we add them to the points array so importRouteFromGeojson can restore segments.
-      if (autoCuts.length > 0 && !points.some(p => p.properties?.marker_type === 'bivouac')) {
-        autoCuts.forEach(cut => {
+      // Filter out duplicates if they are extremely close.
+      autoCuts.forEach((cut, i) => {
+        const isDuplicate = points.some(p => p.properties?.marker_type === 'bivouac' && this.computeDistanceKm(p.geometry.coordinates, [cut.lng, cut.lat]) < 0.05);
+        if (!isDuplicate) {
           points.push({
             geometry: { type: 'Point', coordinates: [cut.lng, cut.lat] },
-            properties: { marker_type: 'bivouac', source: 'auto-split' }
+            properties: { marker_type: 'bivouac', source: 'auto-split', segmentIndex: i + 1 }
           });
-        });
-      }
+        }
+      });
     } else {
       // Single segment
       mergedCoordinates = this.normalizeImportedSequence(segments[0].coordinates);
@@ -707,12 +725,22 @@ export class DirectionsManagerStatsMixin {
         bivouacs.forEach(b => {
           const pt = turfApi.point(b.coordinates);
           const snapped = turfApi.nearestPointOnLine(line, pt);
-          if (snapped && snapped.properties && snapped.properties.location) {
-            // location is in km for turf
+          let distKm = snapped?.properties?.location;
+
+          // Robust fallback if turf snapping doesn't provide a location
+          if (!Number.isFinite(distKm)) {
+            const idx = candidate.coordinates.findIndex(c => this.coordinatesMatch(c, b.coordinates));
+            if (idx !== -1) {
+              distKm = this.estimateSequenceDistanceKm(candidate.coordinates.slice(0, idx + 1));
+            }
+          }
+
+          if (Number.isFinite(distKm)) {
             cuts.push({
-              distanceKm: snapped.properties.location,
+              distanceKm: distKm,
               lng: b.coordinates[0],
-              lat: b.coordinates[1]
+              lat: b.coordinates[1],
+              source: 'restored-bivouac'
             });
           }
         });

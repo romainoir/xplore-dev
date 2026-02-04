@@ -540,7 +540,7 @@ export class RouteLibraryUI {
         // Generate high-fidelity sparkline
         let elevationProfile = [];
         if (ptsWithDist.length > 0) {
-            const samples = 250; // Balanced for 280px width
+            const samples = 500; // High-fidelity for smooth curves and peak preservation
             const totalDist = distanceMeters;
             const step = totalDist / (samples - 1);
 
@@ -554,14 +554,45 @@ export class RouteLibraryUI {
             }
         }
 
+        const distanceKm = distanceMeters / 1000;
+
+        // Match App's hiking time formula: base 5km/h + 1h/500m ascent + 1h/800m descent
+        const hikingHours = (distanceKm / 5) + (elevationGain / 500) + (elevationLoss / 800);
+        const durationMinutes = Math.max(1, Math.round(hikingHours * 60));
+
+        // Difficulty Calculation (Exact match of computeDayDifficulty)
+        let diffScore = 0;
+        if (distanceKm <= 8) diffScore += 0;
+        else if (distanceKm <= 15) diffScore += 0.5;
+        else if (distanceKm <= 20) diffScore += 1;
+        else if (distanceKm <= 25) diffScore += 1.5;
+        else diffScore += 2;
+
+        const totalElevation = elevationGain + elevationLoss;
+        if (totalElevation <= 300) diffScore += 0;
+        else if (totalElevation <= 600) diffScore += 0.5;
+        else if (totalElevation <= 1000) diffScore += 1;
+        else if (totalElevation <= 1500) diffScore += 1.5;
+        else diffScore += 2;
+
+        const avgGradient = distanceKm > 0 ? (elevationGain / (distanceKm * 1000)) * 100 : 0;
+        if (avgGradient <= 5) diffScore += 0;
+        else if (avgGradient <= 10) diffScore += 0.3;
+        else if (avgGradient <= 15) diffScore += 0.6;
+        else diffScore += 1;
+
+        const finalScore = Math.max(1, Math.min(5, Math.round(diffScore + 1)));
+        const levels = ['Facile', 'Modéré', 'Exigeant', 'Difficile', 'Expert'];
+
         return {
             stats: {
-                distanceKm: distanceMeters / 1000,
+                distanceKm,
                 elevationGain,
                 elevationLoss,
-                durationMinutes: (distanceMeters / 1000) * 15,
+                durationMinutes,
                 days: segments.length || 1,
-                segments
+                segments,
+                difficulty: { score: finalScore, level: levels[finalScore - 1] || 'Modéré' }
             },
             elevationProfile
         };
