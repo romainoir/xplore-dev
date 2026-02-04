@@ -1773,22 +1773,33 @@ export class DirectionsManagerStatsMixin {
       }
     }
 
-    let previousElevation = null;
+    let currentAscent = 0;
+    let currentDescent = 0;
+    let lastStableElevation = null;
+    const VERTICAL_THRESHOLD = 2.5; // ignore fluctuations under 2.5m (standard for hiking apps)
+
     coords.forEach((coord) => {
       const elevation = coord?.[2];
       if (!Number.isFinite(elevation)) return;
-      if (previousElevation === null) {
-        previousElevation = elevation;
+
+      if (lastStableElevation === null) {
+        lastStableElevation = elevation;
         return;
       }
-      const delta = elevation - previousElevation;
-      if (delta > 0) {
-        metrics.ascent += delta;
-      } else if (delta < 0) {
-        metrics.descent += Math.abs(delta);
+
+      const diff = elevation - lastStableElevation;
+      if (Math.abs(diff) >= VERTICAL_THRESHOLD) {
+        if (diff > 0) {
+          currentAscent += diff;
+        } else {
+          currentDescent += Math.abs(diff);
+        }
+        lastStableElevation = elevation;
       }
-      previousElevation = elevation;
     });
+
+    metrics.ascent = currentAscent;
+    metrics.descent = currentDescent;
 
     if (metrics.ascent === 0 && metrics.descent === 0 && Array.isArray(route.properties?.segments)) {
       metrics.ascent = route.properties.segments

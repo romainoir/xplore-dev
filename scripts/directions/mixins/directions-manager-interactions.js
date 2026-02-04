@@ -2369,7 +2369,38 @@ export class DirectionsManagerInteractionsMixin {
           elevation = terrainElevation;
         }
       }
-      coord[2] = Number.isFinite(elevation) ? elevation : null;
+      coord[2] = elevation;
+    }
+
+    // Pass 2: Linearly interpolate any remaining holes (points where terrain query failed AND no original elevation)
+    let firstValidIdx = -1;
+    for (let i = 0; i < processingSequence.length; i++) {
+      if (Number.isFinite(processingSequence[i][2])) {
+        if (firstValidIdx === -1) {
+          // Fill start with the first valid elevation found
+          for (let j = 0; j < i; j++) processingSequence[j][2] = processingSequence[i][2];
+        } else if (i > firstValidIdx + 1) {
+          // Interpolate gap between firstValidIdx and i
+          const startEle = processingSequence[firstValidIdx][2];
+          const endEle = processingSequence[i][2];
+          const count = i - firstValidIdx;
+          for (let j = firstValidIdx + 1; j < i; j++) {
+            processingSequence[j][2] = startEle + (endEle - startEle) * ((j - firstValidIdx) / count);
+          }
+        }
+        firstValidIdx = i;
+      }
+    }
+    // Fill trailing holes with last valid elevation
+    if (firstValidIdx !== -1 && firstValidIdx < processingSequence.length - 1) {
+      const lastEle = processingSequence[firstValidIdx][2];
+      for (let i = firstValidIdx + 1; i < processingSequence.length; i++) {
+        processingSequence[i][2] = lastEle;
+      }
+    }
+    // If NO valid elevations were found at all, default to 0 to avoid breaking charts
+    if (firstValidIdx === -1) {
+      for (let i = 0; i < processingSequence.length; i++) processingSequence[i][2] = 0;
     }
 
     const cumulativeDistances = new Array(processingSequence.length).fill(0);
