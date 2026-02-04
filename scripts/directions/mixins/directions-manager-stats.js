@@ -502,17 +502,6 @@ export class DirectionsManagerStatsMixin {
       let totalMergedDist = 0;
 
       segments.forEach((seg, i) => {
-        if (i > 0) {
-          // Add a junction bivouac for indexed segments (day splits)
-          const lastCoord = mergedCoordinates[mergedCoordinates.length - 1];
-          if (lastCoord) {
-            points.push({
-              geometry: { type: 'Point', coordinates: [lastCoord[0], lastCoord[1]] },
-              properties: { marker_type: 'bivouac', source: 'junction', segmentIndex: i }
-            });
-          }
-        }
-
         const segmentDist = this.estimateSequenceDistanceKm(seg.coordinates);
         this.appendCoordinates(mergedCoordinates, seg.coordinates);
         totalMergedDist += segmentDist;
@@ -724,7 +713,7 @@ export class DirectionsManagerStatsMixin {
 
         bivouacs.forEach(b => {
           const pt = turfApi.point(b.coordinates);
-          const snapped = turfApi.nearestPointOnLine(line, pt);
+          const snapped = turfApi.nearestPointOnLine(line, pt, { units: 'kilometers' });
           let distKm = snapped?.properties?.location;
 
           // Robust fallback if turf snapping doesn't provide a location
