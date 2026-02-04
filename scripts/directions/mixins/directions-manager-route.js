@@ -502,34 +502,49 @@ export class DirectionsManagerRouteMixin {
 
   buildExportFeatureCollection() {
     if (!Array.isArray(this.cutSegments) || !this.cutSegments.length) {
-      const markerFeatures = this.computeSegmentMarkers()
-        .map((marker) => {
-          const coords = Array.isArray(marker.coordinates) ? marker.coordinates.slice() : null;
-          if (!coords || coords.length < 2) {
-            return null;
+      const markers = this.computeSegmentMarkers();
+      const waypointFeatures = (this.waypoints || []).map((coord, idx) => {
+        if (!Array.isArray(coord) || coord.length < 2) return null;
+
+        // Match with computed markers (start, bivouac, end)
+        const marker = markers.find(m => this.coordinatesMatch(m.coordinates, coord));
+
+        return {
+          type: 'Feature',
+          properties: {
+            name: marker?.name || (idx === 0 ? 'Départ' : (idx === this.waypoints.length - 1 ? 'Arrivée' : `Waypoint ${idx}`)),
+            marker_type: marker?.type || 'via',
+            segmentIndex: marker?.segmentIndex ?? null,
+            color: marker?.labelColor || null,
+            source: 'waypoint'
+          },
+          geometry: {
+            type: 'Point',
+            coordinates: coord.slice()
           }
-          return {
-            type: 'Feature',
-            properties: {
-              name: marker.name ?? marker.title ?? '',
-              marker_type: marker.type,
-              segmentIndex: marker.segmentIndex ?? null,
-              color: marker.labelColor ?? null,
-              source: 'waypoint'
-            },
-            geometry: {
-              type: 'Point',
-              coordinates: coords
-            }
-          };
-        })
-        .filter(Boolean);
-      if (!markerFeatures.length) {
+        };
+      }).filter(Boolean);
+
+      const trackFeatures = [];
+      if (this.routeGeojson && this.routeGeojson.geometry) {
+        trackFeatures.push({
+          type: 'Feature',
+          properties: {
+            ...this.routeGeojson.properties,
+            source: 'track',
+            name: this.routeGeojson.properties?.name || 'Route'
+          },
+          geometry: JSON.parse(JSON.stringify(this.routeGeojson.geometry))
+        });
+      }
+
+      const features = [...trackFeatures, ...waypointFeatures];
+      if (!features.length) {
         return EMPTY_COLLECTION;
       }
       return {
         type: 'FeatureCollection',
-        features: markerFeatures
+        features
       };
     }
 
@@ -576,30 +591,30 @@ export class DirectionsManagerRouteMixin {
       })
       .filter(Boolean);
 
-    const markerFeatures = markers
-      .map((marker) => {
-        const coords = Array.isArray(marker.coordinates) ? marker.coordinates.slice() : null;
-        if (!coords || coords.length < 2) {
-          return null;
-        }
-        return {
-          type: 'Feature',
-          properties: {
-            name: marker.name ?? marker.title ?? '',
-            marker_type: marker.type,
-            segmentIndex: marker.segmentIndex ?? null,
-            color: marker.labelColor ?? null,
-            source: 'waypoint'
-          },
-          geometry: {
-            type: 'Point',
-            coordinates: coords
-          }
-        };
-      })
-      .filter(Boolean);
+    // Export ALL waypoints to ensure route reconstruction is perfect
+    const waypointFeatures = (this.waypoints || []).map((coord, idx) => {
+      if (!Array.isArray(coord) || coord.length < 2) return null;
 
-    const features = [...trackFeatures, ...markerFeatures];
+      // Check if this waypoint is a bivouac
+      const marker = markers.find(m => this.coordinatesMatch(m.coordinates, coord));
+
+      return {
+        type: 'Feature',
+        properties: {
+          name: marker?.name || (idx === 0 ? 'Départ' : (idx === this.waypoints.length - 1 ? 'Arrivée' : `Waypoint ${idx}`)),
+          marker_type: marker?.type || 'via',
+          segmentIndex: marker?.segmentIndex ?? null,
+          color: marker?.labelColor || null,
+          source: 'waypoint'
+        },
+        geometry: {
+          type: 'Point',
+          coordinates: coord.slice()
+        }
+      };
+    }).filter(Boolean);
+
+    const features = [...trackFeatures, ...waypointFeatures];
     if (!features.length) {
       return EMPTY_COLLECTION;
     }

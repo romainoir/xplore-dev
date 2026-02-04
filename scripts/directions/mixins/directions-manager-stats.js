@@ -496,12 +496,22 @@ export class DirectionsManagerStatsMixin {
         return idxA - idxB;
       });
 
-      // Merge
+      let segmentModes = [];
+      let coordinateMetadata = [];
       segments.forEach(seg => {
-        // TODO: Smart merge to avoid duplicate points at junctions
         this.appendCoordinates(mergedCoordinates, seg.coordinates);
+        if (Array.isArray(seg.properties?.segment_modes)) {
+          segmentModes = [...segmentModes, ...seg.properties.segment_modes];
+        }
+        if (Array.isArray(seg.properties?.coordinate_metadata)) {
+          coordinateMetadata = [...coordinateMetadata, ...seg.properties.coordinate_metadata];
+        }
       });
-      primaryProperties = segments[0].properties;
+      primaryProperties = {
+        ...segments[0].properties,
+        segment_modes: segmentModes,
+        coordinate_metadata: coordinateMetadata
+      };
 
     } else if (segments.length > 1) {
       // No indices, but multiple segments. 
@@ -548,6 +558,9 @@ export class DirectionsManagerStatsMixin {
       let totalMergedDist = candidates[0].distanceKm;
       const autoCuts = [];
 
+      let segmentModes = candidates[0].properties.segment_modes || [];
+      let coordinateMetadata = candidates[0].properties.coordinate_metadata || [];
+
       for (let i = 1; i < candidates.length; i++) {
         const prev = mergedCoordinates[mergedCoordinates.length - 1];
         const curr = candidates[i].coordinates;
@@ -562,13 +575,25 @@ export class DirectionsManagerStatsMixin {
           });
           this.appendCoordinates(mergedCoordinates, curr);
           totalMergedDist += candidates[i].distanceKm;
+
+          // Concatenate metadata/modes if matching the segment structure
+          if (Array.isArray(candidates[i].properties.segment_modes)) {
+            segmentModes = [...segmentModes, ...candidates[i].properties.segment_modes];
+          }
+          if (Array.isArray(candidates[i].properties.coordinate_metadata)) {
+            coordinateMetadata = [...coordinateMetadata, ...candidates[i].properties.coordinate_metadata];
+          }
         } else {
           // Not continuous, we stop merging
           break;
         }
       }
 
-      primaryProperties = candidates[0].properties;
+      primaryProperties = {
+        ...candidates[0].properties,
+        segment_modes: segmentModes,
+        coordinate_metadata: coordinateMetadata
+      };
 
       // If we detected automatic cuts (from separate tracks) and no explicit bivouacs were found,
       // we add them to the points array so importRouteFromGeojson can restore segments.
@@ -621,7 +646,16 @@ export class DirectionsManagerStatsMixin {
 
     this.currentRouteId = options.id || null;
 
-    const waypoints = this.deriveWaypointsFromImportedSequence(candidate.coordinates, options);
+    let waypoints = [];
+    const explicitWaypoints = (candidate.points || [])
+      .filter(p => p.properties?.source === 'waypoint')
+      .map(p => p.coordinates);
+
+    if (explicitWaypoints.length >= 2) {
+      waypoints = explicitWaypoints;
+    } else {
+      waypoints = this.deriveWaypointsFromImportedSequence(candidate.coordinates, options);
+    }
     if (!Array.isArray(waypoints) || waypoints.length < 2) {
       console.warn('Imported route did not contain enough distinct coordinates');
       return false;

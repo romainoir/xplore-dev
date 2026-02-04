@@ -86,11 +86,29 @@ export function parseGpxToGeoJson(gpxText) {
       segmentIndex = parseInt(trackDesc.split('SegmentIndex:')[1]);
     }
 
+    // Extract segment_modes and coordinate_metadata if present in description
+    let segmentModes = null;
+    let coordinateMetadata = null;
+    if (trackDesc && trackDesc.includes('SegmentModes:')) {
+      try {
+        const jsonStr = trackDesc.split('SegmentModes:')[1].split('|')[0];
+        segmentModes = JSON.parse(jsonStr);
+      } catch (e) { }
+    }
+    if (trackDesc && trackDesc.includes('CoordMetadata:')) {
+      try {
+        const jsonStr = trackDesc.split('CoordMetadata:')[1].split('|')[0];
+        coordinateMetadata = JSON.parse(jsonStr);
+      } catch (e) { }
+    }
+
     const color = getTextContent(trackEl, 'color') || (trackEl.getElementsByTagName('extensions')[0]?.getElementsByTagName('color')[0]?.textContent);
 
     const props = { name: trackName, source: 'track' };
     if (segmentIndex !== null) props.segmentIndex = segmentIndex;
     if (color) props.color = color;
+    if (segmentModes) props.segment_modes = segmentModes;
+    if (coordinateMetadata) props.coordinate_metadata = coordinateMetadata;
 
     appendMultiLineFeature(segmentCoords, props);
   });
@@ -260,16 +278,30 @@ function escapeXml(value) {
     .replace(/'/g, '&apos;');
 }
 
-function serializeTrack(name, segments, index, color) {
+function serializeTrack(name, segments, options = {}) {
+  const { index, color, segmentModes, coordinateMetadata } = options;
   if (!segments.length) return '';
   const parts = ['  <trk>'];
   if (name) parts.push(`    <name>${escapeXml(name)}</name>`);
-  if (color) {
-    parts.push(`    <extensions><color>${escapeXml(color)}</color></extensions>`);
-  }
+
+  let descParts = [];
   if (isFiniteNumber(index)) {
     parts.push(`    <number>${index}</number>`);
-    parts.push(`    <desc>SegmentIndex:${index}</desc>`);
+    descParts.push(`SegmentIndex:${index}`);
+  }
+  if (Array.isArray(segmentModes) && segmentModes.length > 0) {
+    descParts.push(`SegmentModes:${JSON.stringify(segmentModes)}`);
+  }
+  if (Array.isArray(coordinateMetadata) && coordinateMetadata.length > 0) {
+    descParts.push(`CoordMetadata:${JSON.stringify(coordinateMetadata)}`);
+  }
+
+  if (descParts.length > 0) {
+    parts.push(`    <desc>${escapeXml(descParts.join('|'))}</desc>`);
+  }
+
+  if (color) {
+    parts.push(`    <extensions><color>${escapeXml(color)}</color></extensions>`);
   }
   segments.forEach((segment) => {
     if (!Array.isArray(segment) || segment.length < 2) return;
@@ -354,7 +386,14 @@ export function geojsonToGpx(geojson, { creator = 'XploreMap' } = {}) {
           routes.push({ name: routeName, points });
         } else {
           const trackName = nameProp || `Track ${++trackCount}`;
-          tracks.push({ name: trackName, segments: [points], index: props.segmentIndex, color: props.color });
+          tracks.push({
+            name: trackName,
+            segments: [points],
+            index: props.segmentIndex,
+            color: props.color,
+            segmentModes: props.segment_modes,
+            coordinateMetadata: props.coordinate_metadata
+          });
         }
         break;
       }
@@ -373,7 +412,14 @@ export function geojsonToGpx(geojson, { creator = 'XploreMap' } = {}) {
           }
         } else {
           const trackName = nameProp || `Track ${++trackCount}`;
-          tracks.push({ name: trackName, segments, index: props.segmentIndex, color: props.color });
+          tracks.push({
+            name: trackName,
+            segments,
+            index: props.segmentIndex,
+            color: props.color,
+            segmentModes: props.segment_modes,
+            coordinateMetadata: props.coordinate_metadata
+          });
         }
         break;
       }
@@ -404,8 +450,8 @@ export function geojsonToGpx(geojson, { creator = 'XploreMap' } = {}) {
     if (block) gpxParts.push(block);
   });
 
-  tracks.forEach(({ name, segments, index, color }) => {
-    const block = serializeTrack(name, segments, index, color);
+  tracks.forEach(({ name, segments, ...options }) => {
+    const block = serializeTrack(name, segments, options);
     if (block) gpxParts.push(block);
   });
 
