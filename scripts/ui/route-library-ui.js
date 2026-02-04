@@ -487,9 +487,11 @@ export class RouteLibraryUI {
         let distanceMeters = 0;
         let elevationGain = 0;
         let elevationLoss = 0;
+        let lastStableElevation = null;
         let lastPoint = null;
         const ptsWithDist = [];
         const segments = [];
+        const VERTICAL_THRESHOLD = 2.5; // ignore fluctuations under 2.5m (match Map stats)
 
         // Helper to process coords
         const processCoords = (coords, featureProps = {}) => {
@@ -500,17 +502,27 @@ export class RouteLibraryUI {
 
             for (let i = 0; i < coords.length; i++) {
                 const curr = coords[i];
-                const ele = curr.length > 2 ? curr[2] : 0;
+                const hasEle = curr.length > 2 && Number.isFinite(curr[2]);
+                const ele = hasEle ? curr[2] : null;
 
                 if (lastPoint) {
                     const step = haversineDistanceMeters(lastPoint, curr) || 0;
                     distanceMeters += step;
 
-                    if (lastPoint.length > 2 && curr.length > 2) {
-                        const diff = curr[2] - lastPoint[2];
-                        if (diff > 0) elevationGain += diff;
-                        else elevationLoss += Math.abs(diff);
+                    if (hasEle) {
+                        if (lastStableElevation === null) {
+                            lastStableElevation = ele;
+                        } else {
+                            const diff = ele - lastStableElevation;
+                            if (Math.abs(diff) >= VERTICAL_THRESHOLD) {
+                                if (diff > 0) elevationGain += diff;
+                                else elevationLoss += Math.abs(diff);
+                                lastStableElevation = ele;
+                            }
+                        }
                     }
+                } else if (hasEle) {
+                    lastStableElevation = ele;
                 }
 
                 ptsWithDist.push({ d: distanceMeters, ele });
@@ -536,11 +548,31 @@ export class RouteLibraryUI {
             }
         });
 
-        // Generate high-fidelity sparkline (sample by distance)
+        // Pass 1: Interpolate missing elevations in ptsWithDist
+        let firstValidIdx = -1;
+        for (let i = 0; i < ptsWithDist.length; i++) {
+            if (ptsWithDist[i].ele !== null) {
+                if (firstValidIdx === -1) {
+                    for (let j = 0; j < i; j++) ptsWithDist[j].ele = ptsWithDist[i].ele;
+                } else if (i > firstValidIdx + 1) {
+                    const startEle = ptsWithDist[firstValidIdx].ele;
+                    const endEle = ptsWithDist[i].ele;
+                    const count = i - firstValidIdx;
+                    for (let j = firstValidIdx + 1; j < i; j++) {
+                        ptsWithDist[j].ele = startEle + (endEle - startEle) * ((j - firstValidIdx) / count);
+                    }
+                }
+                firstValidIdx = i;
+            }
+        }
+        if (firstValidIdx !== -1 && firstValidIdx < ptsWithDist.length - 1) {
+            for (let i = firstValidIdx + 1; i < ptsWithDist.length; i++) ptsWithDist[i].ele = ptsWithDist[firstValidIdx].ele;
+        }
+
         // Generate high-fidelity sparkline
         let elevationProfile = [];
         if (ptsWithDist.length > 0) {
-            const samples = 500; // High-fidelity for smooth curves and peak preservation
+            const samples = 500;
             const totalDist = distanceMeters;
             const step = totalDist / (samples - 1);
 
@@ -550,13 +582,12 @@ export class RouteLibraryUI {
                 while (cursor < ptsWithDist.length - 1 && ptsWithDist[cursor + 1].d < targetD) {
                     cursor++;
                 }
-                elevationProfile.push(Math.round(ptsWithDist[cursor].ele));
+                const e = ptsWithDist[cursor].ele !== null ? ptsWithDist[cursor].ele : 0;
+                elevationProfile.push(Math.round(e));
             }
         }
 
         const distanceKm = distanceMeters / 1000;
-
-        // Match App's hiking time formula: base 5km/h + 1h/500m ascent + 1h/800m descent
         const hikingHours = (distanceKm / 5) + (elevationGain / 500) + (elevationLoss / 800);
         const durationMinutes = Math.max(1, Math.round(hikingHours * 60));
 
