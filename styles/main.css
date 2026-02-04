@@ -1632,16 +1632,14 @@ body {
 
 .route-stats__toggle {
   position: absolute;
-  bottom: 0;
-  right: 0;
+  bottom: 8px;
+  right: 8px;
   z-index: 10;
-  width: 40px;
-  height: 40px;
-  border-radius: 12px 0 12px 0;
-  border: none;
-  border-left: 1px solid var(--glass-border);
-  border-top: 1px solid var(--glass-border);
-  background: var(--glass-surface-strong);
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-surface);
   color: #fff;
   display: flex;
   align-items: center;
@@ -1649,7 +1647,7 @@ body {
   cursor: pointer;
   transition: all 0.2s ease;
   padding: 0;
-  box-shadow: none;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
 .route-stats__toggle:hover {
