@@ -192,18 +192,25 @@ export class RouteLibraryUI {
 
             if (Array.isArray(stats.segments) && stats.segments.length > 0) {
                 const totalDist = stats.distanceKm || 1;
-                // Add stops for each segment to create hard transitions
+                let currentPct = 0;
+
                 stats.segments.forEach((seg, i) => {
-                    const startPct = Math.max(0, Math.min(100, (seg.startKm / totalDist) * 100));
-                    const endPct = Math.max(0, Math.min(100, (seg.endKm / totalDist) * 100));
+                    const startPct = currentPct;
+                    const endPct = Math.min(100, (seg.endKm / totalDist) * 100);
 
-                    // Fill Gradient (low opacity)
-                    gradientStops += `<stop offset="${startPct}%" stop-color="${seg.color}" stop-opacity="0.4" />`;
-                    gradientStops += `<stop offset="${endPct}%" stop-color="${seg.color}" stop-opacity="0.4" />`;
+                    const sStr = startPct.toFixed(2) + '%';
+                    const eStr = endPct.toFixed(2) + '%';
+                    const segColor = seg.color || color;
 
-                    // Stroke Gradient (full opacity)
-                    strokeGradientStops += `<stop offset="${startPct}%" stop-color="${seg.color}" stop-opacity="1" />`;
-                    strokeGradientStops += `<stop offset="${endPct}%" stop-color="${seg.color}" stop-opacity="1" />`;
+                    // Fill Gradient (Soft transitions)
+                    gradientStops += `<stop offset="${sStr}" stop-color="${segColor}" />`;
+                    gradientStops += `<stop offset="${eStr}" stop-color="${segColor}" />`;
+
+                    // Stroke Gradient
+                    strokeGradientStops += `<stop offset="${sStr}" stop-color="${segColor}" />`;
+                    strokeGradientStops += `<stop offset="${eStr}" stop-color="${segColor}" />`;
+
+                    currentPct = endPct;
                 });
             } else {
                 gradientStops = `
@@ -236,9 +243,21 @@ export class RouteLibraryUI {
                             <linearGradient id="grad-stroke-${route.id}" x1="0%" y1="0%" x2="100%" y2="0%">
                                 ${strokeGradientStops}
                             </linearGradient>
+                            <linearGradient id="vertical-fade-${route.id}" x1="0%" y1="0%" x2="0%" y2="100%">
+                                <stop offset="0%" stop-color="white" stop-opacity="0.6" />
+                                <stop offset="60%" stop-color="white" stop-opacity="0.3" />
+                                <stop offset="100%" stop-color="white" stop-opacity="0.05" />
+                            </linearGradient>
+                            <mask id="mask-${route.id}">
+                                <rect width="100%" height="100%" fill="url(#vertical-fade-${route.id})" />
+                            </mask>
+                            <filter id="glow-${route.id}" x="-20%" y="-20%" width="140%" height="140%">
+                                <feGaussianBlur stdDeviation="0.8" result="blur" />
+                                <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                            </filter>
                         </defs>
-                        <polygon points="${fillPoints}" fill="url(#grad-fill-${route.id})" />
-                        <polyline points="${points}" fill="none" stroke="url(#grad-stroke-${route.id})" stroke-width="2" vector-effect="non-scaling-stroke"/>
+                        <polygon points="${fillPoints}" fill="url(#grad-fill-${route.id})" mask="url(#mask-${route.id})" />
+                        <polyline points="${points}" fill="none" stroke="url(#grad-stroke-${route.id})" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round" filter="url(#glow-${route.id})" vector-effect="non-scaling-stroke"/>
                     </svg>
                 </div>
             `;
@@ -314,7 +333,7 @@ export class RouteLibraryUI {
             if (geojson) {
                 // Use the robust import method from DirectionsManager
                 if (typeof this.directionsManager.importRouteFromGeojson === 'function') {
-                    const success = this.directionsManager.importRouteFromGeojson(geojson, { name: route.name });
+                    const success = this.directionsManager.importRouteFromGeojson(geojson, { name: route.name, id: route.id });
                     if (success) {
                         // Zoom to the loaded route
                         if (this.directionsManager.map) {
@@ -456,6 +475,7 @@ export class RouteLibraryUI {
             }
 
             await this.manager.saveRoute(routeData);
+            await this.loadRoutes(); // Refresh the list to show the new card
 
         } catch (e) {
             console.error("Import failed", e);
@@ -467,49 +487,69 @@ export class RouteLibraryUI {
         let distanceMeters = 0;
         let elevationGain = 0;
         let elevationLoss = 0;
-        let segmentCount = 0;
-        const allElevations = [];
+        const ptsWithDist = [];
+        const segments = [];
 
         // Helper to process coords
-        const processCoords = (coords) => {
-            if (!Array.isArray(coords)) return;
-            segmentCount++;
+        const processCoords = (coords, featureProps = {}) => {
+            if (!Array.isArray(coords) || coords.length < 2) return;
+
+            const startKm = distanceMeters / 1000;
+            const segmentColor = featureProps.color || '#f8b40b';
+
             for (let i = 0; i < coords.length; i++) {
                 const curr = coords[i];
-                if (curr.length > 2) allElevations.push(curr[2]);
+                const ele = curr.length > 2 ? curr[2] : 0;
 
                 if (i > 0) {
                     const prev = coords[i - 1];
-                    distanceMeters += haversineDistanceMeters(prev, curr) || 0;
+                    const step = haversineDistanceMeters(prev, curr) || 0;
+                    distanceMeters += step;
 
                     if (prev.length > 2 && curr.length > 2) {
                         const diff = curr[2] - prev[2];
-                        if (diff > 0) {
-                            elevationGain += diff;
-                        } else {
-                            elevationLoss += Math.abs(diff); // Capture descent
-                        }
+                        if (diff > 0) elevationGain += diff;
+                        else elevationLoss += Math.abs(diff);
                     }
                 }
+
+                ptsWithDist.push({ d: distanceMeters, ele });
             }
+
+            segments.push({
+                startKm: startKm,
+                endKm: distanceMeters / 1000,
+                color: segmentColor
+            });
         };
 
         const features = geojson.features || [];
-        features.forEach(f => {
+        const trackFeatures = features.filter(f => f.geometry.type === 'LineString' || f.geometry.type === 'MultiLineString');
+        trackFeatures.sort((a, b) => (Number(a.properties?.segmentIndex) || 0) - (Number(b.properties?.segmentIndex) || 0));
+
+        trackFeatures.forEach(f => {
             if (f.geometry.type === 'LineString') {
-                processCoords(f.geometry.coordinates);
+                processCoords(f.geometry.coordinates, f.properties);
             } else if (f.geometry.type === 'MultiLineString') {
-                f.geometry.coordinates.forEach(processCoords);
+                f.geometry.coordinates.forEach(coords => processCoords(coords, f.properties));
             }
         });
 
-        // Generate simplified profile (e.g. 50 points)
+        // Generate high-fidelity sparkline (sample by distance)
+        // Generate high-fidelity sparkline
         let elevationProfile = [];
-        if (allElevations.length > 0) {
-            const samples = 50;
-            const step = Math.max(1, Math.floor(allElevations.length / samples));
-            for (let i = 0; i < allElevations.length; i += step) {
-                elevationProfile.push(Math.round(allElevations[i]));
+        if (ptsWithDist.length > 0) {
+            const samples = 250; // Balanced for 280px width
+            const totalDist = distanceMeters;
+            const step = totalDist / (samples - 1);
+
+            let cursor = 0;
+            for (let i = 0; i < samples; i++) {
+                const targetD = i * step;
+                while (cursor < ptsWithDist.length - 1 && ptsWithDist[cursor + 1].d < targetD) {
+                    cursor++;
+                }
+                elevationProfile.push(Math.round(ptsWithDist[cursor].ele));
             }
         }
 
@@ -518,8 +558,9 @@ export class RouteLibraryUI {
                 distanceKm: distanceMeters / 1000,
                 elevationGain,
                 elevationLoss,
-                durationMinutes: (distanceMeters / 1000) * 15, // Rough estimate
-                days: segmentCount // Use segment count as day count approximation
+                durationMinutes: (distanceMeters / 1000) * 15,
+                days: segments.length || 1,
+                segments
             },
             elevationProfile
         };

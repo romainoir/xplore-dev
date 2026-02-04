@@ -730,24 +730,34 @@ export class DirectionsManagerRouteMixin {
       console.warn("Failed to fetch route background photo", photoErr);
     }
 
-    // Generate simplified profile for sparkline
+    // Generate high-fidelity simplified profile for library sparkline (sample by distance)
     let elevationProfile = [];
-    if (this.routeProfile && this.routeProfile.coordinates) {
-      const allElevations = this.routeProfile.coordinates
-        .filter(c => c.length > 2)
-        .map(c => c[2]);
+    if (this.routeProfile && Array.isArray(this.routeProfile.coordinates) && Array.isArray(this.routeProfile.cumulativeDistances)) {
+      const coords = this.routeProfile.coordinates;
+      const dists = this.routeProfile.cumulativeDistances;
+      const totalDist = Number(this.routeProfile.totalDistanceKm) || 0;
+      const samples = 500; // High-fidelity for smooth curves
 
-      if (allElevations.length > 0) {
-        const samples = 100;
-        const step = Math.max(1, Math.floor(allElevations.length / samples));
-        for (let i = 0; i < allElevations.length; i += step) {
-          elevationProfile.push(Math.round(allElevations[i]));
+      if (coords.length > 0 && totalDist > 0) {
+        const step = totalDist / (samples - 1);
+        let cursor = 0;
+        for (let i = 0; i < samples; i++) {
+          const targetD = i * step;
+          while (cursor < coords.length - 1 && dists[cursor + 1] < targetD) {
+            cursor++;
+          }
+          const ele = coords[cursor].length > 2 ? coords[cursor][2] : 0;
+          elevationProfile.push(Math.round(ele));
         }
+      } else if (coords.length > 0) {
+        // Fallback for zero-length routes
+        elevationProfile = [Math.round(coords[0][2] || 0), Math.round(coords[0][2] || 0)];
       }
     }
     stats.elevationProfile = elevationProfile;
 
     const routeData = {
+      id: this.currentRouteId, // Maintain same ID if updated
       name: name || `Route ${new Date().toLocaleDateString()}`,
       geojson,
       stats,

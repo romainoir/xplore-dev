@@ -230,6 +230,7 @@ export class DirectionsManagerStatsMixin {
     this.draggedBivouacLngLat = null;
     this.updateWaypoints();
     this.clearRoute();
+    this.currentRouteId = null;
     this.updateStats(null);
     this.updateElevationProfile([]);
     this.routeCoordinateMetadata = [];
@@ -541,12 +542,44 @@ export class DirectionsManagerStatsMixin {
       // If a single GPX contains multiple tracks, they typically want them all.
       // But `importRouteFromGeojson` is designed to load A SINGLE route context.
       // So we MUST merge them or pick one.
-      // Changing strategy: Attempt to merge all segments if they are close endpoints-to-startpoints.
+      // Heuristic: if they are geographically continuous, merge them.
+      // And if they were separate tracks, they might represent days!
+      mergedCoordinates = candidates[0].coordinates.slice();
+      let totalMergedDist = candidates[0].distanceKm;
+      const autoCuts = [];
 
-      // For now, keep legacy behavior for non-indexed segments to be safe.
-      mergedCoordinates = candidates[0].coordinates;
+      for (let i = 1; i < candidates.length; i++) {
+        const prev = mergedCoordinates[mergedCoordinates.length - 1];
+        const curr = candidates[i].coordinates;
+        if (!prev || !curr.length) continue;
+
+        const distToPrev = this.computeDistanceKm(prev, curr[0]);
+        if (distToPrev < 0.1) { // within 100m
+          autoCuts.push({
+            distanceKm: totalMergedDist,
+            lng: prev[0],
+            lat: prev[1]
+          });
+          this.appendCoordinates(mergedCoordinates, curr);
+          totalMergedDist += candidates[i].distanceKm;
+        } else {
+          // Not continuous, we stop merging
+          break;
+        }
+      }
+
       primaryProperties = candidates[0].properties;
 
+      // If we detected automatic cuts (from separate tracks) and no explicit bivouacs were found,
+      // we add them to the points array so importRouteFromGeojson can restore segments.
+      if (autoCuts.length > 0 && !points.some(p => p.properties?.marker_type === 'bivouac')) {
+        autoCuts.forEach(cut => {
+          points.push({
+            geometry: { type: 'Point', coordinates: [cut.lng, cut.lat] },
+            properties: { marker_type: 'bivouac', source: 'auto-split' }
+          });
+        });
+      }
     } else {
       // Single segment
       mergedCoordinates = this.normalizeImportedSequence(segments[0].coordinates);
@@ -585,6 +618,8 @@ export class DirectionsManagerStatsMixin {
       console.warn('No route geometry found in imported data');
       return false;
     }
+
+    this.currentRouteId = options.id || null;
 
     const waypoints = this.deriveWaypointsFromImportedSequence(candidate.coordinates, options);
     if (!Array.isArray(waypoints) || waypoints.length < 2) {
