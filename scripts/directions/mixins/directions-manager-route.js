@@ -610,6 +610,99 @@ export class DirectionsManagerRouteMixin {
     };
   }
 
+  async saveCurrentRoute(name) {
+    if (!this.routeLibraryManager) {
+      console.warn("RouteLibraryManager not initialized.");
+      throw new Error("Library not available");
+    }
+
+    const geojson = this.buildExportFeatureCollection();
+    if (!geojson || !geojson.features || geojson.features.length === 0) {
+      throw new Error("No route to save");
+    }
+
+    // Ensure metrics are up to date
+    const route = this.getRoute();
+    let metrics = this.latestMetrics;
+
+    // Fallback if metrics are missing or incomplete
+    if (!metrics || (!metrics.totalDistanceKm && !metrics.distanceKm)) {
+      metrics = this.calculateRouteMetrics(route);
+    }
+
+    const distanceKm = metrics.totalDistanceKm ?? metrics.distanceKm ?? 0;
+    const ascent = metrics.elevationGain ?? metrics.ascent ?? 0;
+    const descent = metrics.elevationLoss ?? metrics.descent ?? 0;
+
+    // Estimate duration if missing
+    let durationMinutes = metrics.durationMinutes || (metrics.duration / 60);
+    if (!durationMinutes) {
+      const durationHours = this.estimateTravelTimeHours(distanceKm, ascent, descent);
+      durationMinutes = durationHours * 60;
+    }
+
+    // Calculate Difficulty
+    const difficulty = this.computeDayDifficulty(distanceKm, ascent, descent, 0, distanceKm);
+
+    // Extract Segments for Sparkline Colors
+    let segments = [];
+    if (Array.isArray(this.cutSegments) && this.cutSegments.length > 0) {
+      segments = this.cutSegments.map(seg => ({
+        startKm: Number(seg.startKm ?? seg.startDistanceKm ?? 0),
+        endKm: Number(seg.endKm ?? seg.endDistanceKm ?? 0),
+        color: seg.color || this.modeColors[this.currentMode] || '#f8b40b'
+      }));
+    } else {
+      // Single segment
+      segments.push({
+        startKm: 0,
+        endKm: distanceKm,
+        color: this.modeColors[this.currentMode] || '#f8b40b'
+      });
+    }
+
+    // Build Stats Object
+    const stats = {
+      distanceKm,
+      elevationGain: ascent,
+      elevationLoss: descent,
+      durationMinutes,
+      days: (Array.isArray(this.cutSegments) && this.cutSegments.length > 1) ? this.cutSegments.length : 1,
+      color: this.modeColors[this.currentMode], // Main route color
+      difficulty: {
+        score: difficulty.score,
+        level: difficulty.level
+      },
+      segments // Save segments for coloring
+    };
+
+    // Generate simplified profile for sparkline
+    let elevationProfile = [];
+    if (this.routeProfile && this.routeProfile.coordinates) {
+      const allElevations = this.routeProfile.coordinates
+        .filter(c => c.length > 2)
+        .map(c => c[2]);
+
+      if (allElevations.length > 0) {
+        const samples = 100;
+        const step = Math.max(1, Math.floor(allElevations.length / samples));
+        for (let i = 0; i < allElevations.length; i += step) {
+          elevationProfile.push(Math.round(allElevations[i]));
+        }
+      }
+    }
+    stats.elevationProfile = elevationProfile;
+
+    const routeData = {
+      name: name || `Route ${new Date().toLocaleDateString()}`,
+      geojson,
+      stats,
+      tags: ['saved']
+    };
+
+    return this.routeLibraryManager.saveRoute(routeData);
+  }
+
   buildSegmentExportCollections() {
     if (!Array.isArray(this.cutSegments) || !this.cutSegments.length) {
       return [];

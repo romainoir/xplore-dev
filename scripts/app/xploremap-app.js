@@ -21,6 +21,8 @@ import {
   zoomToGeojson
 } from '../gpx/gpx-io.js';
 import { DirectionsManager } from '../directions/core/directions-manager.js';
+import { RouteLibraryManager } from '../storage/route-library-manager.js';
+import { RouteLibraryUI } from '../ui/route-library-ui.js';
 import '../map/pmtiles-protocol.js';
 import { OfflineRouter, DEFAULT_NODE_CONNECTION_TOLERANCE_METERS } from '../routing/offline-path-router.js';
 import { MaplibreDirectionsRouter } from '../routing/maplibre-directions-client.js';
@@ -1939,6 +1941,12 @@ async function init() {
         router: offlineRouter,
         deferRouterInitialization: true
       });
+
+      // Initialize Route Library
+      const routeLibraryManager = new RouteLibraryManager();
+      const routeLibraryUI = new RouteLibraryUI(routeLibraryManager, directionsManager);
+      directionsManager.routeLibraryManager = routeLibraryManager; // Inject into DirectionsManager
+
       console.log('[App] DirectionsManager initialized:', directionsManager);
 
       const initialRouter = routers[activeRouterKey] ?? offlineRouter;

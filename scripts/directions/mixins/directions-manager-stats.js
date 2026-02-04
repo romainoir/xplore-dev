@@ -88,7 +88,8 @@ import {
   haversineDistanceMeters,
   fetchOverpassRoutePois,
   resolvePoiDefinition,
-  buildPoiIdentifier
+  buildPoiIdentifier,
+  bearingBetween
 } from '../utils/directions-utils.js';
 
 import {
@@ -434,82 +435,148 @@ export class DirectionsManagerStatsMixin {
       return null;
     }
 
-    const candidates = [];
-    const pushCandidate = (coordinates, properties = {}) => {
-      const sequence = this.normalizeImportedSequence(coordinates);
-      if (sequence.length < 2) {
-        return;
-      }
-      const distanceKm = this.estimateSequenceDistanceKm(sequence);
-      const source = typeof properties.source === 'string' ? properties.source : null;
-      let priority = 1;
-      if (source === 'track') {
-        priority = 3;
-      } else if (source === 'route') {
-        priority = 2;
-      }
-      candidates.push({
-        coordinates: sequence.map((coord) => coord.slice()),
-        properties: { ...properties },
-        distanceKm,
-        priority
-      });
-    };
+    // New logic: First attempt to detect a partitioned route (multiple segments)
+    // that should be joined together.
+    const segments = [];
+    const points = [];
 
-    const handleGeometry = (geometry, properties = {}) => {
-      if (!geometry || typeof geometry !== 'object') {
-        return;
-      }
+    const collectFeatures = (geometry, properties = {}) => {
+      if (!geometry) return;
       if (geometry.type === 'LineString') {
-        pushCandidate(geometry.coordinates, properties);
-        return;
-      }
-      if (geometry.type === 'MultiLineString') {
-        const merged = this.mergeImportedCoordinateSegments(geometry.coordinates);
-        if (merged.length >= 2) {
-          pushCandidate(merged, properties);
-        }
-        return;
-      }
-      if (geometry.type === 'GeometryCollection' && Array.isArray(geometry.geometries)) {
-        geometry.geometries.forEach((child) => handleGeometry(child, properties));
+        segments.push({
+          coordinates: geometry.coordinates,
+          properties,
+          segmentIndex: properties.segmentIndex ?? -1
+        });
+      } else if (geometry.type === 'MultiLineString') {
+        // Treat MultiLineString as a single coherent segment if possible, 
+        // or split if needed. For now, pushing as one segment usually works 
+        // for basic GPX, but if we exported segments, they are usually separate features.
+        // We'll flatten it.
+        this.mergeImportedCoordinateSegments(geometry.coordinates).forEach(chain => {
+          segments.push({
+            coordinates: chain,
+            properties,
+            segmentIndex: properties.segmentIndex ?? -1
+          });
+        });
+      } else if (geometry.type === 'Point') {
+        points.push({
+          coordinates: geometry.coordinates,
+          properties
+        });
+      } else if (geometry.type === 'GeometryCollection' && Array.isArray(geometry.geometries)) {
+        geometry.geometries.forEach(g => collectFeatures(g, properties));
       }
     };
 
     if (geojson.type === 'FeatureCollection' && Array.isArray(geojson.features)) {
-      geojson.features.forEach((feature) => {
-        if (!feature || !feature.geometry) {
-          return;
-        }
-        handleGeometry(feature.geometry, feature.properties || {});
-      });
+      geojson.features.forEach(f => collectFeatures(f.geometry, f.properties || {}));
     } else if (geojson.type === 'Feature') {
-      handleGeometry(geojson.geometry, geojson.properties || {});
-    } else if (geojson.type === 'LineString' || geojson.type === 'MultiLineString' || geojson.type === 'GeometryCollection') {
-      handleGeometry(geojson, {});
+      collectFeatures(geojson.geometry, geojson.properties || {});
+    } else {
+      collectFeatures(geojson, {});
     }
 
-    if (!candidates.length) {
-      return null;
+    if (segments.length === 0) return null;
+
+    // Check if we have multiple segments that look like a split route
+    // If we have explicit segmentIndices, use them.
+    const hasIndices = segments.some(s => s.segmentIndex !== -1);
+
+    let mergedCoordinates = [];
+    let primaryProperties = {};
+
+    if (hasIndices) {
+      // Sort by index
+      segments.sort((a, b) => {
+        const idxA = a.segmentIndex !== -1 ? a.segmentIndex : 9999;
+        const idxB = b.segmentIndex !== -1 ? b.segmentIndex : 9999;
+        return idxA - idxB;
+      });
+
+      // Merge
+      segments.forEach(seg => {
+        // TODO: Smart merge to avoid duplicate points at junctions
+        this.appendCoordinates(mergedCoordinates, seg.coordinates);
+      });
+      primaryProperties = segments[0].properties;
+
+    } else if (segments.length > 1) {
+      // No indices, but multiple segments. 
+      // Heuristic: if they are geographically continuous, merge them.
+      // Otherwise, fallback to "Best Candidate" approach (existing behavior) 
+      // OR just merge everything in order (dangerous if random order).
+
+      // For now, let's look for the single longest continuous chain we can build, 
+      // or just default to the longest individual segment if they are disjoint.
+
+      // Simple approach for XploreMap exported routes (which usually have segmentIndex anyway):
+      // If no indices, we default to the legacy logic of picking the "best" one,
+      // UNLESS they form a chain.
+      // But for "Direct Save" routes, we KNOW we write segmentIndex.
+      // So legacy GPX files are the main concern here.
+
+      // Let's use the legacy logic for "best candidate" if no explicit structure is found,
+      // to avoid breaking random GPX imports that contain noise.
+
+      const candidates = segments.map(s => {
+        const seq = this.normalizeImportedSequence(s.coordinates);
+        return {
+          coordinates: seq,
+          properties: s.properties,
+          distanceKm: this.estimateSequenceDistanceKm(seq),
+          priority: s.properties.source === 'track' ? 3 : (s.properties.source === 'route' ? 2 : 1)
+        };
+      });
+
+      candidates.sort((a, b) => {
+        if (b.priority !== a.priority) return b.priority - a.priority;
+        if (b.distanceKm !== a.distanceKm) return b.distanceKm - a.distanceKm;
+        return b.coordinates.length - a.coordinates.length;
+      });
+
+      // However, if the user explicitly Selected multiple files in the Library, 
+      // they are treated as separate routes. Here we are inside ONE geojson.
+      // If a single GPX contains multiple tracks, they typically want them all.
+      // But `importRouteFromGeojson` is designed to load A SINGLE route context.
+      // So we MUST merge them or pick one.
+      // Changing strategy: Attempt to merge all segments if they are close endpoints-to-startpoints.
+
+      // For now, keep legacy behavior for non-indexed segments to be safe.
+      mergedCoordinates = candidates[0].coordinates;
+      primaryProperties = candidates[0].properties;
+
+    } else {
+      // Single segment
+      mergedCoordinates = this.normalizeImportedSequence(segments[0].coordinates);
+      primaryProperties = segments[0].properties;
     }
 
-    candidates.sort((a, b) => {
-      if (b.priority !== a.priority) {
-        return b.priority - a.priority;
-      }
-      if (Number.isFinite(b.distanceKm) && Number.isFinite(a.distanceKm) && b.distanceKm !== a.distanceKm) {
-        return b.distanceKm - a.distanceKm;
-      }
-      return (b.coordinates.length || 0) - (a.coordinates.length || 0);
-    });
-
-    const best = candidates[0];
-    const properties = { ...(best.properties || {}) };
     return {
-      coordinates: best.coordinates,
-      properties,
-      distanceKm: best.distanceKm
+      coordinates: mergedCoordinates,
+      properties: primaryProperties,
+      distanceKm: this.estimateSequenceDistanceKm(mergedCoordinates),
+      points: points // extract potential checkpoints/bivouacs
     };
+  }
+
+  appendCoordinates(target, source) {
+    if (!source || source.length === 0) return;
+    if (target.length === 0) {
+      source.forEach(c => target.push(c));
+      return;
+    }
+
+    const last = target[target.length - 1];
+    const first = source[0];
+
+    // If identically same coordinates (floating point tol), skip first
+    const isSame = Math.abs(last[0] - first[0]) < 1e-6 && Math.abs(last[1] - first[1]) < 1e-6;
+
+    for (let i = (isSame ? 1 : 0); i < source.length; i++) {
+      target.push(source[i]);
+    }
   }
 
   importRouteFromGeojson(geojson, options = {}) {
@@ -545,6 +612,43 @@ export class DirectionsManagerStatsMixin {
     this.applyRoute(routeFeature);
     this.updateWaypoints();
     this.updateModeAvailability();
+
+    // Explicitly update Elevation Profile and Stats immediately 
+    // to ensure UI is populated even if prepareNetwork is delayed/skipped
+    if (candidate.coordinates && candidate.coordinates.length > 0) {
+      this.updateElevationProfile(candidate.coordinates);
+      this.updateStats(routeFeature);
+    }
+
+    // Restore Bivouacs (Segments) if available
+    if (candidate.points && candidate.points.length > 0) {
+      const bivouacs = candidate.points.filter(p => p.properties && p.properties.marker_type === 'bivouac');
+      if (bivouacs.length > 0) {
+        const cuts = [];
+        // We need to map these points to distances on the new route
+        const line = turfApi.lineString(candidate.coordinates);
+
+        bivouacs.forEach(b => {
+          const pt = turfApi.point(b.coordinates);
+          const snapped = turfApi.nearestPointOnLine(line, pt);
+          if (snapped && snapped.properties && snapped.properties.location) {
+            // location is in km for turf
+            cuts.push({
+              distanceKm: snapped.properties.location,
+              lng: b.coordinates[0],
+              lat: b.coordinates[1]
+            });
+          }
+        });
+
+        if (cuts.length > 0) {
+          this.setRouteCutDistances(cuts);
+          // Force update of cuts
+          setTimeout(() => this.updateCutDisplays(), 100);
+        }
+      }
+    }
+
     this.prepareNetwork({ reason: 'imported-route' }).catch(() => { });
     return true;
   }
