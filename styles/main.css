@@ -1720,10 +1720,12 @@ body {
   align-items: stretch;
   gap: 0;
   overflow-x: auto;
-  padding: 0;
+  padding: 8px 32px 4px;
+  /* Align with content gutters */
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
   width: 100%;
+  box-sizing: border-box;
 }
 
 .day-timeline::-webkit-scrollbar {
@@ -1789,20 +1791,20 @@ body {
 
 .day-tab-wrapper:first-child .day-tab {
   clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 0 100%);
-  padding-left: 20px;
-  border-radius: 12px 0 0 0;
+  padding-left: 16px;
+  border-radius: 12px 0 0 12px;
 }
 
 .day-tab-wrapper.is-last .day-tab {
   clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, 12px 50%);
-  padding-right: 20px;
-  border-radius: 0 12px 0 0;
+  padding-right: 16px;
+  border-radius: 0 12px 12px 0;
 }
 
 .day-tab-wrapper:first-child.is-last .day-tab {
   clip-path: none;
-  border-radius: 12px 12px 0 0;
-  padding: 10px 20px;
+  border-radius: 12px;
+  padding: 10px 16px;
 }
 
 .day-tab__arrow {
