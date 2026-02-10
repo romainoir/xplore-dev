@@ -6,10 +6,16 @@ import { DirectionsManagerProfileSegmentsMixin } from '../mixins/directions-mana
 import { DirectionsManagerHistoryMixin } from '../mixins/directions-manager-history.js';
 import { DirectionsManagerRoutingMixin } from '../mixins/directions-manager-routing.js';
 import { DirectionsManagerRouteMixin } from '../mixins/directions-manager-route.js';
+import { DirectionsManagerRouteLogMixin } from '../mixins/directions-manager-route-log.js';
 import { DirectionsManagerInteractionsMixin } from '../mixins/directions-manager-interactions.js';
+import { DirectionsManagerElevationInteractionMixin } from '../mixins/directions-manager-elevation-interaction.js';
+import { DirectionsManagerBivouacMixin } from '../mixins/directions-manager-bivouac.js';
 import { DirectionsManagerElevationMixin } from '../mixins/directions-manager-elevation.js';
+import { DirectionsManagerElevationRenderMixin } from '../mixins/directions-manager-elevation-render.js';
 import { DirectionsManagerPoiMixin } from '../mixins/directions-manager-poi.js';
 import { DirectionsManagerStatsMixin } from '../mixins/directions-manager-stats.js';
+import { DirectionsManagerStatsRenderMixin } from '../mixins/directions-manager-stats-render.js';
+import { DirectionsManagerImportMixin } from '../mixins/directions-manager-import.js';
 
 const applyMixins = (targetClass, mixinClasses) => {
   mixinClasses.forEach((mixinClass) => {
@@ -244,8 +250,14 @@ applyMixins(DirectionsManager, [
   DirectionsManagerHistoryMixin,
   DirectionsManagerRoutingMixin,
   DirectionsManagerRouteMixin,
+  DirectionsManagerRouteLogMixin,
   DirectionsManagerInteractionsMixin,
+  DirectionsManagerElevationInteractionMixin,
+  DirectionsManagerBivouacMixin,
   DirectionsManagerElevationMixin,
+  DirectionsManagerElevationRenderMixin,
   DirectionsManagerPoiMixin,
-  DirectionsManagerStatsMixin
+  DirectionsManagerStatsMixin,
+  DirectionsManagerStatsRenderMixin,
+  DirectionsManagerImportMixin
 ]);
