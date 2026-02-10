@@ -2565,68 +2565,8 @@ async function init() {
   map.once('idle', initFogControls);
 
   // 5. Initialize Snow Control Logic
-  const initSnowControls = () => {
-    const snowUI = document.getElementById('snowControls');
-    const altSlider = document.getElementById('snowAltitude');
-    const slopeSlider = document.getElementById('snowSlope');
-    const altLabel = document.getElementById('snowAltitudeLabel');
-    const slopeLabel = document.getElementById('snowSlopeLabel');
-    const closeBtn = document.getElementById('snowControlsClose');
-
-    if (!snowUI || !altSlider || !slopeSlider) return;
-
-    const updateSnowSettings = () => {
-      const altitude = parseInt(altSlider.value, 10);
-      const maxSlope = parseInt(slopeSlider.value, 10);
-
-      // Update for native snow layer (hillshade-based)
-      window.snowConfig = {
-        altitude: altitude,
-        maxSlope: maxSlope
-      };
-
-      if (map) {
-        // Force immediate redraw pass
-        map.triggerRepaint();
-
-        // Target specific layers that depend on snowConfig to force state invalidation
-        const hillLayers = ['snow-native', 'avalanche-native', 'slope-native', 'aspect-native', 'hillshade', 'shadow-native'];
-        hillLayers.forEach(layerId => {
-          if (map.getLayer(layerId)) {
-            // Nudging a paint property forces the painter to re-evaluate uniforms for this layer.
-            // We use a safe, microscopic toggle to ensure MapLibre detects a state change.
-            const currentExag = map.getPaintProperty(layerId, 'hillshade-exaggeration') || 1.0;
-            const nudge = (altitude % 2 === 0) ? 0 : 0.00001;
-            map.setPaintProperty(layerId, 'hillshade-exaggeration', currentExag + nudge);
-          }
-        });
-      }
-    };
-
-    const sliderHandler = () => {
-      altLabel.textContent = `${altSlider.value}m`;
-      slopeLabel.textContent = `${slopeSlider.value}°`; // Ensure both labels verify? No, separate.
-      updateSnowSettings();
-    };
-
-    altSlider.addEventListener('input', () => {
-      altLabel.textContent = `${altSlider.value}m`;
-      updateSnowSettings();
-    });
-    altSlider.addEventListener('change', updateSnowSettings);
-
-    slopeSlider.addEventListener('input', () => {
-      slopeLabel.textContent = `${slopeSlider.value}°`;
-      updateSnowSettings();
-    });
-    slopeSlider.addEventListener('change', updateSnowSettings);
-
-    if (closeBtn) {
-      closeBtn.addEventListener('click', () => {
-        snowUI.style.display = 'none';
-      });
-    }
-  };
+  // Legacy snow controls removed in favor of uniform analytical legend panel
+  const initSnowControls = () => { };
 
   initSnowControls();
 
@@ -3234,6 +3174,9 @@ async function init() {
   if (!window.slopeConfig) {
     window.slopeConfig = { min: 0, max: 90 };
   }
+  if (!window.snowConfig) {
+    window.snowConfig = { altitude: 1000, maxSlope: 40 };
+  }
 
   function updateAnalyticalLegends() {
     const container = document.getElementById('analyticalLegendContainer');
@@ -3244,6 +3187,8 @@ async function init() {
     if (imageryState.get('aspect')?.enabled) activeAnalyzers.push('aspect');
     if (imageryState.get('slope')?.enabled) activeAnalyzers.push('slope');
     if (imageryState.get('avalanche')?.enabled) activeAnalyzers.push('avalanche');
+    if (imageryState.get('snow')?.enabled) activeAnalyzers.push('snow');
+    if (imageryState.get('snow-depth')?.enabled) activeAnalyzers.push('snow-depth');
 
     if (activeAnalyzers.length === 0) {
       container.style.opacity = '0';
@@ -3348,6 +3293,74 @@ async function init() {
         maxS.addEventListener('mousedown', e => e.stopPropagation());
         minS.addEventListener('touchstart', e => e.stopPropagation());
         maxS.addEventListener('touchstart', e => e.stopPropagation());
+
+        legend.appendChild(content);
+
+      } else if (type === 'snow') {
+        const content = document.createElement('div');
+        content.className = 'snow-legend__content';
+
+        const barWrapper = document.createElement('div');
+        barWrapper.className = 'snow-bar-wrapper';
+
+        barWrapper.innerHTML = `
+          <div class="snow-gradient-bar"></div>
+          <div class="snow-labels">
+            <span>5000</span>
+            <span>2500</span>
+            <span>0</span>
+          </div>
+          <div class="snow-range-inputs">
+            <input type="range" id="snowAltitudeSlider" min="0" max="5000" step="50" value="${window.snowConfig.altitude}">
+          </div>
+        `;
+
+        content.appendChild(barWrapper);
+        legend.appendChild(content);
+
+        const altS = barWrapper.querySelector('#snowAltitudeSlider');
+
+        const updateAlt = () => {
+          const altitude = parseInt(altS.value);
+          window.snowConfig.altitude = altitude;
+          window.snowConfig.maxSlope = 40; // Ensure hardcoded
+
+          if (map) {
+            map.triggerRepaint();
+            const hillLayers = ['snow-native', 'avalanche-native', 'slope-native'];
+            hillLayers.forEach(l => {
+              if (map.getLayer(l)) {
+                const ex = map.getPaintProperty(l, 'hillshade-exaggeration') || 1.0;
+                map.setPaintProperty(l, 'hillshade-exaggeration', ex === 1.0 ? 1.00001 : 1.0);
+              }
+            });
+          }
+        };
+
+        altS.addEventListener('input', updateAlt);
+        altS.addEventListener('mousedown', e => e.stopPropagation());
+        altS.addEventListener('touchstart', e => e.stopPropagation());
+
+      } else if (type === 'snow-depth') {
+        const content = document.createElement('div');
+        content.className = 'snow-depth-legend__content';
+        content.innerHTML = `
+          <div class="snow-depth-bar"></div>
+          <div class="snow-depth-labels">
+            <span>0 cm</span>
+            <span>1 cm</span>
+            <span>20 cm</span>
+            <span>40 cm</span>
+            <span>60 cm</span>
+            <span>80 cm</span>
+            <span>100 cm</span>
+            <span>150 cm</span>
+            <span>200 cm</span>
+            <span>300 cm</span>
+            <span>500 cm</span>
+          </div>
+        `;
+        legend.appendChild(content);
 
       } else if (type === 'avalanche') {
         const content = document.createElement('div');

@@ -562,13 +562,81 @@ body {
 }
 
 .slope-legend__value {
-  text-align: center;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  color: #2ecc71;
-  background: rgba(0, 0, 0, 0.2);
-  padding: 4px;
+  display: none;
+}
+
+/* Snow Bar & Handles */
+.snow-legend__content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+}
+
+.snow-bar-wrapper {
+  position: relative;
+  height: 160px;
+  width: 40px;
+  margin: 0 auto;
+}
+
+.snow-gradient-bar {
+  position: absolute;
+  inset: 0 14px;
   border-radius: 6px;
+  background: linear-gradient(to top,
+      #1a365d 0%,
+      #3182ce 50%,
+      #ffffff 100%);
+  box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.3);
+}
+
+.snow-range-inputs {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.snow-range-inputs input[type="range"] {
+  position: absolute;
+  appearance: none;
+  background: none;
+  pointer-events: none;
+  width: 160px;
+  height: 40px;
+  top: 60px;
+  left: -60px;
+  transform: rotate(-90deg);
+  margin: 0;
+  z-index: 2;
+}
+
+.snow-range-inputs input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  width: 20px;
+  height: 14px;
+  background: white;
+  border-radius: 4px;
+  cursor: ns-resize;
+  border: 1px solid #333;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  pointer-events: auto;
+}
+
+.snow-labels {
+  position: absolute;
+  left: 28px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  font-size: 8px;
+  font-family: var(--font-mono);
+  color: rgba(255, 255, 255, 0.6);
+  pointer-events: none;
 }
 
 /* Avalanche Legend - Shader Aligned */
@@ -613,6 +681,45 @@ body {
   display: flex;
   align-items: center;
 }
+
+/* Snow Depth Legend (Alps) */
+.snow-depth-legend__content {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 10px;
+  padding: 4px 0;
+}
+
+.snow-depth-bar {
+  width: 10px;
+  height: 200px;
+  border-radius: 4px;
+  background: linear-gradient(to bottom,
+      #ffffff 0%,
+      #ccffff 10%,
+      #99ccff 20%,
+      #3366ff 30%,
+      #0000ff 40%,
+      #6633ff 50%,
+      #9933ff 60%,
+      #996699 70%,
+      #ffcc66 80%,
+      #cc3333 90%,
+      #000000 100%);
+  box-shadow: inset 0 0 6px rgba(0, 0, 0, 0.4);
+}
+
+.snow-depth-labels {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  font-size: 8px;
+  font-family: var(--font-mono);
+  color: rgba(255, 255, 255, 0.7);
+  white-space: nowrap;
+}
+
 
 /* Terrain Hover Info */
 .terrain-hover-info {
