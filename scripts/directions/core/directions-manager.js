@@ -7,6 +7,8 @@ import { DirectionsManagerHistoryMixin } from '../mixins/directions-manager-hist
 import { DirectionsManagerRoutingMixin } from '../mixins/directions-manager-routing.js';
 import { DirectionsManagerRouteMixin } from '../mixins/directions-manager-route.js';
 import { DirectionsManagerInteractionsMixin } from '../mixins/directions-manager-interactions.js';
+import { DirectionsManagerElevationMixin } from '../mixins/directions-manager-elevation.js';
+import { DirectionsManagerPoiMixin } from '../mixins/directions-manager-poi.js';
 import { DirectionsManagerStatsMixin } from '../mixins/directions-manager-stats.js';
 
 const applyMixins = (targetClass, mixinClasses) => {
@@ -243,5 +245,7 @@ applyMixins(DirectionsManager, [
   DirectionsManagerRoutingMixin,
   DirectionsManagerRouteMixin,
   DirectionsManagerInteractionsMixin,
+  DirectionsManagerElevationMixin,
+  DirectionsManagerPoiMixin,
   DirectionsManagerStatsMixin
 ]);
