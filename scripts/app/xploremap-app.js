@@ -2768,34 +2768,44 @@ async function init() {
       });
     }
 
-    // Dynamic background for Terrain Toolbox Toggle
-    const terrainToolboxToggle = document.getElementById('terrainToolboxToggle');
-    if (terrainToolboxToggle) {
-      const TERRAIN_IDS = ['aspect', 'slope', 'avalanche'];
-      const activeTerrainId = TERRAIN_IDS.find(id => {
+    // Dynamic background for Analysis Toggles (Terrain, Shadow, Snow)
+    const toggleConfigs = [
+      { btnId: 'terrainToolboxToggle', layerIds: ['aspect', 'slope', 'avalanche'] },
+      { btnId: 'shadowToolboxToggle', layerIds: ['shadow', 'detail-shading'] },
+      { btnId: 'snowToolboxToggle', layerIds: ['snow', 'snow-depth'] }
+    ];
+
+    toggleConfigs.forEach(config => {
+      const btn = document.getElementById(config.btnId);
+      if (!btn) return;
+
+      const activeId = config.layerIds.find(id => {
         const state = imageryState.get(id);
         return Boolean(state?.enabled && state.opacity > 0);
       });
 
-      // Ensure we have a thumbnail element
-      let thumb = terrainToolboxToggle.querySelector('.terrain-toolbox-toggle__thumb');
+      let thumb = btn.querySelector('.map-action-btn__thumb');
       if (!thumb) {
         thumb = document.createElement('div');
-        thumb.className = 'terrain-toolbox-toggle__thumb';
-        terrainToolboxToggle.prepend(thumb); // Put it behind the icon
+        thumb.className = 'map-action-btn__thumb';
+        btn.prepend(thumb);
       }
 
-      if (activeTerrainId) {
-        const option = IMAGERY_OPTIONS_BY_ID.get(activeTerrainId);
+      if (activeId) {
+        const option = IMAGERY_OPTIONS_BY_ID.get(activeId);
         if (option && option.previewImage) {
           thumb.style.backgroundImage = `url(${option.previewImage})`;
-          terrainToolboxToggle.classList.add('has-active-layer');
+          btn.classList.add('has-active-layer');
+        } else {
+          thumb.style.backgroundImage = '';
+          btn.classList.remove('has-active-layer');
         }
       } else {
         thumb.style.backgroundImage = '';
-        terrainToolboxToggle.classList.remove('has-active-layer');
+        btn.classList.remove('has-active-layer');
       }
-    }
+    });
+
   }
 
   function applyImageryState() {

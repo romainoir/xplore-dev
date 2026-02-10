@@ -319,7 +319,7 @@ body {
   border-radius: 50% !important;
 }
 
-.terrain-toolbox-toggle__thumb {
+.map-action-btn__thumb {
   position: absolute;
   inset: 0;
   background-size: cover;
@@ -328,10 +328,10 @@ body {
   transition: opacity 0.2s ease;
   z-index: 0;
   border-radius: 50%;
-  filter: brightness(0.6);
+  filter: brightness(0.7);
 }
 
-.terrain-toolbox-toggle__thumb::after {
+.map-action-btn__thumb::after {
   content: '';
   position: absolute;
   inset: 0;
@@ -339,20 +339,32 @@ body {
   border-radius: 50%;
 }
 
-.terrain-toolbox-toggle.has-active-layer .terrain-toolbox-toggle__thumb {
+.map-action-btn.has-active-layer .map-action-btn__thumb {
   opacity: 1;
 }
 
-.terrain-toolbox-toggle img {
+.map-action-btn.has-active-layer img {
   position: relative;
   z-index: 1;
   filter: brightness(0) invert(1) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.6)) !important;
 }
 
+
 .terrain-toolbox-toggle.has-active-layer {
   border-color: #2ecc71 !important;
   box-shadow: 0 0 15px rgba(39, 174, 96, 0.5), 0 4px 15px rgba(0, 0, 0, 0.4) !important;
 }
+
+.shadow-toolbox-toggle.has-active-layer {
+  border-color: #f39c12 !important;
+  box-shadow: 0 0 15px rgba(243, 156, 18, 0.5), 0 4px 15px rgba(0, 0, 0, 0.4) !important;
+}
+
+.snow-toolbox-toggle.has-active-layer {
+  border-color: #3498db !important;
+  box-shadow: 0 0 15px rgba(52, 152, 219, 0.5), 0 4px 15px rgba(0, 0, 0, 0.4) !important;
+}
+
 
 .terrain-toolbox .btn.terrain-toolbox__toggle,
 .snow-toolbox .btn.snow-toolbox__toggle,
