@@ -1,54 +1,20 @@
+import {
+  SAC_SCALE_RANK,
+  TRAIL_VISIBILITY_RANK,
+  SURFACE_SEVERITY_RANK as SURFACE_RANK,
+  normalizeTagString,
+  normalizeSacScale,
+  normalizeTrailVisibility,
+  normalizeSurface,
+  normalizeTrackType,
+  collectHikingAttributes
+} from './routing-tag-utils.js';
+
 const SUPPORTED_MODES = new Set(['foot-hiking', 'cycling-regular', 'driving-car']);
 const PATH_CLASSES = new Set(['path', 'footway', 'pedestrian', 'steps']);
 const PATH_SUBCLASSES = new Set(['path', 'footway', 'trail', 'steps', 'bridleway', 'via_ferrata']);
 const CYCLE_CLASSES = new Set(['cycleway']);
 const ROAD_CLASSES = new Set(['service', 'residential', 'unclassified', 'minor', 'track', 'tertiary', 'secondary', 'primary', 'trunk', 'motorway']);
-const SAC_SCALE_RANK = Object.freeze({
-  hiking: 1,
-  mountain_hiking: 2,
-  demanding_mountain_hiking: 3,
-  alpine_hiking: 4,
-  demanding_alpine_hiking: 5,
-  difficult_alpine_hiking: 6
-});
-
-const TRAIL_VISIBILITY_RANK = Object.freeze({
-  excellent: 1,
-  good: 2,
-  intermediate: 3,
-  bad: 4,
-  horrible: 5,
-  no: 6
-});
-
-const SURFACE_RANK = Object.freeze({
-  paved: 1,
-  asphalt: 1,
-  concrete: 1,
-  'concrete:lanes': 1,
-  paving_stones: 1,
-  sett: 1,
-  cobblestone: 1,
-  compacted: 2,
-  fine_gravel: 2,
-  gravel_turf: 2,
-  dirt: 3,
-  earth: 3,
-  ground: 3,
-  gravel: 3,
-  grass: 3,
-  mud: 3,
-  sand: 3,
-  scree: 4,
-  rock: 4,
-  stone: 4,
-  pebblestone: 4,
-  shingle: 4,
-  bare_rock: 4,
-  glacier: 5,
-  snow: 5,
-  ice: 5
-});
 
 const DEFAULT_OPTIONS = Object.freeze({
   sourceId: 'openmaptiles',
@@ -267,90 +233,7 @@ function determineCostMultiplier(properties) {
   return 1;
 }
 
-function normalizeTagString(value) {
-  if (typeof value !== 'string') {
-    return null;
-  }
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return null;
-  }
-  return trimmed;
-}
 
-function normalizeSacScaleValue(value) {
-  const normalized = normalizeTagString(value);
-  if (!normalized) {
-    return null;
-  }
-  const lower = normalized.toLowerCase().replace(/\s+/g, '_');
-  if (SAC_SCALE_RANK[lower]) {
-    return lower;
-  }
-  const sanitized = lower.replace(/\+/g, '');
-  if (SAC_SCALE_RANK[sanitized]) {
-    return sanitized;
-  }
-  const alias = {
-    t1: 'hiking',
-    t2: 'mountain_hiking',
-    t3: 'demanding_mountain_hiking',
-    t4: 'alpine_hiking',
-    t5: 'demanding_alpine_hiking',
-    t6: 'difficult_alpine_hiking'
-  };
-  return alias[sanitized] || alias[lower] || null;
-}
-
-function normalizeTrailVisibilityValue(value) {
-  const normalized = normalizeTagString(value);
-  if (!normalized) {
-    return null;
-  }
-  const lower = normalized.toLowerCase().replace(/\s+/g, '_');
-  return TRAIL_VISIBILITY_RANK[lower] ? lower : null;
-}
-
-function normalizeSurfaceValue(value) {
-  const normalized = normalizeTagString(value);
-  if (!normalized) {
-    return null;
-  }
-  const lower = normalized.toLowerCase().replace(/\s+/g, '_');
-  return SURFACE_RANK[lower] ? lower : lower;
-}
-
-function collectHikingAttributes(properties) {
-  if (!properties || typeof properties !== 'object') {
-    return null;
-  }
-  const sacScale = normalizeSacScaleValue(
-    properties.sacScale
-      ?? properties.sac_scale
-      ?? properties.difficulty
-  );
-  const trailVisibility = normalizeTrailVisibilityValue(properties.trailVisibility ?? properties.trail_visibility);
-  const surface = normalizeSurfaceValue(properties.surface);
-  const smoothness = normalizeTagString(properties.smoothness);
-  const trackType = normalizeTagString(properties.trackType ?? properties.tracktype ?? properties.track_type);
-  const attributes = {};
-  if (sacScale) {
-    attributes.sacScale = sacScale;
-  }
-  if (trailVisibility) {
-    attributes.trailVisibility = trailVisibility;
-  }
-  if (surface) {
-    attributes.surface = surface;
-  }
-  if (smoothness) {
-    attributes.smoothness = smoothness;
-  }
-  if (trackType) {
-    attributes.trackType = trackType;
-  }
-  return Object.keys(attributes).length ? attributes : null;
-}
 
 function mergeHikingAttributes(current, next) {
   if (!current) {

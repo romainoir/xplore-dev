@@ -1,4 +1,17 @@
 import { GeoJsonPathFinder, haversineDistanceKm } from './geojson-pathfinding.js';
+import {
+  SAC_SCALE_RANK,
+  TRAIL_VISIBILITY_RANK,
+  SURFACE_SEVERITY_RANK,
+  TRAIL_VISIBILITY_VALUES,
+  normalizeTagString,
+  normalizeSacScale,
+  resolveSacScale,
+  normalizeTrailVisibility,
+  normalizeSurface,
+  normalizeTrackType,
+  collectHikingAttributes
+} from './routing-tag-utils.js';
 
 export const DEFAULT_NODE_CONNECTION_TOLERANCE_METERS = 2;
 export const MAX_NODE_CONNECTION_TOLERANCE_METERS = 100;
@@ -17,159 +30,14 @@ const COORDINATE_DUPLICATE_TOLERANCE_METERS = 0.05;
 
 const OFFLINE_ROUTER_DEBUG_PREFIX = '[OfflineRouter]';
 
-const SAC_SCALE_RANK = Object.freeze({
-  hiking: 1,
-  mountain_hiking: 2,
-  demanding_mountain_hiking: 3,
-  alpine_hiking: 4,
-  demanding_alpine_hiking: 5,
-  difficult_alpine_hiking: 6
-});
-
-const TRAIL_VISIBILITY_RANK = Object.freeze({
-  excellent: 1,
-  good: 2,
-  intermediate: 3,
-  bad: 4,
-  horrible: 5,
-  no: 6
-});
-
-const SURFACE_SEVERITY_RANK = Object.freeze({
-  paved: 1,
-  asphalt: 1,
-  concrete: 1,
-  'concrete:lanes': 1,
-  paving_stones: 1,
-  sett: 1,
-  cobblestone: 1,
-  compacted: 2,
-  fine_gravel: 2,
-  gravel_turf: 2,
-  dirt: 3,
-  earth: 3,
-  ground: 3,
-  gravel: 3,
-  grass: 3,
-  mud: 3,
-  sand: 3,
-  scree: 4,
-  rock: 4,
-  stone: 4,
-  pebblestone: 4,
-  shingle: 4,
-  bare_rock: 4,
-  glacier: 5,
-  snow: 5,
-  ice: 5
-});
-
-const TRAIL_VISIBILITY_VALUES = new Set(Object.keys(TRAIL_VISIBILITY_RANK));
-
 const CONNECTOR_METADATA_SOURCES = new Set(['connector', 'connector-start', 'connector-end']);
 const CONNECTOR_DIRECTION_PREFERENCE = Object.freeze({
   'connector-start': [1, -1],
   'connector-end': [-1, 1]
 });
 
-function normalizeTagString(value) {
-  if (typeof value !== 'string') {
-    return null;
-  }
-  const trimmed = value.trim();
-  return trimmed.length ? trimmed : null;
-}
-
-function normalizeSacScale(value) {
-  const normalized = normalizeTagString(value);
-  if (!normalized) {
-    return null;
-  }
-  const lower = normalized.toLowerCase().replace(/\s+/g, '_');
-  if (SAC_SCALE_RANK[lower]) {
-    return lower;
-  }
-  const sanitized = lower.replace(/\+/g, '');
-  if (SAC_SCALE_RANK[sanitized]) {
-    return sanitized;
-  }
-  const alias = {
-    t1: 'hiking',
-    t2: 'mountain_hiking',
-    t3: 'demanding_mountain_hiking',
-    t4: 'alpine_hiking',
-    t5: 'demanding_alpine_hiking',
-    t6: 'difficult_alpine_hiking'
-  };
-  return alias[sanitized] || alias[lower] || null;
-}
-
-function resolveSacScale(...values) {
-  for (const value of values) {
-    const normalized = normalizeSacScale(value);
-    if (normalized) {
-      return normalized;
-    }
-  }
-  return null;
-}
-
-function normalizeTrailVisibility(value) {
-  const normalized = normalizeTagString(value);
-  if (!normalized) {
-    return null;
-  }
-  const lower = normalized.toLowerCase().replace(/\s+/g, '_');
-  return TRAIL_VISIBILITY_VALUES.has(lower) ? lower : null;
-}
-
-function normalizeSurface(value) {
-  const normalized = normalizeTagString(value);
-  if (!normalized) {
-    return null;
-  }
-  return normalized.toLowerCase().replace(/\s+/g, '_');
-}
-
-function normalizeTrackType(value) {
-  const normalized = normalizeTagString(value);
-  if (!normalized) {
-    return null;
-  }
-  return normalized.toLowerCase().replace(/\s+/g, '_');
-}
-
-function normalizeHikingAttributes(attributes) {
-  if (!attributes || typeof attributes !== 'object') {
-    return null;
-  }
-  const sacScale = resolveSacScale(
-    attributes.sacScale,
-    attributes.sac_scale,
-    attributes.difficulty
-  );
-  const trailVisibility = normalizeTrailVisibility(attributes.trailVisibility ?? attributes.trail_visibility);
-  const surface = normalizeSurface(attributes.surface);
-  const smoothness = normalizeTagString(attributes.smoothness);
-  const trackType = normalizeTrackType(attributes.trackType ?? attributes.tracktype ?? attributes.track_type);
-  const result = {};
-  if (sacScale) {
-    result.sacScale = sacScale;
-  }
-  if (trailVisibility) {
-    result.trailVisibility = trailVisibility;
-  }
-  if (surface) {
-    result.surface = surface;
-  }
-  if (smoothness) {
-    result.smoothness = smoothness;
-  }
-  if (trackType) {
-    result.trackType = trackType;
-  }
-  return Object.keys(result).length ? result : null;
-}
+// Alias for backwards-compatibility with call sites using the old local name
+const normalizeHikingAttributes = collectHikingAttributes;
 
 function formatDistanceKm(distanceKm) {
   const km = Number(distanceKm);
@@ -1080,6 +948,15 @@ export class OfflineRouter {
   }
 
   async getRoute(waypoints, { mode, preservedSegments } = {}) {
+    const routeStartTime = performance.now();
+    const routeTimings = {
+      ensureReady: 0,
+      pathfinding: 0,
+      total: 0,
+      segmentCount: 0,
+      preservedCount: 0,
+      cacheHit: false
+    };
     const waypointSequence = sanitizeCoordinateSequence(waypoints);
     if (!Array.isArray(waypointSequence) || waypointSequence.length < 2) {
       return null;
@@ -1250,7 +1127,9 @@ export class OfflineRouter {
         };
       }
 
+      const ensureReadyStart = performance.now();
       await this.ensureReady();
+      routeTimings.ensureReady = performance.now() - ensureReadyStart;
 
       const coordinates = [];
       const segments = [];
@@ -1373,6 +1252,9 @@ export class OfflineRouter {
         ascent: totalAscent,
         descent: totalDescent
       };
+
+      routeTimings.segmentCount = segments.length;
+      routeTimings.preservedCount = preservedMap.size;
 
       if (this.debugLoggingEnabled) {
         logRouteSummaryDebug({

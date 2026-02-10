@@ -5195,7 +5195,7 @@ export class DirectionsManagerStatsMixin {
     }
   }
 
-  applyRoute(route) {
+  applyRoute(route, routeVersion) {
     this.hideRouteHover();
     const previousCuts = this.cloneRouteCuts();
     if (previousCuts.length && this.routeProfile && Array.isArray(this.routeProfile.coordinates)) {
@@ -5339,22 +5339,27 @@ export class DirectionsManagerStatsMixin {
     // Phase 2: Defer secondary UI updates to next frame
     // This allows the browser to render the route line first
     const deferredUpdates = () => {
+      // Discard deferred updates if a newer route has been applied
+      if (typeof routeVersion === 'number' && this._routeVersion !== routeVersion) return;
+
       const coordinates = this.routeGeojson?.geometry?.coordinates ?? [];
 
       // Update elevation chart
-      this.updateElevationProfile(coordinates);
+      try { this.updateElevationProfile(coordinates); } catch (e) { console.warn('Elevation profile update failed', e); }
 
       // Update distance markers on map
-      this.updateDistanceMarkers(this.routeGeojson);
+      try { this.updateDistanceMarkers(this.routeGeojson); } catch (e) { console.warn('Distance markers update failed', e); }
 
       // Update stats panel
-      this._lastSummaryStatsKey = null;
-      if (this.routeGeojson) {
-        this.updateStats(this.routeGeojson);
-      }
+      try {
+        this._lastSummaryStatsKey = null;
+        if (this.routeGeojson) {
+          this.updateStats(this.routeGeojson);
+        }
+      } catch (e) { console.warn('Stats update failed', e); }
 
       // Update POI day colors
-      this.updatePoiDayColors();
+      try { this.updatePoiDayColors(); } catch (e) { console.warn('POI day colors update failed', e); }
 
       // Phase 3: Fetch POIs (network request - lowest priority)
       this.refreshRoutePointsOfInterest().catch((error) => {
@@ -5376,23 +5381,33 @@ export class DirectionsManagerStatsMixin {
   async getRoute() {
     if (this.waypoints.length < 2) return;
 
+    this._routeVersion = (this._routeVersion || 0) + 1;
+    const version = this._routeVersion;
+
     try {
       if (!this.router || typeof this.router.getRoute !== 'function') {
         throw new Error('No routing engine is configured');
       }
 
       await this.prepareNetwork({ reason: 'route-request' });
+
+      // Discard if a newer route request was issued while we were waiting
+      if (this._routeVersion !== version) return;
+
       const preservedSegments = this.buildPreservedSegments();
       const route = await this.router.getRoute(this.waypoints, {
         mode: this.currentMode,
         preservedSegments
       });
 
+      // Discard if a newer route request was issued while we were computing
+      if (this._routeVersion !== version) return;
+
       if (!route || !route.geometry) {
         throw new Error('No route returned from the offline router');
       }
 
-      this.applyRoute(route);
+      this.applyRoute(route, version);
     } catch (error) {
       console.error('Failed to compute route', error);
     }
