@@ -3098,34 +3098,32 @@ async function init() {
         const formatDate = (date) => date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 
         content.innerHTML = `
-          <div class="shadow-legend__row shadow-legend__row--date">
+          <div class="shadow-legend__row">
             <input type="range" id="shadowDateSlider" class="shadow-legend__slider shadow-legend__slider--date" min="1" max="366" value="${dayOfYear}">
-            <div class="shadow-legend__date-display">
-              <span id="shadowDateLabel" class="shadow-legend__label">${formatDate(now)}</span>
-              <button id="shadowNowBtn" class="shadow-legend__btn-now" title="Set to now">Now</button>
-            </div>
+            <span id="shadowDateLabel" class="shadow-legend__label">${formatDate(now)}</span>
           </div>
-          <div class="shadow-legend__row shadow-legend__row--time">
+          <div class="shadow-legend__row">
             <input type="range" id="shadowTimeSlider" class="shadow-legend__slider" min="0" max="1440" step="1" value="${initialMins}">
             <span id="shadowTimeLabel" class="shadow-legend__label">${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}</span>
           </div>
+          <div class="shadow-legend__actions">
+             <button id="shadowNowBtn" class="shadow-legend__btn-now">Now</button>
+             ${window.XploreDebug ? `<button id="shadowDebugTgl" class="shadow-legend__btn-icon" title="Atmosphere & Debug Settings">⚙️</button>` : ''}
+          </div>
           ${window.XploreDebug ? `
-          <div class="shadow-legend__debug-wrapper">
-             <button id="shadowDebugTgl" class="shadow-legend__btn-icon" title="Atmosphere & Debug Settings">⚙️</button>
-             <div id="shadowDebugMenu" class="shadow-legend__debug-menu" style="display: none;">
-                <button id="shdSkyTgl" class="shadow-legend__btn shadow-legend__btn--sky" data-off="${window._skyDisabled}">Sky ${window._skyDisabled ? 'OFF' : 'ON'}</button>
-                <div class="shadow-legend__fog-group">
-                   <div class="shadow-legend__fog-row">
-                      <label>Ground</label>
-                      <input type="range" id="fogGrnd" min="-5" max="5" step="0.1" value="0.1">
-                   </div>
-                   <div class="shadow-legend__fog-row">
-                      <label>Horizon</label>
-                      <input type="range" id="fogHoriz" min="-1" max="5" step="0.1" value="0.5">
-                   </div>
+          <div id="shadowDebugMenu" class="shadow-legend__debug-menu" style="display: none;">
+             <button id="shdSkyTgl" class="shadow-legend__btn shadow-legend__btn--sky" data-off="${window._skyDisabled}">Sky ${window._skyDisabled ? 'OFF' : 'ON'}</button>
+             <div class="shadow-legend__fog-group">
+                <div class="shadow-legend__fog-row">
+                   <label>Ground</label>
+                   <input type="range" id="fogGrnd" min="-5" max="5" step="0.1" value="0.1">
                 </div>
-                <button id="shdDbgTgl" class="shadow-legend__btn shadow-legend__btn--debug" data-off="${!window._shadowDebugMode}">Debug ${window._shadowDebugMode ? 'ON' : 'OFF'}</button>
+                <div class="shadow-legend__fog-row">
+                   <label>Horizon</label>
+                   <input type="range" id="fogHoriz" min="-1" max="5" step="0.1" value="0.5">
+                </div>
              </div>
+             <button id="shdDbgTgl" class="shadow-legend__btn shadow-legend__btn--debug" data-off="${!window._shadowDebugMode}">Debug ${window._shadowDebugMode ? 'ON' : 'OFF'}</button>
           </div>
           ` : ''}
         `;
@@ -3137,19 +3135,31 @@ async function init() {
         const tLb = content.querySelector('#shadowTimeLabel');
         const nBtn = content.querySelector('#shadowNowBtn');
 
+        const updateTimeGradient = (date) => {
+          if (!map || !date) return;
+          try {
+            const center = map.getCenter();
+            const times = SunCalc.getTimes(date, center.lat, center.lng);
+            const toPct = (d) => ((d.getHours() * 60 + d.getMinutes()) / 1440) * 100;
+            const sunrise = toPct(times.sunrise);
+            const sunset = toPct(times.sunset);
+            const grad = `linear-gradient(to right, #1a1a2e 0%, #1a1a2e ${sunrise - 5}%, #f39c12 ${sunrise}%, #87ceeb ${sunrise + 5}%, #87ceeb ${sunset - 5}%, #f39c12 ${sunset}%, #1a1a2e ${sunset + 5}%, #1a1a2e 100%)`;
+            tSl.style.background = grad;
+          } catch (e) { }
+        };
+
         const triggerUpdate = () => {
           const date = new Date(new Date().getFullYear(), 0);
           date.setDate(parseInt(dSl.value));
-
           const mins = parseInt(tSl.value);
           const h = Math.floor(mins / 60);
           const m = mins % 60;
-
           date.setHours(h, m, 0, 0);
 
           dLb.textContent = formatDate(date);
           tLb.textContent = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
 
+          updateTimeGradient(date);
           updateShadowTime(date);
         };
 
@@ -3166,23 +3176,18 @@ async function init() {
             const now = new Date();
             const start = new Date(now.getFullYear(), 0, 0);
             const day = Math.floor((now - start) / (1000 * 60 * 60 * 24));
-            const mins = now.getHours() * 60 + now.getMinutes();
-
             dSl.value = day;
-            tSl.value = mins;
+            tSl.value = now.getHours() * 60 + now.getMinutes();
             triggerUpdate();
           });
         }
 
-        // Debug handling
         const dbT = content.querySelector('#shadowDebugTgl');
         const dbM = content.querySelector('#shadowDebugMenu');
         if (dbT && dbM) {
           dbT.addEventListener('click', () => {
-            const isVis = dbM.style.display === 'block';
-            dbM.style.display = isVis ? 'none' : 'block';
+            dbM.style.display = dbM.style.display === 'block' ? 'none' : 'block';
           });
-
           const skT = content.querySelector('#shdSkyTgl');
           skT?.addEventListener('click', () => {
             window._skyDisabled = !window._skyDisabled;
@@ -3190,7 +3195,6 @@ async function init() {
             skT.dataset.off = window._skyDisabled;
             if (map) map.triggerRepaint();
           });
-
           const dgT = content.querySelector('#shdDbgTgl');
           dgT?.addEventListener('click', () => {
             window._shadowDebugMode = !window._shadowDebugMode;
@@ -3198,25 +3202,23 @@ async function init() {
             dgT.dataset.off = !window._shadowDebugMode;
             if (map) map.triggerRepaint();
           });
-
-          const fG = content.querySelector('#fogGrnd');
-          const fH = content.querySelector('#fogHoriz');
           const applyF = () => {
-            if (map && map.setSky) {
+            if (map?.setSky) {
               const cur = map.getSky ? map.getSky() : {};
               map.setSky({
                 ...cur,
-                'fog-ground-blend': parseFloat(fG.value),
-                'horizon-fog-blend': parseFloat(fH.value)
+                'fog-ground-blend': parseFloat(content.querySelector('#fogGrnd').value),
+                'horizon-fog-blend': parseFloat(content.querySelector('#fogHoriz').value)
               }, { validate: false });
             }
           };
-          fG?.addEventListener('input', applyF);
-          fH?.addEventListener('input', applyF);
+          content.querySelector('#fogGrnd')?.addEventListener('input', applyF);
+          content.querySelector('#fogHoriz')?.addEventListener('input', applyF);
         }
 
-        // Seed initial view
+        updateTimeGradient(now);
         updateShadowTime(now);
+
 
 
       } else if (type === 'avalanche') {
