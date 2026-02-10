@@ -216,24 +216,6 @@ const IMAGERY_OPTIONS = Object.freeze([
     defaultOpacity: 1.0,
     defaultVisible: false
   },
-  {
-    id: 'normalmap',
-    label: 'Normal Map',
-    type: 'native-layer',
-    layerId: 'normalmap',
-    previewImage: './data/icons_Xmap/normal.png',
-    defaultOpacity: 1.0,
-    defaultVisible: false
-  },
-  {
-    id: COLOR_RELIEF_OPTION_ID,
-    label: 'Color Relief',
-    type: 'color-relief',
-    layerId: 'color-relief',
-    previewImage: './data/style.png',
-    defaultOpacity: 1,
-    defaultVisible: false
-  },
   // 6. Snow Analysis group
   {
     id: 'snow',
@@ -406,7 +388,7 @@ const LAYER_GROUPS = Object.freeze([
     id: 'terrain-analysis',
     label: 'Terrain Analysis',
     exclusive: true,
-    members: ['aspect', 'slope', 'avalanche', 'normalmap', 'color-relief']
+    members: ['aspect', 'slope', 'avalanche']
   },
   {
     id: 'snow',
@@ -1916,6 +1898,68 @@ async function init() {
   // Functions removed as they are no longer needed for the consolidated bar
 
   map.on('load', async () => {
+    // Terrain Analysis Hover Readout
+    const terrainHoverInfo = document.getElementById('terrainHoverInfo');
+
+    map.on('mousemove', (e) => {
+      const isAspect = imageryState.get('aspect')?.enabled;
+      const isSlope = imageryState.get('slope')?.enabled;
+      const isAvalanche = imageryState.get('avalanche')?.enabled;
+
+      if (!terrainHoverInfo) return;
+
+      if (!(isAspect || isSlope || isAvalanche)) {
+        terrainHoverInfo.style.display = 'none';
+        return;
+      }
+
+      const terrain = calculateTerrainAnalysis(e.lngLat);
+      if (!terrain) {
+        terrainHoverInfo.style.display = 'none';
+        return;
+      }
+
+      let content = '';
+
+      // Slope Filtering
+      if (isSlope) {
+        const min = window.slopeConfig?.min ?? 0;
+        const max = window.slopeConfig?.max ?? 90;
+        if (terrain.slope >= min && terrain.slope <= max) {
+          content += `<span style="color: #2ecc71">Slope:</span> ${terrain.slope.toFixed(1)}° `;
+        }
+      }
+
+      // Avalanche Filtering
+      if (isAvalanche) {
+        if (terrain.slope >= 30) {
+          const color = terrain.slope >= 30 && terrain.slope <= 50 ? '#ff6b6b' : '#2ecc71';
+          content += `<span style="color: ${color}">Slope:</span> ${terrain.slope.toFixed(1)}° `;
+          if (terrain.slope <= 50) {
+            content += `<div style="color: #e74c3c; font-weight: 800; font-size: 10px; margin-top: 2px">⚠️ AVALANCHE DANGER ZONE</div>`;
+          }
+        }
+      }
+
+      // Aspect (Always visible when active)
+      if (isAspect) {
+        content += `<span style="color: #3498db">Aspect:</span> ${terrain.aspectName} `;
+      }
+
+      if (content) {
+        terrainHoverInfo.innerHTML = content;
+        terrainHoverInfo.style.display = 'block';
+        terrainHoverInfo.style.left = `${e.originalEvent.clientX}px`;
+        terrainHoverInfo.style.top = `${e.originalEvent.clientY}px`;
+      } else {
+        terrainHoverInfo.style.display = 'none';
+      }
+    });
+
+    map.on('mouseleave', () => {
+      if (terrainHoverInfo) terrainHoverInfo.style.display = 'none';
+    });
+
     // Manually add AttributionControl in compact mode after load
     map.addControl(new maplibregl.AttributionControl({ compact: true }));
     try {
@@ -2677,7 +2721,7 @@ async function init() {
   const processedIds = new Set();
 
   const SHADOW_TOOLBOX_IDS = ['shadow', 'detail-shading'];
-  const TERRAIN_TOOLBOX_IDS = ['aspect', 'slope', 'avalanche', 'normalmap', 'color-relief'];
+  const TERRAIN_TOOLBOX_IDS = ['aspect', 'slope', 'avalanche'];
   const SNOW_TOOLBOX_IDS = ['snow', 'snow-depth'];
 
   IMAGERY_OPTIONS.forEach((option) => {
@@ -3034,6 +3078,35 @@ async function init() {
         }
       });
     }
+
+    // Dynamic background for Terrain Toolbox Toggle
+    const terrainToolboxToggle = document.getElementById('terrainToolboxToggle');
+    if (terrainToolboxToggle) {
+      const TERRAIN_IDS = ['aspect', 'slope', 'avalanche'];
+      const activeTerrainId = TERRAIN_IDS.find(id => {
+        const state = imageryState.get(id);
+        return Boolean(state?.enabled && state.opacity > 0);
+      });
+
+      // Ensure we have a thumbnail element
+      let thumb = terrainToolboxToggle.querySelector('.terrain-toolbox-toggle__thumb');
+      if (!thumb) {
+        thumb = document.createElement('div');
+        thumb.className = 'terrain-toolbox-toggle__thumb';
+        terrainToolboxToggle.prepend(thumb); // Put it behind the icon
+      }
+
+      if (activeTerrainId) {
+        const option = IMAGERY_OPTIONS_BY_ID.get(activeTerrainId);
+        if (option && option.previewImage) {
+          thumb.style.backgroundImage = `url(${option.previewImage})`;
+          terrainToolboxToggle.classList.add('has-active-layer');
+        }
+      } else {
+        thumb.style.backgroundImage = '';
+        terrainToolboxToggle.classList.remove('has-active-layer');
+      }
+    }
   }
 
   function applyImageryState() {
@@ -3057,15 +3130,6 @@ async function init() {
       }
       if (option.type === 'hillshade') {
         // Hillshade is always on, handled by applyHillshadeAppearance
-        return;
-      }
-      if (option.type === 'color-relief') {
-        if (map.getLayer('color-relief')) {
-          try {
-            map.setPaintProperty('color-relief', 'color-relief-opacity', visible ? opacity : 0);
-            map.setLayoutProperty('color-relief', 'visibility', visible ? 'visible' : 'none');
-          } catch (_) { }
-        }
         return;
       }
       if (option.type === 'wikimedia') {
@@ -3117,6 +3181,198 @@ async function init() {
     }
 
     // Hillshade appearance is handled by applyHillshadeAppearance() called after applyImageryState()
+
+    // Update analytical legends
+    if (typeof updateAnalyticalLegends === 'function') {
+      updateAnalyticalLegends();
+    }
+  }
+
+  function calculateTerrainAnalysis(lngLat) {
+    if (!map || typeof map.queryTerrainElevation !== 'function') return null;
+
+    const ele = map.queryTerrainElevation([lngLat.lng, lngLat.lat]);
+    if (ele === null || ele === undefined) return null;
+
+    // Use a small offset for neighbor sampling (approx 10-20m)
+    const d = 0.0001;
+    const zN = map.queryTerrainElevation([lngLat.lng, lngLat.lat + d]);
+    const zS = map.queryTerrainElevation([lngLat.lng, lngLat.lat - d]);
+    const zE = map.queryTerrainElevation([lngLat.lng + d, lngLat.lat]);
+    const zW = map.queryTerrainElevation([lngLat.lng - d, lngLat.lat]);
+
+    // If all are exactly 0, it's likely terrain is not loaded at this point
+    if (ele === 0 && zN === 0 && zS === 0 && zE === 0 && zW === 0) return null;
+
+    const latRad = lngLat.lat * Math.PI / 180;
+    const dy = 2 * d * 111320;
+    const dx = 2 * d * 111320 * Math.cos(latRad);
+
+    const dzdx = (zE - zW) / dx;
+    const dzdy = (zN - zS) / dy;
+
+    // Slope
+    const slopeRad = Math.atan(Math.sqrt(dzdx * dzdx + dzdy * dzdy));
+    const slopeDeg = slopeRad * 180 / Math.PI;
+
+    // Negate derivatives to match shader (deriv = -deriv)
+    const dx_shader = -dzdx;
+    const dy_shader = -dzdy;
+
+    // Shader uses mod(degrees(atan(deriv.x, deriv.y)) + 180, 360)
+    // In JS atan2(y, x) is atan(y, x). So atan(deriv.x, deriv.y) is atan2(dx_shader, dy_shader).
+    let aspectDeg = (Math.atan2(dx_shader, dy_shader) * 180 / Math.PI + 180) % 360;
+    if (aspectDeg < 0) aspectDeg += 360;
+
+    const aspects = ['North', 'North-East', 'East', 'South-East', 'South', 'South-West', 'West', 'North-West', 'North'];
+    const aspectName = aspects[Math.round(aspectDeg / 45)];
+
+    return { ele, slope: slopeDeg, aspect: aspectDeg, aspectName };
+  }
+
+  // Initialize slope config for shader wiring
+  if (!window.slopeConfig) {
+    window.slopeConfig = { min: 0, max: 90 };
+  }
+
+  function updateAnalyticalLegends() {
+    const container = document.getElementById('analyticalLegendContainer');
+    if (!container) return;
+    container.innerHTML = '';
+
+    const activeAnalyzers = [];
+    if (imageryState.get('aspect')?.enabled) activeAnalyzers.push('aspect');
+    if (imageryState.get('slope')?.enabled) activeAnalyzers.push('slope');
+    if (imageryState.get('avalanche')?.enabled) activeAnalyzers.push('avalanche');
+
+    if (activeAnalyzers.length === 0) {
+      container.style.opacity = '0';
+      container.style.pointerEvents = 'none';
+      return;
+    }
+
+    container.style.opacity = '1';
+    container.style.pointerEvents = 'auto';
+
+    activeAnalyzers.forEach(type => {
+      const legend = document.createElement('div');
+      legend.className = 'analytical-legend';
+      // Titles removed for minimalist look
+
+      if (type === 'aspect') {
+        const content = document.createElement('div');
+        content.className = 'analytical-legend__content';
+        // Colors exactly matching hillshade.fragment.glsl (Method 6: ASPECT)
+        // N: #78FFFF, NE: #7AC2FF, E: #FFFFFF, SE: #FFB285, S: #FF4D00, SW: #7A2400, W: #292929, NW: #003678
+        content.innerHTML = `
+          <svg viewBox="0 0 100 100" width="105" height="105" style="filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3))">
+            <circle cx="50" cy="50" r="38" fill="rgba(12, 24, 36, 0.4)" stroke="rgba(255,255,255,0.2)" stroke-width="1.5" />
+            <!-- Sectors (rotated -90 to start North at top in SVG) -->
+            <g transform="rotate(-90, 50, 50)">
+              <path d="M50,50 L85.1,35.5 A38,38 0 0,1 85.1,64.5 Z" fill="#78FFFF" opacity="0.8" /> <!-- N -->
+              <path d="M50,50 L85.1,64.5 A38,38 0 0,1 64.5,85.1 Z" fill="#7AC2FF" opacity="0.8" /> <!-- NE -->
+              <path d="M50,50 L64.5,85.1 A38,38 0 0,1 35.5,85.1 Z" fill="#FFFFFF" opacity="0.8" /> <!-- E -->
+              <path d="M50,50 L35.5,85.1 A38,38 0 0,1 14.9,64.5 Z" fill="#FFB285" opacity="0.8" /> <!-- SE -->
+              <path d="M50,50 L14.9,64.5 A38,38 0 0,1 14.9,35.5 Z" fill="#FF4C00" opacity="0.8" /> <!-- S -->
+              <path d="M50,50 L14.9,35.5 A38,38 0 0,1 35.5,14.9 Z" fill="#7A2400" opacity="0.8" /> <!-- SW -->
+              <path d="M50,50 L35.5,14.9 A38,38 0 0,1 64.5,14.9 Z" fill="#292929" opacity="0.8" /> <!-- W -->
+              <path d="M50,50 L64.5,14.9 A38,38 0 0,1 85.1,35.5 Z" fill="#003678" opacity="0.8" /> <!-- NW -->
+            </g>
+            <circle cx="50" cy="50" r="3" fill="#fff" />
+            <text x="50" y="8" text-anchor="middle" fill="#fff" font-size="9" font-weight="900" style="text-shadow: 0 1px 2px #000">N</text>
+            <text x="50" y="98" text-anchor="middle" fill="#fff" font-size="9" font-weight="900" style="text-shadow: 0 1px 2px #000">S</text>
+            <text x="94" y="53" text-anchor="middle" fill="#fff" font-size="9" font-weight="900" style="text-shadow: 0 1px 2px #000">E</text>
+            <text x="6" y="53" text-anchor="middle" fill="#fff" font-size="9" font-weight="900" style="text-shadow: 0 1px 2px #000">W</text>
+          </svg>
+        `;
+        legend.appendChild(content);
+      } else if (type === 'slope') {
+        const content = document.createElement('div');
+        content.className = 'slope-legend__content';
+
+        const barWrapper = document.createElement('div');
+        barWrapper.className = 'slope-bar-wrapper';
+
+        barWrapper.innerHTML = `
+          <div class="slope-gradient-bar"></div>
+          <div class="slope-labels">
+            <span>90°</span>
+            <span>45°</span>
+            <span>30°</span>
+            <span>0°</span>
+          </div>
+          <div class="slope-range-inputs">
+            <input type="range" id="slopeMinSlider" min="0" max="90" step="1" value="${window.slopeConfig.min}">
+            <input type="range" id="slopeMaxSlider" min="0" max="90" step="1" value="${window.slopeConfig.max}">
+          </div>
+        `;
+
+        content.appendChild(barWrapper);
+        legend.appendChild(content);
+
+        // Wiring handles to shader
+        const minS = barWrapper.querySelector('#slopeMinSlider');
+        const maxS = barWrapper.querySelector('#slopeMaxSlider');
+
+        const updateSlope = (e) => {
+          // Bring the active slider to front
+          if (e) {
+            minS.style.zIndex = (e.target === minS) ? '3' : '2';
+            maxS.style.zIndex = (e.target === maxS) ? '3' : '2';
+          }
+
+          let min = parseInt(minS.value);
+          let max = parseInt(maxS.value);
+          if (min > max) [min, max] = [max, min];
+
+          window.slopeConfig.min = min;
+          window.slopeConfig.max = max;
+
+          if (map) {
+            map.triggerRepaint();
+            // Force nudge as in snow logic to re-evaluate uniforms
+            const hillLayers = ['slope-native', 'avalanche-native'];
+            hillLayers.forEach(l => {
+              if (map.getLayer(l)) {
+                const ex = map.getPaintProperty(l, 'hillshade-exaggeration') || 1.0;
+                map.setPaintProperty(l, 'hillshade-exaggeration', ex === 1.0 ? 1.00001 : 1.0);
+              }
+            });
+          }
+        };
+
+        minS.addEventListener('input', updateSlope);
+        maxS.addEventListener('input', updateSlope);
+        // Stop propagation so map doesn't drag
+        minS.addEventListener('mousedown', e => e.stopPropagation());
+        maxS.addEventListener('mousedown', e => e.stopPropagation());
+        minS.addEventListener('touchstart', e => e.stopPropagation());
+        maxS.addEventListener('touchstart', e => e.stopPropagation());
+
+      } else if (type === 'avalanche') {
+        const content = document.createElement('div');
+        content.className = 'avalanche-legend-content';
+        // Colors from avalanche_hillshade in hillshade.fragment.glsl
+        // 30-35: #E2BE1B (Yellow), 35-40: #D8721B (Orange), 40-45: #E21B1B (Red), 45+: #B882AD (Purple)
+        content.innerHTML = `
+          <div class="avalanche-bar">
+            <div class="avalanche-bar__segment" style="background: #E2BE1B"></div>
+            <div class="avalanche-bar__segment" style="background: #D8721B"></div>
+            <div class="avalanche-bar__segment" style="background: #E21B1B"></div>
+            <div class="avalanche-bar__segment" style="background: #B882AD"></div>
+          </div>
+          <div class="avalanche-labels">
+            <span>30°</span>
+            <span>35°</span>
+            <span>40°</span>
+            <span>45°+</span>
+          </div>
+        `;
+        legend.appendChild(content);
+      }
+
+      container.appendChild(legend);
+    });
   }
 
   if (imageryPanelToggle && imageryPanelDrawer) {
@@ -3278,7 +3534,7 @@ async function init() {
 
   if (imageryToggle) {
     const SHADOW_TOOLBOX_IDS = ['shadow', 'detail-shading'];
-    const TERRAIN_TOOLBOX_IDS = ['aspect', 'slope', 'avalanche', 'normalmap', 'color-relief'];
+    const TERRAIN_TOOLBOX_IDS = ['aspect', 'slope', 'avalanche'];
     const SNOW_TOOLBOX_IDS = ['snow', 'snow-depth'];
     if (terrainToolbox) terrainToolbox.textContent = '';
     if (snowToolbox) snowToolbox.textContent = '';
@@ -3364,6 +3620,11 @@ async function init() {
             applyImageryState();
             updateImageryControlStates();
             applyImageryLayerOrder();
+
+            // Close toolbox after selection if it's a toolbox member
+            if (isTerrainToolboxMember) setTerrainToolboxOpen(false);
+            if (isSnowToolboxMember) setSnowToolboxOpen(false);
+            if (isShadowToolboxMember) setShadowToolboxOpen(false);
           });
 
           let targetToolbox = terrainToolbox;
