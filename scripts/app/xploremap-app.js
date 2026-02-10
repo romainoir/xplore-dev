@@ -2270,296 +2270,60 @@ async function init() {
 
 
 
-  // Initialize Shadow & Time Controls for native layers
-  const initShadowTimeControl = () => {
-    const control = document.getElementById('shadowTimeControl');
-    const dateInput = document.getElementById('shadowDate');
-    const timeSlider = document.getElementById('shadowTime');
-    const timeLabel = document.getElementById('shadowTimeLabel');
-    const nowBtn = document.getElementById('shadowTimeNow');
-    const closeBtn = document.getElementById('shadowTimeClose');
+  // 5. Initialize Shadow & Time Controls
+  // Moved to updateAnalyticalLegends for dynamic initialization
+  let shadowUpdateFunction = null;
 
-    if (!control || !dateInput || !timeSlider || !timeLabel) return;
+  const updateShadowTime = (dateInput, timeSlider, timeLabel) => {
+    if (!dateInput || !timeSlider) return;
 
-    const formatTime = (mins) => {
-      const h = Math.floor(mins / 60);
-      const m = mins % 60;
-      return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
-    };
+    const dateParts = dateInput.value.split('-');
+    const mins = parseInt(timeSlider.value, 10);
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
 
-    const updateShadowTime = () => {
-      const dateParts = dateInput.value.split('-');
-      const mins = parseInt(timeSlider.value, 10);
-      const h = Math.floor(mins / 60);
-      const m = mins % 60;
+    const date = new Date(
+      parseInt(dateParts[0], 10),
+      parseInt(dateParts[1], 10) - 1,
+      parseInt(dateParts[2], 10),
+      h, m, 0, 0
+    );
 
-      const date = new Date(
-        parseInt(dateParts[0], 10),
-        parseInt(dateParts[1], 10) - 1,
-        parseInt(dateParts[2], 10),
-        h, m, 0, 0
-      );
+    window.skySimulationDate = date.getTime();
 
-      // Store in window for shaders to pick up
-      window.skySimulationDate = date.getTime();
+    if (map) {
+      try {
+        const center = map.getCenter();
+        const sunPos = SunCalc.getPosition(date, center.lat, center.lng);
+        const sunAzi = (sunPos.azimuth * 180 / Math.PI + 180) % 360;
+        const sunAlt = sunPos.altitude * 180 / Math.PI;
 
-      // Update native shadow layer's hillshade illumination
-      if (map) {
-        try {
-          const center = map.getCenter();
-          const sunPos = SunCalc.getPosition(date, center.lat, center.lng);
-          const moonPos = SunCalc.getMoonPosition(date, center.lat, center.lng);
+        window.sunConfig = { azimuth: sunAzi, altitude: sunAlt };
 
-          const sunAzi = (sunPos.azimuth * 180 / Math.PI + 180) % 360;
-          const sunAlt = sunPos.altitude * 180 / Math.PI;
-          const moonAzi = (moonPos.azimuth * 180 / Math.PI + 180) % 360;
-          const moonAlt = moonPos.altitude * 180 / Math.PI;
-
-          // Decide which light source is primary
-          const isNight = sunAlt <= 0;
-          const azi = isNight ? moonAzi : sunAzi;
-          const alt = isNight ? Math.max(0.01, moonAlt) : Math.max(0.01, sunAlt);
-
-          // Update window.sunConfig for hillshade_prepare shadow computation
-          window.sunConfig = { azimuth: azi, altitude: alt };
-
-          // Force DEM tiles to re-render with new light position
-          if (map.style && map.style.sourceCaches) {
-            Object.values(map.style.sourceCaches).forEach((cache) => {
-              if (cache._source && cache._source.type === 'raster-dem') {
-                cache.clearTiles();
-                cache.update(map.transform);
-              }
-            });
-          }
-
-          // Update hillshade illumination for shadow layer and detail layer
-          if (map.getLayer('shadow-native')) {
-            map.setPaintProperty('shadow-native', 'hillshade-illumination-direction', azi);
-            map.setPaintProperty('shadow-native', 'hillshade-illumination-altitude', [alt, alt, alt, alt]);
-          }
-          if (map.getLayer('detail-native')) {
-            map.setPaintProperty('detail-native', 'hillshade-illumination-direction', azi);
-            map.setPaintProperty('detail-native', 'hillshade-illumination-altitude', [alt, alt, alt, alt]);
-          }
-
-          // For the main Relief Hillshade: Make it "rotate" by following the light source
-          if (map.getLayer('hillshade')) {
-            map.setPaintProperty('hillshade', 'hillshade-illumination-direction', [azi, (azi + 45) % 360, (azi - 45 + 360) % 360, (azi + 180) % 360]);
-            map.setPaintProperty('hillshade', 'hillshade-illumination-altitude', [alt, alt, alt, alt]);
-          }
-        } catch (e) {
-          console.warn('Could not update light orientation:', e);
+        if (map.getLayer('shadow-native')) {
+          map.setPaintProperty('shadow-native', 'hillshade-illumination-direction', sunAzi);
+          map.setPaintProperty('shadow-native', 'hillshade-illumination-altitude', [sunAlt, sunAlt, sunAlt, sunAlt]);
         }
-      }
+        if (map.getLayer('detail-native')) {
+          map.setPaintProperty('detail-native', 'hillshade-illumination-direction', sunAzi);
+          map.setPaintProperty('detail-native', 'hillshade-illumination-altitude', [sunAlt, sunAlt, sunAlt, sunAlt]);
+        }
+        if (map.getLayer('hillshade')) {
+          map.setPaintProperty('hillshade', 'hillshade-illumination-direction', [sunAzi, (sunAzi + 45) % 360, (sunAzi - 45 + 360) % 360, (sunAzi + 180) % 360]);
+          map.setPaintProperty('hillshade', 'hillshade-illumination-altitude', [sunAlt, sunAlt, sunAlt, sunAlt]);
+        }
+      } catch (e) { }
 
-      // Update sky preset based on simulation time
       if (viewModeController && viewModeController.updateSkyForTime) {
         viewModeController.updateSkyForTime(date);
       }
-    };
-
-    // Initial State
-    const currentNow = new Date();
-    dateInput.value = currentNow.toISOString().slice(0, 10);
-    const initialMinutes = currentNow.getHours() * 60 + currentNow.getMinutes();
-    timeSlider.value = initialMinutes;
-    timeLabel.textContent = formatTime(initialMinutes);
-
-    // Event Listeners
-    dateInput.addEventListener('change', updateShadowTime);
-
-    timeSlider.addEventListener('input', () => {
-      const mins = parseInt(timeSlider.value, 10);
-      timeLabel.textContent = formatTime(mins);
-      updateShadowTime();
-    });
-
-    if (nowBtn) {
-      nowBtn.addEventListener('click', () => {
-        const n = new Date();
-        dateInput.value = n.toISOString().slice(0, 10);
-        const mins = n.getHours() * 60 + n.getMinutes();
-        timeSlider.value = mins;
-        timeLabel.textContent = formatTime(mins);
-        updateShadowTime();
-      });
+      map.triggerRepaint();
     }
-
-    // SKY TOGGLE: Disable heavy atmospheric effects for performance testing
-    const skyBtn = document.getElementById('shadowSkyToggle');
-    if (skyBtn) {
-      window._skyDisabled = window._skyDisabled || false;
-      const updateSkyBtn = () => {
-        skyBtn.dataset.enabled = window._skyDisabled ? 'false' : 'true';
-        skyBtn.textContent = window._skyDisabled ? 'Sky OFF' : 'Sky ON';
-        skyBtn.style.background = window._skyDisabled ? '#555' : '#e67e22';
-        // Show fog controls when Sky is ON, hide when OFF
-        const fogControls = document.getElementById('fogDebugControls');
-        if (fogControls) {
-          fogControls.style.display = window._skyDisabled ? 'none' : 'block';
-        }
-      };
-      updateSkyBtn();
-
-      skyBtn.addEventListener('click', () => {
-        window._skyDisabled = !window._skyDisabled;
-        updateSkyBtn();
-        if (map) map.triggerRepaint();
-      });
-    }
-
-    // DEBUG: Toggle neighbor visualization mode
-    const debugBtn = document.getElementById('shadowDebugToggle');
-    if (debugBtn) {
-      // Hide debug button container if not in debug mode
-      debugBtn.parentElement.style.display = window.XploreDebug ? 'flex' : 'none';
-
-      window._shadowDebugMode = window._shadowDebugMode || false;
-      const updateDebugBtn = () => {
-        debugBtn.dataset.debug = window._shadowDebugMode ? 'true' : 'false';
-        debugBtn.textContent = window._shadowDebugMode ? 'Debug ON' : 'Debug';
-        debugBtn.style.background = window._shadowDebugMode ? '#ff6b6b' : '';
-      };
-      updateDebugBtn();
-
-      debugBtn.addEventListener('click', () => {
-        window._shadowDebugMode = !window._shadowDebugMode;
-        updateDebugBtn();
-
-        if (map) {
-          map.triggerRepaint();
-        }
-        console.log('[Shadow] Debug mode:', window._shadowDebugMode);
-      });
-    }
-
-    if (closeBtn) {
-      closeBtn.addEventListener('click', () => {
-        control.style.display = 'none';
-      });
-    }
-
-    updateShadowTime();
   };
 
-  initShadowTimeControl();
+  const initFogControls = () => { }; // Legacy - fog now handled in shadow debug menu
+  console.log('[Fog] Fog controls initialized');
 
-  // CSS Fog overlay - toggle based on camera pitch
-  const cssFogOverlay = document.getElementById('fogOverlay');
-  if (cssFogOverlay) {
-    const updateCssFogOverlay = () => {
-      const pitch = map.getPitch();
-      if (pitch > 20) {
-        cssFogOverlay.classList.add('fog-overlay--active');
-        const intensity = Math.min(1, (pitch - 20) / 40);
-        cssFogOverlay.style.opacity = intensity;
-
-        if (typeof window !== 'undefined' && window._currentSkyPreset) {
-          const preset = window._currentSkyPreset;
-          const fogHex = preset['fog-color'] || preset['horizon-color'] || '#e8e8e0';
-          const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(fogHex);
-          if (result) {
-            const r = parseInt(result[1], 16);
-            const g = parseInt(result[2], 16);
-            const b = parseInt(result[3], 16);
-            cssFogOverlay.style.background = `linear-gradient(
-              to top,
-              transparent 0%,
-              transparent 35%,
-              rgba(${r}, ${g}, ${b}, 0.3) 55%,
-              rgba(${r}, ${g}, ${b}, 0.7) 75%,
-              rgba(${r}, ${g}, ${b}, 0.95) 100%
-            )`;
-          }
-        }
-      } else {
-        cssFogOverlay.classList.remove('fog-overlay--active');
-        cssFogOverlay.style.opacity = 0;
-      }
-    };
-
-    map.on('pitch', updateCssFogOverlay);
-    map.on('move', updateCssFogOverlay);
-    updateCssFogOverlay();
-  }
-
-  // Initialize Fog Controls (independent of TerrainShadingPlugin)
-  const initFogControls = () => {
-    const fogGroundBlendSlider = document.getElementById('fogGroundBlendSlider');
-    const horizonFogBlendSlider = document.getElementById('horizonFogBlendSlider');
-    const skyHorizonBlendSlider = document.getElementById('skyHorizonBlendSlider');
-    const fogAutoBtn = document.getElementById('fogAutoBtn');
-
-    if (!fogGroundBlendSlider) {
-      console.log('[Fog] Fog controls not found in DOM');
-      return;
-    }
-
-    console.log('[Fog] Initializing fog controls, setSky:', typeof map?.setSky);
-
-    // Track manual fog override state
-    window._fogManualOverride = false;
-
-    // Store current sky settings for modification
-    let currentSkySettings = null;
-
-    const applyFogFromSliders = () => {
-      // Enable manual override when user touches sliders
-      window._fogManualOverride = true;
-      if (fogAutoBtn) fogAutoBtn.style.background = '#666';
-
-      const fogGroundBlendLabel = document.getElementById('fogGroundBlendLabel');
-      const horizonFogBlendLabel = document.getElementById('horizonFogBlendLabel');
-      const skyHorizonBlendLabel = document.getElementById('skyHorizonBlendLabel');
-
-      const fogGroundBlend = parseFloat(fogGroundBlendSlider.value);
-      const horizonFogBlend = parseFloat(horizonFogBlendSlider.value);
-      const skyHorizonBlend = parseFloat(skyHorizonBlendSlider.value);
-
-      // Update labels
-      if (fogGroundBlendLabel) fogGroundBlendLabel.textContent = fogGroundBlend.toFixed(2);
-      if (horizonFogBlendLabel) horizonFogBlendLabel.textContent = horizonFogBlend.toFixed(2);
-      if (skyHorizonBlendLabel) skyHorizonBlendLabel.textContent = skyHorizonBlend.toFixed(2);
-
-      // Apply fog via setSky
-      if (map && typeof map.setSky === 'function') {
-        // Get current sky settings to preserve colors
-        const existingSky = map.getSky ? map.getSky() : {};
-
-        map.setSky({
-          'sky-color': existingSky['sky-color'] || '#87CEEB',
-          'horizon-color': existingSky['horizon-color'] || '#f0e6d3',
-          'fog-color': existingSky['fog-color'] || '#d8cfc0',
-          'sky-horizon-blend': skyHorizonBlend,
-          'horizon-fog-blend': horizonFogBlend,
-          'fog-ground-blend': fogGroundBlend
-        }, { validate: false });
-
-        console.log('[Fog] Applied via setSky:', { fogGroundBlend, horizonFogBlend, skyHorizonBlend });
-      } else {
-        console.warn('[Fog] setSky not available');
-      }
-    };
-
-    fogGroundBlendSlider.addEventListener('input', applyFogFromSliders);
-    horizonFogBlendSlider.addEventListener('input', applyFogFromSliders);
-    skyHorizonBlendSlider.addEventListener('input', applyFogFromSliders);
-
-    if (fogAutoBtn) {
-      fogAutoBtn.addEventListener('click', () => {
-        window._fogManualOverride = false;
-        fogAutoBtn.style.background = '#4a6';
-        // Re-apply automatic sky settings
-        if (typeof updateShadowTime === 'function') {
-          updateShadowTime();
-        }
-        console.log('[Fog] Auto mode enabled');
-      });
-    }
-
-    console.log('[Fog] Fog controls initialized');
-  };
 
   // Initialize fog controls when map is ready
   map.once('idle', initFogControls);
@@ -3050,9 +2814,8 @@ async function init() {
   }
 
   function applyImageryState() {
-    let shouldShowTimeControl = false;
-
     IMAGERY_OPTIONS.forEach((option) => {
+
       const state = imageryState.get(option.id);
       const opacity = clampOpacity(state?.opacity ?? 0);
       const visible = Boolean(state?.enabled && opacity > 0);
@@ -3085,19 +2848,7 @@ async function init() {
           } catch (_) { }
         }
 
-        // Show Snow Controls for native snow layer
-        if (option.layerId === 'snow-native') {
-          const snowControls = document.getElementById('snowControls');
-          if (snowControls) {
-            snowControls.style.display = visible ? 'block' : 'none';
-          }
-        }
-
-        // Show Time Control (shadow settings) for native shadow layer
-        if (option.layerId === 'shadow-native') {
-          if (visible) shouldShowTimeControl = true;
-        }
-
+        // Show Snow and Shadow controls are now handled via updateAnalyticalLegends()
         return;
       }
 
@@ -3105,20 +2856,6 @@ async function init() {
       map.setPaintProperty(option.layerId, 'raster-opacity', opacity);
       map.setLayoutProperty(option.layerId, 'visibility', visible ? 'visible' : 'none');
     });
-
-    // Update global Time Control visibility once after checking all layers
-    const timeControl = document.getElementById('shadowTimeControl');
-    if (timeControl) {
-      // Toggle logic
-      if (shouldShowTimeControl) {
-        timeControl.style.display = 'block';
-        // Force update sun position for current map center
-        const dateInput = document.getElementById('shadowDate');
-        if (dateInput) dateInput.dispatchEvent(new Event('change'));
-      } else {
-        timeControl.style.display = 'none';
-      }
-    }
 
     // Hillshade appearance is handled by applyHillshadeAppearance() called after applyImageryState()
 
@@ -3189,6 +2926,7 @@ async function init() {
     if (imageryState.get('avalanche')?.enabled) activeAnalyzers.push('avalanche');
     if (imageryState.get('snow')?.enabled) activeAnalyzers.push('snow');
     if (imageryState.get('snow-depth')?.enabled) activeAnalyzers.push('snow-depth');
+    if (imageryState.get('shadow')?.enabled) activeAnalyzers.push('shadow');
 
     if (activeAnalyzers.length === 0) {
       container.style.opacity = '0';
@@ -3361,6 +3099,105 @@ async function init() {
           </div>
         `;
         legend.appendChild(content);
+
+      } else if (type === 'shadow') {
+        const content = document.createElement('div');
+        content.className = 'shadow-legend__content';
+
+        const now = new Date(window.skySimulationDate || Date.now());
+        const dateVal = now.toISOString().split('T')[0];
+        const initialMins = now.getHours() * 60 + now.getMinutes();
+
+        content.innerHTML = `
+          <div class="shadow-legend__row">
+            <input type="date" id="shadowDate" class="shadow-legend__input" value="${dateVal}">
+          </div>
+          <div class="shadow-legend__row shadow-legend__row--time">
+            <input type="range" id="shadowTime" class="shadow-legend__slider" min="0" max="1440" step="1" value="${initialMins}">
+            <span id="shadowTimeLabel" class="shadow-legend__label">${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}</span>
+          </div>
+          ${window.XploreDebug ? `
+          <div class="shadow-legend__debug-wrapper">
+             <button id="shadowDebugTgl" class="shadow-legend__btn-icon" title="Atmosphere & Debug Settings">⚙️</button>
+             <div id="shadowDebugMenu" class="shadow-legend__debug-menu" style="display: none;">
+                <button id="shdSkyTgl" class="shadow-legend__btn shadow-legend__btn--sky" data-off="${window._skyDisabled}">Sky ${window._skyDisabled ? 'OFF' : 'ON'}</button>
+                <div class="shadow-legend__fog-group">
+                   <div class="shadow-legend__fog-row">
+                      <label>Ground</label>
+                      <input type="range" id="fogGrnd" min="-5" max="5" step="0.1" value="0.1">
+                   </div>
+                   <div class="shadow-legend__fog-row">
+                      <label>Horizon</label>
+                      <input type="range" id="fogHoriz" min="-1" max="5" step="0.1" value="0.5">
+                   </div>
+                </div>
+                <button id="shdDbgTgl" class="shadow-legend__btn shadow-legend__btn--debug" data-off="${!window._shadowDebugMode}">Debug ${window._shadowDebugMode ? 'ON' : 'OFF'}</button>
+             </div>
+          </div>
+          ` : ''}
+        `;
+        legend.appendChild(content);
+
+        const dIn = content.querySelector('#shadowDate');
+        const tSl = content.querySelector('#shadowTime');
+        const tLb = content.querySelector('#shadowTimeLabel');
+
+        const triggerUpdate = () => {
+          const h = Math.floor(tSl.value / 60);
+          const m = tSl.value % 60;
+          tLb.textContent = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+          updateShadowTime(dIn, tSl, tLb);
+        };
+
+        dIn.addEventListener('change', triggerUpdate);
+        tSl.addEventListener('input', triggerUpdate);
+        tSl.addEventListener('mousedown', e => e.stopPropagation());
+        tSl.addEventListener('touchstart', e => e.stopPropagation());
+
+        // Debug handling
+        const dbT = content.querySelector('#shadowDebugTgl');
+        const dbM = content.querySelector('#shadowDebugMenu');
+        if (dbT && dbM) {
+          dbT.addEventListener('click', () => {
+            const isVis = dbM.style.display === 'block';
+            dbM.style.display = isVis ? 'none' : 'block';
+          });
+
+          const skT = content.querySelector('#shdSkyTgl');
+          skT?.addEventListener('click', () => {
+            window._skyDisabled = !window._skyDisabled;
+            skT.textContent = window._skyDisabled ? 'Sky OFF' : 'Sky ON';
+            skT.dataset.off = window._skyDisabled;
+            if (map) map.triggerRepaint();
+          });
+
+          const dgT = content.querySelector('#shdDbgTgl');
+          dgT?.addEventListener('click', () => {
+            window._shadowDebugMode = !window._shadowDebugMode;
+            dgT.textContent = window._shadowDebugMode ? 'Debug ON' : 'Debug OFF';
+            dgT.dataset.off = !window._shadowDebugMode;
+            if (map) map.triggerRepaint();
+          });
+
+          // Simplified fog applying
+          const fG = content.querySelector('#fogGrnd');
+          const fH = content.querySelector('#fogHoriz');
+          const applyF = () => {
+            if (map && map.setSky) {
+              const cur = map.getSky ? map.getSky() : {};
+              map.setSky({
+                ...cur,
+                'fog-ground-blend': parseFloat(fG.value),
+                'horizon-fog-blend': parseFloat(fH.value)
+              }, { validate: false });
+            }
+          };
+          fG?.addEventListener('input', applyF);
+          fH?.addEventListener('input', applyF);
+        }
+
+        // Trigger initial positioning
+        triggerUpdate();
 
       } else if (type === 'avalanche') {
         const content = document.createElement('div');

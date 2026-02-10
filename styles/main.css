@@ -639,6 +639,135 @@ body {
   pointer-events: none;
 }
 
+/* Shadow Legend */
+.shadow-legend__content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  padding: 4px 0;
+}
+
+.shadow-legend__input {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  color: white;
+  padding: 6px;
+  font-size: 11px;
+  font-family: inherit;
+}
+
+.shadow-legend__row--time {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.shadow-legend__slider {
+  flex: 1;
+  appearance: none;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.shadow-legend__slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  background: white;
+  border-radius: 50%;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+}
+
+.shadow-legend__label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  min-width: 40px;
+  color: #fff;
+  text-align: right;
+}
+
+.shadow-legend__debug-wrapper {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.shadow-legend__btn-icon {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.4);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0;
+  transition: all 0.2s;
+}
+
+.shadow-legend__btn-icon:hover {
+  color: white;
+  transform: rotate(45deg);
+}
+
+.shadow-legend__debug-menu {
+  margin-top: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 10px;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.shadow-legend__btn {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: white;
+  font-size: 11px;
+  padding: 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.shadow-legend__btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.shadow-legend__btn--sky[data-off="false"] {
+  background: #e67e22;
+  border-color: #f39c12;
+}
+
+.shadow-legend__btn--debug[data-off="false"] {
+  background: #e74c3c;
+  border-color: #c0392b;
+}
+
+.shadow-legend__fog-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.shadow-legend__fog-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 10px;
+  gap: 10px;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.shadow-legend__fog-row input {
+  flex: 1;
+}
+
+
 /* Avalanche Legend - Shader Aligned */
 .avalanche-legend-content {
   display: flex;

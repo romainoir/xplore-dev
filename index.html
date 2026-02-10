@@ -162,57 +162,8 @@
     </div>
   </div>
 
-  <!-- Shadow Time Control - shown when shadow/daylight layer is active -->
-  <div id="shadowTimeControl" class="shadow-time-control" style="display: none;">
-    <div class="shadow-time-control__header">
-      <span class="shadow-time-control__title">☀️ Sun Position</span>
-      <button id="shadowTimeClose" class="shadow-time-control__close" type="button">&times;</button>
-    </div>
-    <div class="shadow-time-control__body">
-      <div class="shadow-time-control__row">
-        <label for="shadowDate">Date:</label>
-        <input type="date" id="shadowDate" class="shadow-time-control__input" />
-      </div>
-      <div class="shadow-time-control__row">
-        <label for="shadowTime">Time:</label>
-        <input type="range" id="shadowTime" class="shadow-time-control__slider" min="0" max="1440" step="1"
-          value="720" />
-        <span id="shadowTimeLabel" class="shadow-time-control__label">12:00</span>
-      </div>
-      <div class="shadow-time-control__row" style="gap: 8px;">
-        <button id="shadowTimeNow" class="shadow-time-control__btn" type="button" style="flex: 1;">Now</button>
-        <button id="shadowSkyToggle" class="shadow-time-control__btn" type="button"
-          style="flex: 1.5; background: #e67e22;" data-enabled="true">Sky ON</button>
-        <button id="shadowDebugToggle" class="shadow-time-control__btn shadow-time-control__btn--debug" type="button"
-          style="flex: 1;" data-debug="false">Debug</button>
-      </div>
-      <!-- Fog Controls (uses setSky fog properties) -->
-      <div id="fogDebugControls"
-        style="border-top: 1px solid rgba(255,255,255,0.2); margin-top: 8px; padding-top: 8px;">
-        <div class="shadow-time-control__row">
-          <label for="fogGroundBlendSlider">Fog Ground:</label>
-          <input type="range" id="fogGroundBlendSlider" class="shadow-time-control__slider" min="-5" max="5" step="0.01"
-            value="0.1" />
-          <span id="fogGroundBlendLabel" class="shadow-time-control__label">0.10</span>
-        </div>
-        <div class="shadow-time-control__row">
-          <label for="horizonFogBlendSlider">Horizon Fog:</label>
-          <input type="range" id="horizonFogBlendSlider" class="shadow-time-control__slider" min="-1" max="5"
-            step="0.01" value="0.5" />
-          <span id="horizonFogBlendLabel" class="shadow-time-control__label">0.50</span>
-        </div>
-        <div class="shadow-time-control__row">
-          <label for="skyHorizonBlendSlider">Sky Horizon:</label>
-          <input type="range" id="skyHorizonBlendSlider" class="shadow-time-control__slider" min="-1" max="5"
-            step="0.01" value="0.5" />
-          <span id="skyHorizonBlendLabel" class="shadow-time-control__label">0.50</span>
-        </div>
-        <div class="shadow-time-control__row">
-          <button id="fogAutoBtn" class="shadow-time-control__btn" type="button" style="background: #4a6;">Auto</button>
-        </div>
-      </div>
-    </div>
-  </div>
+
+
   </div>
 
 
