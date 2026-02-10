@@ -3098,30 +3098,33 @@ async function init() {
         const formatDate = (date) => date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 
         content.innerHTML = `
+          <div class="shadow-legend__header">
+            <div class="shadow-legend__stats">
+              <span id="shadowDateLabel">${formatDate(now)}</span>
+              <span class="shadow-legend__separator">•</span>
+              <span id="shadowTimeLabel">${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}</span>
+            </div>
+            <div class="shadow-legend__header-actions">
+              <button id="shadowNowBtn" class="shadow-legend__btn-now">Now</button>
+              ${window.XploreDebug ? `<button id="shadowDebugTgl" class="shadow-legend__btn-icon shadow-legend__btn-icon--small" title="Settings">⚙️</button>` : ''}
+            </div>
+          </div>
+
           <div class="shadow-legend__row">
+            <span class="shadow-legend__row-icon">📅</span>
             <input type="range" id="shadowDateSlider" class="shadow-legend__slider shadow-legend__slider--date" min="1" max="366" value="${dayOfYear}">
-            <span id="shadowDateLabel" class="shadow-legend__label">${formatDate(now)}</span>
           </div>
           <div class="shadow-legend__row">
+            <span class="shadow-legend__row-icon">🕒</span>
             <input type="range" id="shadowTimeSlider" class="shadow-legend__slider" min="0" max="1440" step="1" value="${initialMins}">
-            <span id="shadowTimeLabel" class="shadow-legend__label">${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}</span>
           </div>
-          <div class="shadow-legend__actions">
-             <button id="shadowNowBtn" class="shadow-legend__btn-now">Now</button>
-             ${window.XploreDebug ? `<button id="shadowDebugTgl" class="shadow-legend__btn-icon" title="Atmosphere & Debug Settings">⚙️</button>` : ''}
-          </div>
+
           ${window.XploreDebug ? `
           <div id="shadowDebugMenu" class="shadow-legend__debug-menu" style="display: none;">
              <button id="shdSkyTgl" class="shadow-legend__btn shadow-legend__btn--sky" data-off="${window._skyDisabled}">Sky ${window._skyDisabled ? 'OFF' : 'ON'}</button>
              <div class="shadow-legend__fog-group">
-                <div class="shadow-legend__fog-row">
-                   <label>Ground</label>
-                   <input type="range" id="fogGrnd" min="-5" max="5" step="0.1" value="0.1">
-                </div>
-                <div class="shadow-legend__fog-row">
-                   <label>Horizon</label>
-                   <input type="range" id="fogHoriz" min="-1" max="5" step="0.1" value="0.5">
-                </div>
+                <div class="shadow-legend__fog-row"><label>Ground</label><input type="range" id="fogGrnd" min="-5" max="5" step="0.1" value="0.1"></div>
+                <div class="shadow-legend__fog-row"><label>Horizon</label><input type="range" id="fogHoriz" min="-1" max="5" step="0.1" value="0.5"></div>
              </div>
              <button id="shdDbgTgl" class="shadow-legend__btn shadow-legend__btn--debug" data-off="${!window._shadowDebugMode}">Debug ${window._shadowDebugMode ? 'ON' : 'OFF'}</button>
           </div>
