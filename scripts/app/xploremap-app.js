@@ -4260,6 +4260,15 @@ async function init() {
     // No longer needed - method is forced by layer.id in hillshade_program.ts
     console.log('[App] Native terrain layers added (normalmap, aspect, slope, avalanche)');
 
+    // Add Snow layer (native)
+    map.addLayer({
+      id: 'snow-native',
+      type: 'hillshade',
+      source: 'hillshadeSource',
+      layout: { 'visibility': 'none' },
+      paint: { 'hillshade-exaggeration': 1.0 }
+    }, topLabelId || undefined);
+
     // Add Aspect layer (native)
     map.addLayer({
       id: 'aspect-native',
@@ -4286,16 +4295,6 @@ async function init() {
       layout: { 'visibility': 'none' },
       paint: { 'hillshade-exaggeration': 1.0 }
     }, topLabelId || undefined);
-
-    // Add Snow layer (native)
-    map.addLayer({
-      id: 'snow-native',
-      type: 'hillshade',
-      source: 'hillshadeSource',
-      layout: { 'visibility': 'none' },
-      paint: { 'hillshade-exaggeration': 1.0 }
-    }, topLabelId || undefined);
-
     // Add Detail/Self-Shadow layer (native) - High Res, No Raymarching
     // Uses Green Accent (#00ff00) as shader flag
     map.addLayer({
