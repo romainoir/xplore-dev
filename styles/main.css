@@ -648,22 +648,55 @@ body {
   padding: 4px 0;
 }
 
-.shadow-legend__input {
-  width: 100%;
+.shadow-legend__row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.shadow-legend__date-display {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.shadow-legend__btn-now {
   background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #aaa;
+  font-size: 9px;
+  padding: 2px 6px;
   border-radius: 4px;
-  color: white;
-  padding: 6px;
-  font-size: 11px;
-  font-family: inherit;
+  cursor: pointer;
+}
+
+.shadow-legend__btn-now:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+
+.shadow-legend__row--date {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .shadow-legend__row--time {
   display: flex;
+  flex-direction: row;
   align-items: center;
   gap: 10px;
 }
+
+.shadow-legend__slider--date {
+  background: linear-gradient(to right,
+      rgba(255, 255, 255, 0.1) 0%,
+      rgba(255, 255, 255, 0.2) 25%,
+      rgba(255, 255, 255, 0.3) 50%,
+      rgba(255, 255, 255, 0.2) 75%,
+      rgba(255, 255, 255, 0.1) 100%);
+}
+
 
 .shadow-legend__slider {
   flex: 1;

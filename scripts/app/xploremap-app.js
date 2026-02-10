@@ -2271,23 +2271,8 @@ async function init() {
 
 
   // 5. Initialize Shadow & Time Controls
-  // Moved to updateAnalyticalLegends for dynamic initialization
-  let shadowUpdateFunction = null;
-
-  const updateShadowTime = (dateInput, timeSlider, timeLabel) => {
-    if (!dateInput || !timeSlider) return;
-
-    const dateParts = dateInput.value.split('-');
-    const mins = parseInt(timeSlider.value, 10);
-    const h = Math.floor(mins / 60);
-    const m = mins % 60;
-
-    const date = new Date(
-      parseInt(dateParts[0], 10),
-      parseInt(dateParts[1], 10) - 1,
-      parseInt(dateParts[2], 10),
-      h, m, 0, 0
-    );
+  const updateShadowTime = (date) => {
+    if (!date || !(date instanceof Date)) return;
 
     window.skySimulationDate = date.getTime();
 
@@ -2300,14 +2285,14 @@ async function init() {
 
         window.sunConfig = { azimuth: sunAzi, altitude: sunAlt };
 
-        if (map.getLayer('shadow-native')) {
-          map.setPaintProperty('shadow-native', 'hillshade-illumination-direction', sunAzi);
-          map.setPaintProperty('shadow-native', 'hillshade-illumination-altitude', [sunAlt, sunAlt, sunAlt, sunAlt]);
-        }
-        if (map.getLayer('detail-native')) {
-          map.setPaintProperty('detail-native', 'hillshade-illumination-direction', sunAzi);
-          map.setPaintProperty('detail-native', 'hillshade-illumination-altitude', [sunAlt, sunAlt, sunAlt, sunAlt]);
-        }
+        const hillLayers = ['shadow-native', 'detail-native'];
+        hillLayers.forEach(l => {
+          if (map.getLayer(l)) {
+            map.setPaintProperty(l, 'hillshade-illumination-direction', sunAzi);
+            map.setPaintProperty(l, 'hillshade-illumination-altitude', [sunAlt, sunAlt, sunAlt, sunAlt]);
+          }
+        });
+
         if (map.getLayer('hillshade')) {
           map.setPaintProperty('hillshade', 'hillshade-illumination-direction', [sunAzi, (sunAzi + 45) % 360, (sunAzi - 45 + 360) % 360, (sunAzi + 180) % 360]);
           map.setPaintProperty('hillshade', 'hillshade-illumination-altitude', [sunAlt, sunAlt, sunAlt, sunAlt]);
@@ -3105,15 +3090,23 @@ async function init() {
         content.className = 'shadow-legend__content';
 
         const now = new Date(window.skySimulationDate || Date.now());
-        const dateVal = now.toISOString().split('T')[0];
+        const startOfYear = new Date(now.getFullYear(), 0, 0);
+        const diff = now - startOfYear;
+        const dayOfYear = Math.floor(diff / (1000 * 60 * 60 * 24));
         const initialMins = now.getHours() * 60 + now.getMinutes();
 
+        const formatDate = (date) => date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+
         content.innerHTML = `
-          <div class="shadow-legend__row">
-            <input type="date" id="shadowDate" class="shadow-legend__input" value="${dateVal}">
+          <div class="shadow-legend__row shadow-legend__row--date">
+            <input type="range" id="shadowDateSlider" class="shadow-legend__slider shadow-legend__slider--date" min="1" max="366" value="${dayOfYear}">
+            <div class="shadow-legend__date-display">
+              <span id="shadowDateLabel" class="shadow-legend__label">${formatDate(now)}</span>
+              <button id="shadowNowBtn" class="shadow-legend__btn-now" title="Set to now">Now</button>
+            </div>
           </div>
           <div class="shadow-legend__row shadow-legend__row--time">
-            <input type="range" id="shadowTime" class="shadow-legend__slider" min="0" max="1440" step="1" value="${initialMins}">
+            <input type="range" id="shadowTimeSlider" class="shadow-legend__slider" min="0" max="1440" step="1" value="${initialMins}">
             <span id="shadowTimeLabel" class="shadow-legend__label">${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}</span>
           </div>
           ${window.XploreDebug ? `
@@ -3138,21 +3131,48 @@ async function init() {
         `;
         legend.appendChild(content);
 
-        const dIn = content.querySelector('#shadowDate');
-        const tSl = content.querySelector('#shadowTime');
+        const dSl = content.querySelector('#shadowDateSlider');
+        const dLb = content.querySelector('#shadowDateLabel');
+        const tSl = content.querySelector('#shadowTimeSlider');
         const tLb = content.querySelector('#shadowTimeLabel');
+        const nBtn = content.querySelector('#shadowNowBtn');
 
         const triggerUpdate = () => {
-          const h = Math.floor(tSl.value / 60);
-          const m = tSl.value % 60;
+          const date = new Date(new Date().getFullYear(), 0);
+          date.setDate(parseInt(dSl.value));
+
+          const mins = parseInt(tSl.value);
+          const h = Math.floor(mins / 60);
+          const m = mins % 60;
+
+          date.setHours(h, m, 0, 0);
+
+          dLb.textContent = formatDate(date);
           tLb.textContent = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
-          updateShadowTime(dIn, tSl, tLb);
+
+          updateShadowTime(date);
         };
 
-        dIn.addEventListener('change', triggerUpdate);
+        dSl.addEventListener('input', triggerUpdate);
         tSl.addEventListener('input', triggerUpdate);
-        tSl.addEventListener('mousedown', e => e.stopPropagation());
-        tSl.addEventListener('touchstart', e => e.stopPropagation());
+
+        [dSl, tSl].forEach(sl => {
+          sl.addEventListener('mousedown', e => e.stopPropagation());
+          sl.addEventListener('touchstart', e => e.stopPropagation());
+        });
+
+        if (nBtn) {
+          nBtn.addEventListener('click', () => {
+            const now = new Date();
+            const start = new Date(now.getFullYear(), 0, 0);
+            const day = Math.floor((now - start) / (1000 * 60 * 60 * 24));
+            const mins = now.getHours() * 60 + now.getMinutes();
+
+            dSl.value = day;
+            tSl.value = mins;
+            triggerUpdate();
+          });
+        }
 
         // Debug handling
         const dbT = content.querySelector('#shadowDebugTgl');
@@ -3179,7 +3199,6 @@ async function init() {
             if (map) map.triggerRepaint();
           });
 
-          // Simplified fog applying
           const fG = content.querySelector('#fogGrnd');
           const fH = content.querySelector('#fogHoriz');
           const applyF = () => {
@@ -3196,8 +3215,9 @@ async function init() {
           fH?.addEventListener('input', applyF);
         }
 
-        // Trigger initial positioning
-        triggerUpdate();
+        // Seed initial view
+        updateShadowTime(now);
+
 
       } else if (type === 'avalanche') {
         const content = document.createElement('div');
