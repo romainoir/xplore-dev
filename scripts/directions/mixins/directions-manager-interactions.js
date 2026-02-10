@@ -297,12 +297,11 @@ export class DirectionsManagerInteractionsMixin {
       }
     }
 
+    // When expanding, refresh elevation data in case terrain tiles have loaded since route was opened
     if (!this.isElevationCollapsed && this.routeProfile) {
-      if (typeof this.updateElevationProfile === 'function') {
-        const coords = Array.isArray(this.routeProfile.coordinates) ? this.routeProfile.coordinates : [];
-        if (coords.length) {
-          this.updateElevationProfile(coords);
-        }
+      if (typeof this.refreshElevationProfile === 'function') {
+        // Force a refresh to get latest terrain data
+        this.refreshElevationProfile();
       }
     }
 
@@ -2389,9 +2388,14 @@ export class DirectionsManagerInteractionsMixin {
       let elevation = Number.isFinite(coord[2]) ? coord[2] : null;
       if (canQueryTerrain) {
         const terrainElevation = this.queryTerrainElevationValue(coord);
-        if (Number.isFinite(terrainElevation)) {
+        // Only count as valid terrain sample if we get a non-zero value
+        // MapLibre returns 0 when terrain tiles haven't loaded yet
+        if (Number.isFinite(terrainElevation) && terrainElevation !== 0) {
           elevation = terrainElevation;
           terrainSampleCount++;
+        } else if (Number.isFinite(terrainElevation)) {
+          // Got 0 from terrain - use it but don't count as valid sample
+          elevation = terrainElevation;
         }
       }
       coord[2] = elevation;

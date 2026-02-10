@@ -3819,7 +3819,7 @@ export class DirectionsManagerStatsMixin {
         this.routeGeojson.geometry.coordinates = profile.coordinates.map(c => c.slice());
       }
 
-      // Full data rebuild to ensure segments and metrics are updated with new altitudes
+      // Sync all data structures with new altitudes
       this.rebuildSegmentData();
       this.updateRouteCutSegments();
       this.updateRouteLineSource();
@@ -3828,18 +3828,16 @@ export class DirectionsManagerStatsMixin {
       // Update the chart
       this.updateElevationProfile(profile.coordinates);
 
-      // Re-calculate metrics as they are now more accurate
+      // Update metrics and summary
       this.latestMetrics = this.calculateRouteMetrics({
         geometry: { coordinates: profile.coordinates },
         properties: this.routeGeojson.properties
       });
       this.renderRouteStatsSummary(this.latestMetrics);
       this.updateDistanceMarkers(this.routeGeojson);
-
-      console.log(`%c[DirectionsManager] Elevation profile refreshed: ${newSampleCount}/${totalPoints} terrain samples`, 'color: #4CAF50; font-weight: bold');
     }
 
-    // Stop pending if we reach high coverage (95%+)
+    // High coverage reached (95%+)
     if (newSampleCount >= totalPoints * 0.95) {
       this._elevationRefreshPending = false;
     }
@@ -3875,13 +3873,7 @@ export class DirectionsManagerStatsMixin {
     }
 
     // Use densified coordinates from the route profile for more accurate sampling if available.
-    // However, if the profile has no elevation data (e.g. terrain not loaded yet), fallback to raw coordinates
-    // which might at least have elevations from the source GPX/JSON.
-    const hasProfileElevations = Array.isArray(this.routeProfile?.elevations) &&
-      this.routeProfile.elevations.some(e => e !== null && e !== 0);
-
-    const sourceCoords = (hasProfileElevations &&
-      Array.isArray(this.routeProfile?.coordinates) &&
+    const sourceCoords = (Array.isArray(this.routeProfile?.coordinates) &&
       this.routeProfile.coordinates.length >= coordinates.length)
       ? this.routeProfile.coordinates
       : coordinates;
@@ -3907,16 +3899,7 @@ export class DirectionsManagerStatsMixin {
       return;
     }
 
-    // If we fell back to raw coordinates, re-calculate metrics to ensure we show 
-    // the source elevation data even if the densified profile was flat
-    let metrics = this.latestMetrics;
-    if (sourceCoords === coordinates && (!metrics || (metrics.ascent === 0 && metrics.descent === 0))) {
-      metrics = this.calculateRouteMetrics({ geometry: { coordinates: sourceCoords }, properties: this.routeGeojson?.properties });
-    }
-
-    if (!metrics) {
-      metrics = this.calculateRouteMetrics({ geometry: { coordinates } });
-    }
+    const metrics = this.latestMetrics ?? this.calculateRouteMetrics({ geometry: { coordinates } });
     const totalDistance = Number(metrics.distanceKm) || 0;
 
     this.elevationSamples = samples;
@@ -5234,21 +5217,10 @@ export class DirectionsManagerStatsMixin {
     this.setRoutePointsOfInterest([]);
     this.pendingPoiRequest = null;
 
-    // Only use densified coordinates if they successfully captured elevation data,
-    // or if the original input itself had no elevation. This prevents "flattening" a route
-    // when opening from library just because terrain hasn't loaded yet.
-    const hasOriginalElevations = coordinates.some(c => Array.isArray(c) && Number.isFinite(c[2]) && c[2] !== 0);
-    const hasProfileElevations = Array.isArray(this.routeProfile?.elevations) &&
-      this.routeProfile.elevations.some(e => e !== null && e !== 0);
+    // Use densified coordinates from the profile as the source of truth for the route line
+    const profileCoords = Array.isArray(this.routeProfile?.coordinates) ? this.routeProfile.coordinates : [];
+    const routeCoordinates = profileCoords.map((coord) => (Array.isArray(coord) ? coord.slice() : coord));
 
-    let routeCoordinates;
-    if (hasOriginalElevations && !hasProfileElevations) {
-      // Preserve input coordinates if profile building failed to get elevations
-      routeCoordinates = coordinates.map((coord) => (Array.isArray(coord) ? coord.slice() : coord));
-    } else {
-      const profileCoords = Array.isArray(this.routeProfile?.coordinates) ? this.routeProfile.coordinates : [];
-      routeCoordinates = profileCoords.map((coord) => (Array.isArray(coord) ? coord.slice() : coord));
-    }
     let resolvedRoute = route;
     if (routeCoordinates.length) {
       resolvedRoute = {
@@ -5261,18 +5233,12 @@ export class DirectionsManagerStatsMixin {
     }
     this.routeGeojson = resolvedRoute;
 
-    // Detect if we have a missing or degraded elevation profile that should be refreshed
-    // when terrain tiles become available. 
-    // We want high coverage (at least 90%) of actual terrain samples.
+    // Track if we need an elevation refresh when tiles load
     const canQuery = typeof this.canQueryTerrainElevation === 'function' && this.canQueryTerrainElevation();
     const terrainSamples = this.routeProfile?.terrainSampleCount ?? 0;
     const totalPoints = this.routeProfile?.coordinates?.length ?? 1;
 
-    if (canQuery && terrainSamples < totalPoints * 0.9) {
-      this._elevationRefreshPending = true;
-    } else {
-      this._elevationRefreshPending = false;
-    }
+    this._elevationRefreshPending = canQuery && terrainSamples < totalPoints * 0.9;
 
     const coordinateMetadata = Array.isArray(resolvedRoute?.properties?.coordinate_metadata)
       ? resolvedRoute.properties.coordinate_metadata
