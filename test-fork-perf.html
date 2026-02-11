@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>Fork Build Performance Test</title>
+    <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.css">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+        }
+
+        #map {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 100%;
+        }
+
+        #fps-overlay {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 999;
+            background: rgba(30, 30, 40, 0.85);
+            color: #fff;
+            padding: 12px 16px;
+            font-family: monospace;
+            font-size: 13px;
+            border-radius: 8px;
+            line-height: 1.6;
+        }
+
+        #fps-overlay .big {
+            font-size: 32px;
+            font-weight: bold;
+            color: #4ecdc4;
+        }
+
+        #fps-overlay .label {
+            color: #aaa;
+            display: inline-block;
+            width: 60px;
+        }
+
+        #fps-overlay .warn {
+            background: #e74c3c;
+            color: #fff;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 10px;
+        }
+
+        #fps-overlay .ok {
+            background: #2ecc71;
+            color: #fff;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 10px;
+        }
+
+        button {
+            display: block;
+            margin: 4px 0;
+            padding: 6px 12px;
+            cursor: pointer;
+            border: none;
+            border-radius: 4px;
+            font-size: 12px;
+            color: white;
+        }
+
+        .btn-3d {
+            background: #3498db;
+        }
+
+        .btn-flat {
+            background: #e67e22;
+        }
+
+        .btn-hide {
+            background: #9b59b6;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="map"></div>
+    <div id="fps-overlay">
+        <span class="warn">FORK BUILD</span><br>
+        FPS<br>
+        <span class="big" id="fps">--</span><br>
+        <span class="label">Min</span> <span id="fps-min">--</span><br>
+        <span class="label">Max</span> <span id="fps-max">--</span><br>
+        <span class="label">Avg (5s)</span> <span id="fps-avg">--</span><br>
+        <br>
+        <span class="label">Mode</span> <span id="mode-label">2D</span><br>
+        <span class="label">Pitch</span> <span id="pitch-label">0°</span><br>
+        <span class="label">Zoom</span> <span id="zoom-label">--</span><br>
+        <br>
+        <button class="btn-3d" id="toggle-3d">Switch to 3D (pitch 60°)</button>
+        <button class="btn-flat" id="toggle-flat">3D Flat (pitch 0°, terrain ON)</button>
+        <button class="btn-hide" id="toggle-hillshade">Hide Hillshade</button>
+        <br>
+        <small>Matterhorn · Mapbox DEM · Terrain</small>
+    </div>
+
+    <script src="maplibre-gl-js/dist/maplibre-gl.js"></script>
+    <script>
+        const map = new maplibregl.Map({
+            container: 'map',
+            style: {
+                version: 8,
+                sources: {
+                    'osm': {
+                        type: 'raster',
+                        tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+                        tileSize: 256,
+                        attribution: '© OpenStreetMap contributors'
+                    },
+                    'terrain-dem': {
+                        type: 'raster-dem',
+                        tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
+                        encoding: 'terrarium',
+                        tileSize: 256,
+                        maxzoom: 15
+                    },
+                    'hillshade-dem': {
+                        type: 'raster-dem',
+                        tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
+                        encoding: 'terrarium',
+                        tileSize: 256,
+                        maxzoom: 15
+                    }
+                },
+                layers: [
+                    { id: 'osm-tiles', type: 'raster', source: 'osm' },
+                    {
+                        id: 'hillshade-layer',
+                        type: 'hillshade',
+                        source: 'hillshade-dem',
+                        paint: {
+                            'hillshade-exaggeration': 0.3,
+                            'hillshade-shadow-color': '#000',
+                            'hillshade-highlight-color': '#fff'
+                        }
+                    }
+                ]
+            },
+            center: [7.6586, 45.9763], // Matterhorn
+            zoom: 12,
+            maxPitch: 85
+        });
+
+        // FPS tracking
+        let frames = [], minFps = Infinity, maxFps = 0;
+        const fpsEl = document.getElementById('fps');
+        const fpsMinEl = document.getElementById('fps-min');
+        const fpsMaxEl = document.getElementById('fps-max');
+        const fpsAvgEl = document.getElementById('fps-avg');
+        const modeEl = document.getElementById('mode-label');
+        const pitchEl = document.getElementById('pitch-label');
+        const zoomEl = document.getElementById('zoom-label');
+
+        let lastTime = performance.now();
+        function updateFPS() {
+            const now = performance.now();
+            const delta = now - lastTime;
+            lastTime = now;
+            const currentFps = Math.round(1000 / delta);
+            frames.push({ fps: currentFps, time: now });
+
+            // Keep 5 seconds
+            const cutoff = now - 5000;
+            frames = frames.filter(f => f.time > cutoff);
+
+            const avg = Math.round(frames.reduce((s, f) => s + f.fps, 0) / frames.length);
+            minFps = Math.min(minFps, currentFps);
+            maxFps = Math.max(maxFps, currentFps);
+
+            fpsEl.textContent = currentFps;
+            fpsMinEl.textContent = minFps;
+            fpsMaxEl.textContent = maxFps;
+            fpsAvgEl.textContent = avg;
+            pitchEl.textContent = Math.round(map.getPitch()) + '°';
+            zoomEl.textContent = map.getZoom().toFixed(1);
+
+            requestAnimationFrame(updateFPS);
+        }
+        requestAnimationFrame(updateFPS);
+
+        let terrainOn = false;
+        let hillshadeVisible = true;
+
+        function resetMinMax() { minFps = Infinity; maxFps = 0; frames = []; }
+
+        document.getElementById('toggle-3d').addEventListener('click', () => {
+            if (!terrainOn) {
+                map.setTerrain({ source: 'terrain-dem', exaggeration: 1.5 });
+                map.setPitch(60);
+                terrainOn = true;
+                modeEl.textContent = '3D (60°)';
+                document.getElementById('toggle-3d').textContent = 'Switch to 2D';
+            } else {
+                map.setTerrain(null);
+                map.setPitch(0);
+                terrainOn = false;
+                modeEl.textContent = '2D';
+                document.getElementById('toggle-3d').textContent = 'Switch to 3D (pitch 60°)';
+                document.getElementById('toggle-flat').textContent = '3D Flat (pitch 0°, terrain ON)';
+            }
+            resetMinMax();
+        });
+
+        document.getElementById('toggle-flat').addEventListener('click', () => {
+            if (!terrainOn) {
+                map.setTerrain({ source: 'terrain-dem', exaggeration: 1.5 });
+                terrainOn = true;
+                map.setPitch(0);
+                modeEl.textContent = '3D flat (0°)';
+                document.getElementById('toggle-3d').textContent = 'Switch to 3D (pitch 60°)';
+                document.getElementById('toggle-flat').textContent = 'Disable Terrain';
+            } else {
+                map.setTerrain(null);
+                terrainOn = false;
+                map.setPitch(0);
+                modeEl.textContent = '2D';
+                document.getElementById('toggle-3d').textContent = 'Switch to 3D (pitch 60°)';
+                document.getElementById('toggle-flat').textContent = '3D Flat (pitch 0°, terrain ON)';
+            }
+            resetMinMax();
+        });
+
+        document.getElementById('toggle-hillshade').addEventListener('click', () => {
+            hillshadeVisible = !hillshadeVisible;
+            map.setLayoutProperty('hillshade-layer', 'visibility', hillshadeVisible ? 'visible' : 'none');
+            document.getElementById('toggle-hillshade').textContent = hillshadeVisible ? 'Hide Hillshade' : 'Show Hillshade';
+            resetMinMax();
+        });
+    </script>
+</body>
+
+</html>

@@ -53,6 +53,7 @@ export function createViewModeController(map, options = {}) {
   const defaultExaggeration = Number.isFinite(options.defaultExaggeration)
     ? options.defaultExaggeration
     : DEFAULT_EXAGGERATION;
+  const skipSky = options.skipSky ?? false;
   let hdEnabled = options.defaultHd ?? true;
 
   const terrainSourceResolver = options.terrainSourceId ?? 'terrainSource';
@@ -88,22 +89,23 @@ export function createViewModeController(map, options = {}) {
   let lastSimulationDate = null;
   let glareUpdatePending = false;
 
-  // Update fog glare effect when camera moves (throttled)
-  let lastGlareUpdate = 0;
-  map.on('move', () => {
-    const now = Date.now();
-    if (currentMode !== VIEW_MODES.THREED || !lastSimulationDate || glareUpdatePending || (now - lastGlareUpdate < 50)) return;
+  // Update fog glare effect after camera movement settles (debounced to avoid first-frame hiccup)
+  // Using 'moveend' instead of 'move' prevents setLight/setSky/setFog from triggering
+  // synchronous style recalculation during the first frame of a pan/rotate gesture.
+  let glareDebounceTimer = null;
+  map.on('moveend', () => {
+    // Kill-switch: window._disableGlare = true to skip all glare updates
+    if (typeof window !== 'undefined' && window._disableGlare) return;
+    if (skipSky) return;
+    if (currentMode !== VIEW_MODES.THREED || !lastSimulationDate) return;
 
-    glareUpdatePending = true;
-    requestAnimationFrame(() => {
-      glareUpdatePending = false;
-      lastGlareUpdate = Date.now();
-      // Re-apply sky to update glare based on new camera direction
-      if (currentMode === VIEW_MODES.THREED && lastSimulationDate) {
-        const center = map.getCenter();
-        updateSunPosition(map, center.lat, center.lng, lastSimulationDate);
-      }
-    });
+    // Debounce: wait 100ms after last moveend before updating
+    if (glareDebounceTimer) clearTimeout(glareDebounceTimer);
+    glareDebounceTimer = setTimeout(() => {
+      glareDebounceTimer = null;
+      const center = map.getCenter();
+      updateSunPosition(map, center.lat, center.lng, lastSimulationDate);
+    }, 100);
   });
 
   function stopAnimation() {
@@ -141,6 +143,7 @@ export function createViewModeController(map, options = {}) {
   }
 
   function applySky(is3D, simulationDate = null) {
+    if (skipSky) return; // Feature gate: sky/fog disabled
     if (typeof map.setSky !== 'function') {
       return;
     }
@@ -260,6 +263,7 @@ export function createViewModeController(map, options = {}) {
   }
 
   function applyHdMode() {
+    return; // PERF TEST: use MapLibre default LOD instead of aggressive custom params
     if (typeof map.setSourceTileLodParams !== 'function') {
       return;
     }

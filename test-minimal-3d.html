@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>3D Performance A/B — Find the Bottleneck</title>
+    <link href="https://unpkg.com/maplibre-gl@5.15.0/dist/maplibre-gl.css" rel="stylesheet" />
+    <!-- Uses fork build if available, falls back to CDN -->
+    <style>
+        body {
+            margin: 0;
+            font-family: monospace;
+        }
+
+        #map {
+            width: 100%;
+            height: 100vh;
+        }
+
+        #panel {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            z-index: 10;
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 14px;
+            border-radius: 10px;
+            min-width: 310px;
+            max-height: 95vh;
+            overflow-y: auto;
+        }
+
+        .fps {
+            font-size: 36px;
+            font-weight: bold;
+            margin: 4px 0;
+        }
+
+        .green {
+            color: #2ecc71;
+        }
+
+        .red {
+            color: #e74c3c;
+        }
+
+        .yellow {
+            color: #f1c40f;
+        }
+
+        .info {
+            color: #888;
+            font-size: 10px;
+            margin: 2px 0;
+        }
+
+        h3 {
+            margin: 8px 0 4px;
+            color: #3498db;
+            font-size: 12px;
+            border-bottom: 1px solid #333;
+            padding-bottom: 2px;
+        }
+
+        button {
+            display: block;
+            width: 100%;
+            margin: 3px 0;
+            padding: 6px 8px;
+            cursor: pointer;
+            font: 11px monospace;
+            border: none;
+            border-radius: 4px;
+            background: #2c3e50;
+            color: #ecf0f1;
+            text-align: left;
+        }
+
+        button:hover {
+            background: #34495e;
+        }
+
+        button.done {
+            background: #27ae60;
+            color: white;
+        }
+
+        button.active {
+            background: #e74c3c;
+        }
+
+        .step-num {
+            color: #f39c12;
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="map"></div>
+    <div id="panel">
+        <div>FPS: <span class="fps" id="fps">--</span></div>
+        <div class="info" id="info">Loading style...</div>
+        <div class="info" id="stats"></div>
+
+        <h3>Step 1: Base (already loaded)</h3>
+        <button id="s1-terrain" class="done">✅ OSM Liberty 196 layers loaded</button>
+        <button id="s1-terrain-on">1A. Enable Terrain</button>
+
+        <h3>Step 2: Add DEM Sources (like main app)</h3>
+        <button id="s2-hillshade">2A. + Hillshade layer</button>
+        <button id="s2-dem-sources">2B. + 4 extra DEM sources</button>
+        <button id="s2-hillshade-layers">2C. + 8 hillshade layers (shadow, slope, etc)</button>
+
+        <h3>Step 3: Sky / Fog / Light</h3>
+        <button id="s3-sky">3A. Set Sky</button>
+        <button id="s3-fog">3B. Set Fog</button>
+        <button id="s3-light">3C. Set Light (directional)</button>
+
+        <h3>Step 4: Per-move updates (SUSPECTS!)</h3>
+        <button id="s4-move-sky">4A. 🔴 on('move') → setSky() every move</button>
+        <button id="s4-move-fog">4B. 🔴 on('move') → setFog() every move</button>
+        <button id="s4-move-paint">4C. 🔴 on('move') → setPaintProperty(hillshade) every move</button>
+        <button id="s4-move-all">4D. 🔴 ALL per-move updates combined</button>
+
+        <h3>Step 5: Other features</h3>
+        <button id="s5-triggerrepaint">5A. triggerRepaint() every move</button>
+        <button id="s5-contours">5B. + Contour source (simulated)</button>
+        <button id="s5-images">5C. + styleimagemissing handler</button>
+
+        <h3>Step 6: 🔴 LOD & Tile Loading (HIGH SUSPECT)</h3>
+        <button id="s6-lod-mild">6A. LOD mild: setSourceTileLodParams(5, 2) on ALL sources</button>
+        <button id="s6-lod-hd">6B. 🔴 LOD HD: setSourceTileLodParams(3, 9) on DEM sources</button>
+        <button id="s6-raster-dem">6C. + Raster layer FROM raster-dem source (terrain visible)</button>
+        <button id="s6-contour-real">6D. + Real contour DemSource (mlcontour worker)</button>
+        <button id="s6-all-imagery">6E. + 10 raster imagery sources (hidden)</button>
+
+        <h3>Controls</h3>
+        <button id="reset" style="background:#c0392b;color:white">🔄 RESET (reload page)</button>
+    </div>
+
+    <script src="./libs/maplibre-gl.js"></script>
+    <script>
+        const TILE_URL = 'https://tiles.mapterhorn.com/{z}/{x}/{y}.webp';
+        let map;
+
+        // FPS tracking
+        let frames = [], lastTime = performance.now();
+        function tick() {
+            const now = performance.now();
+            frames.push(now - lastTime);
+            lastTime = now;
+            if (frames.length > 90) frames.shift();
+            const avg = frames.reduce((a, b) => a + b, 0) / frames.length;
+            const fps = Math.round(1000 / avg);
+            const el = document.getElementById('fps');
+            el.textContent = fps;
+            el.className = 'fps ' + (fps > 40 ? 'green' : fps > 20 ? 'yellow' : 'red');
+            requestAnimationFrame(tick);
+        }
+        requestAnimationFrame(tick);
+
+        function updateStats() {
+            const s = map.getStyle();
+            const srcCount = Object.keys(s.sources).length;
+            const layerCount = s.layers.length;
+            document.getElementById('stats').textContent = `Sources: ${srcCount} | Layers: ${layerCount} | DPR: ${window.devicePixelRatio}`;
+        }
+
+        function markDone(id, label) {
+            const btn = document.getElementById(id);
+            btn.classList.add('done');
+            btn.textContent = '✅ ' + (label || btn.textContent);
+            btn.disabled = true;
+            updateStats();
+        }
+
+        function markActive(id, label) {
+            const btn = document.getElementById(id);
+            btn.classList.add('active');
+            btn.textContent = '🔴 ' + (label || btn.textContent);
+        }
+
+        async function init() {
+            let style;
+            try {
+                const resp = await fetch('./osm_liberty.json');
+                style = await resp.json();
+                style.glyphs = 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf';
+                style.sprite = 'https://maputnik.github.io/osm-liberty/sprites/osm-liberty';
+            } catch (e) {
+                style = { version: 8, sources: {}, layers: [{ id: 'bg', type: 'background', paint: { 'background-color': '#e0e0e0' } }] };
+            }
+
+            style.sources['terrainDem'] = {
+                type: 'raster-dem', tiles: [TILE_URL],
+                encoding: 'terrarium', tileSize: 512, maxzoom: 12
+            };
+
+            map = window.map = new maplibregl.Map({
+                container: 'map',
+                style: style,
+                center: [7.6586, 45.9763],
+                zoom: 11.7,
+                pitch: 60,
+                bearing: -18.6,
+                maxPitch: 85,
+                pixelRatio: window.devicePixelRatio,
+                antialias: true
+            });
+
+            map.on('load', () => {
+                document.getElementById('info').textContent =
+                    `Loaded: ${map.getStyle().layers.length} layers | DPR: ${window.devicePixelRatio}`;
+                updateStats();
+            });
+
+            // ===== STEP 1: Terrain =====
+            document.getElementById('s1-terrain-on').onclick = function () {
+                map.setTerrain({ source: 'terrainDem' });
+                markDone('s1-terrain-on', 'Terrain ON');
+            };
+
+            // ===== STEP 2: DEM Sources & Hillshade Layers =====
+            document.getElementById('s2-hillshade').onclick = function () {
+                if (!map.getSource('hillshadeDem')) {
+                    map.addSource('hillshadeDem', {
+                        type: 'raster-dem', tiles: [TILE_URL],
+                        encoding: 'terrarium', tileSize: 512, maxzoom: 12
+                    });
+                }
+                if (!map.getLayer('hillshade')) {
+                    map.addLayer({
+                        id: 'hillshade', type: 'hillshade', source: 'hillshadeDem',
+                        paint: { 'hillshade-exaggeration': 0.23 }
+                    });
+                }
+                markDone('s2-hillshade', 'Hillshade layer added');
+            };
+
+            document.getElementById('s2-dem-sources').onclick = function () {
+                ['shadowDem', 'reliefDem', 'colorDem', 'extraDem'].forEach(id => {
+                    if (!map.getSource(id)) {
+                        map.addSource(id, {
+                            type: 'raster-dem', tiles: [TILE_URL],
+                            encoding: 'terrarium', tileSize: 512, maxzoom: 12
+                        });
+                    }
+                });
+                markDone('s2-dem-sources', '4 extra DEM sources added');
+            };
+
+            document.getElementById('s2-hillshade-layers').onclick = function () {
+                // First ensure hillshade source exists
+                if (!map.getSource('hillshadeDem')) {
+                    map.addSource('hillshadeDem', {
+                        type: 'raster-dem', tiles: [TILE_URL],
+                        encoding: 'terrarium', tileSize: 512, maxzoom: 12
+                    });
+                }
+                if (!map.getSource('shadowDem')) {
+                    map.addSource('shadowDem', {
+                        type: 'raster-dem', tiles: [TILE_URL],
+                        encoding: 'terrarium', tileSize: 512, maxzoom: 12
+                    });
+                }
+                const layers = [
+                    'normalmap', 'snow-native', 'aspect-native',
+                    'slope-native', 'avalanche-native', 'detail-native'
+                ];
+                layers.forEach(id => {
+                    if (!map.getLayer(id)) {
+                        map.addLayer({
+                            id, type: 'hillshade', source: 'hillshadeDem',
+                            layout: { visibility: 'none' },
+                            paint: { 'hillshade-exaggeration': 1.0 }
+                        });
+                    }
+                });
+                if (!map.getLayer('shadow-native')) {
+                    map.addLayer({
+                        id: 'shadow-native', type: 'hillshade', source: 'shadowDem',
+                        layout: { visibility: 'none' },
+                        paint: { 'hillshade-exaggeration': 1.0 }
+                    });
+                }
+                markDone('s2-hillshade-layers', '8 hillshade layers added (all hidden)');
+            };
+
+            // ===== STEP 3: Sky / Fog / Light =====
+            document.getElementById('s3-sky').onclick = function () {
+                map.setSky({
+                    'sky-color': '#88bbee',
+                    'horizon-color': '#f0e4d4',
+                    'fog-color': '#b0cce8',
+                    'atmosphere-blend': 0.85
+                });
+                markDone('s3-sky', 'Sky set');
+            };
+
+            document.getElementById('s3-fog').onclick = function () {
+                if (typeof map.setFog !== 'function') { markDone('s3-fog', 'setFog not available (stock MapLibre)'); return; }
+                map.setFog({
+                    range: [0.3, 4.0],
+                    color: '#b0cce8',
+                    'horizon-blend': 0.15,
+                    'high-color': '#3868c0',
+                    'space-color': '#405060',
+                    'star-intensity': 0
+                });
+                markDone('s3-fog', 'Fog set');
+            };
+
+            document.getElementById('s3-light').onclick = function () {
+                map.setLight({
+                    anchor: 'viewport',
+                    color: '#ffffff',
+                    intensity: 0.4,
+                    position: [1.5, 200, 30]
+                });
+                markDone('s3-light', 'Light set');
+            };
+
+            // ===== STEP 4: Per-move updates (THE SUSPECTS) =====
+            let moveSkyActive = false, moveFogActive = false, movePaintActive = false;
+
+            document.getElementById('s4-move-sky').onclick = function () {
+                if (moveSkyActive) return;
+                moveSkyActive = true;
+                let count = 0;
+                map.on('move', () => {
+                    count++;
+                    if (typeof map.setSky !== 'function') return;
+                    map.setSky({
+                        'sky-color': '#88bbee',
+                        'horizon-color': '#f0e4d4',
+                        'fog-color': '#b0cce8',
+                        'atmosphere-blend': 0.85 + Math.sin(count * 0.01) * 0.01 // tiny change to force update
+                    });
+                });
+                markActive('s4-move-sky', 'setSky() on every move — ACTIVE');
+            };
+
+            document.getElementById('s4-move-fog').onclick = function () {
+                if (moveFogActive) return;
+                moveFogActive = true;
+                let count = 0;
+                map.on('move', () => {
+                    count++;
+                    if (typeof map.setFog !== 'function') return;
+                    map.setFog({
+                        range: [0.3, 4.0 + Math.sin(count * 0.01) * 0.01],
+                        color: '#b0cce8',
+                        'horizon-blend': 0.15,
+                        'high-color': '#3868c0',
+                        'space-color': '#405060',
+                        'star-intensity': 0
+                    });
+                });
+                markActive('s4-move-fog', 'setFog() on every move — ACTIVE');
+            };
+
+            document.getElementById('s4-move-paint').onclick = function () {
+                if (movePaintActive) return;
+                movePaintActive = true;
+                // Ensure hillshade layer exists
+                if (!map.getLayer('hillshade')) {
+                    document.getElementById('s2-hillshade').click();
+                }
+                let count = 0;
+                map.on('move', () => {
+                    count++;
+                    const dir = (count * 0.5) % 360;
+                    try {
+                        map.setPaintProperty('hillshade', 'hillshade-illumination-direction', dir);
+                    } catch (e) { }
+                    // Also update extra layers if they exist
+                    ['shadow-native', 'detail-native'].forEach(id => {
+                        if (map.getLayer(id)) {
+                            try {
+                                map.setPaintProperty(id, 'hillshade-illumination-direction', dir);
+                            } catch (e) { }
+                        }
+                    });
+                });
+                markActive('s4-move-paint', 'setPaintProperty(hillshade) on move — ACTIVE');
+            };
+
+            document.getElementById('s4-move-all').onclick = function () {
+                // Activate all three at once
+                document.getElementById('s4-move-sky').click();
+                document.getElementById('s4-move-fog').click();
+                document.getElementById('s4-move-paint').click();
+                markActive('s4-move-all', 'ALL per-move updates — ACTIVE');
+            };
+
+            // ===== STEP 5: Other features =====
+            document.getElementById('s5-triggerrepaint').onclick = function () {
+                map.on('move', () => map.triggerRepaint());
+                markActive('s5-triggerrepaint', 'triggerRepaint() on move — ACTIVE');
+            };
+
+            document.getElementById('s5-contours').onclick = function () {
+                // Simulate contour source overhead
+                if (!map.getSource('contours-sim')) {
+                    map.addSource('contours-sim', {
+                        type: 'vector',
+                        tiles: ['https://demotiles.maplibre.org/tiles/{z}/{x}/{y}.pbf'],
+                        maxzoom: 14
+                    });
+                    map.addLayer({
+                        id: 'contours-sim', type: 'line', source: 'contours-sim',
+                        'source-layer': 'countries',
+                        paint: { 'line-color': 'rgba(0,0,0,0.3)', 'line-width': 0.5 }
+                    });
+                }
+                markDone('s5-contours', 'Contour source added');
+            };
+
+            document.getElementById('s5-images').onclick = function () {
+                map.on('styleimagemissing', (e) => {
+                    if (map.hasImage(e.id)) return;
+                    map.addImage(e.id, { width: 1, height: 1, data: new Uint8Array([0, 0, 0, 0]) });
+                });
+                markDone('s5-images', 'styleimagemissing handler added');
+            };
+
+            // ===== STEP 6: LOD & Tile Loading =====
+            document.getElementById('s6-lod-mild').onclick = function () {
+                if (typeof map.setSourceTileLodParams !== 'function') {
+                    markDone('s6-lod-mild', 'setSourceTileLodParams not available');
+                    return;
+                }
+                // Apply mild LOD to ALL sources (like main app does on init)
+                map.setSourceTileLodParams(5, 2);
+                markDone('s6-lod-mild', 'LOD(5,2) applied to all sources');
+            };
+
+            document.getElementById('s6-lod-hd').onclick = function () {
+                if (typeof map.setSourceTileLodParams !== 'function') {
+                    markDone('s6-lod-hd', 'setSourceTileLodParams not available');
+                    return;
+                }
+                // Apply aggressive HD LOD to DEM sources (like main app HD mode)
+                const demSources = ['terrainDem', 'hillshadeDem', 'shadowDem', 'reliefDem', 'colorDem', 'extraDem'];
+                demSources.forEach(id => {
+                    if (map.getSource(id)) {
+                        try { map.setSourceTileLodParams(3, 9, id); } catch (e) { }
+                    }
+                });
+                markActive('s6-lod-hd', 'LOD HD (3,9) on DEM sources — ACTIVE');
+            };
+
+            document.getElementById('s6-raster-dem').onclick = function () {
+                // Main app renders DEM as a visible raster layer (line 4076-4080)
+                if (!map.getLayer('terrain-raster')) {
+                    map.addLayer({
+                        id: 'terrain-raster',
+                        type: 'raster',
+                        source: 'terrainDem'
+                    });
+                }
+                markDone('s6-raster-dem', 'Raster layer from raster-dem added');
+            };
+
+            document.getElementById('s6-contour-real').onclick = function () {
+                // Load actual mlcontour library
+                const script = document.createElement('script');
+                script.src = './libs/maplibre-contour.umd.js';
+                script.onload = () => {
+                    if (typeof mlcontour === 'undefined') {
+                        markDone('s6-contour-real', 'mlcontour not found');
+                        return;
+                    }
+                    const demSource = new mlcontour.DemSource({
+                        url: TILE_URL,
+                        encoding: 'terrarium',
+                        maxzoom: 12,
+                        worker: true,
+                        tileSize: 512
+                    });
+                    demSource.setupMaplibre(maplibregl);
+                    map.addSource('contours-real', {
+                        type: 'vector',
+                        tiles: [demSource.contourProtocolUrl({
+                            multiplier: 1,
+                            thresholds: { 11: [60, 300], 12: [30, 150], 13: [30, 150], 14: [15, 60] },
+                            elevationKey: 'ele', levelKey: 'level', contourLayer: 'contours'
+                        })],
+                        maxzoom: 16
+                    });
+                    map.addLayer({
+                        id: 'contours-real', type: 'line',
+                        source: 'contours-real', 'source-layer': 'contours',
+                        paint: { 'line-color': 'rgba(0,0,0,0.5)', 'line-width': ['match', ['get', 'level'], 1, 1, 0.5] }
+                    });
+                    markDone('s6-contour-real', 'Real mlcontour DemSource added');
+                };
+                script.onerror = () => markDone('s6-contour-real', 'mlcontour.js not found');
+                document.head.appendChild(script);
+            };
+
+            document.getElementById('s6-all-imagery').onclick = function () {
+                // Add 10 hidden raster sources like the main app has
+                const imagery = [
+                    { id: 'strava-all', url: 'https://atlas.hartakji.com/strava-heatmap-all/{z}/{x}/{y}' },
+                    { id: 'strava-winter', url: 'https://atlas.hartakji.com/strava-winter/{z}/{x}/{y}' },
+                    { id: 'ign-scan', url: 'https://data.geopf.fr/private/wmts?apikey=ign_scan_ws&layer=GEOGRAPHICALGRIDSYSTEMS.MAPS&style=normal&tilematrixset=PM&Service=WMTS&Request=GetTile&Version=1.0.0&Format=image%2Fjpeg&TileMatrix={z}&TileCol={x}&TileRow={y}' },
+                    { id: 'ign-ortho', url: 'https://data.geopf.fr/private/wmts?apikey=ign_scan_ws&layer=ORTHOIMAGERY.ORTHOPHOTOS.BDORTHO&style=normal&tilematrixset=PM&Service=WMTS&Request=GetTile&Version=1.0.0&Format=image%2Fjpeg&TileMatrix={z}&TileCol={x}&TileRow={y}' },
+                    { id: 'eox-s2', url: 'https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2020_3857/default/GoogleMapsCompatible/{z}/{y}/{x}.jpg' },
+                    { id: 'snow-depth', url: 'https://p20.cosmos-project.ch/BfOlLXvmGpviW0YojaYiRqsT9NHEYdn88fpHZlr_map/gmaps/sd20alps@epsg3857/{z}/{x}/{y}.png' },
+                    { id: 'ign-cosia', url: 'https://data.geopf.fr/private/wmts?apikey=ign_scan_ws&layer=IGNF_COSIA_2021-2023&style=normal&tilematrixset=PM&Service=WMTS&Request=GetTile&Version=1.0.0&Format=image%2Fpng&TileMatrix={z}&TileCol={x}&TileRow={y}' },
+                    { id: 'ign-forest', url: 'https://data.geopf.fr/private/wmts?apikey=ign_scan_ws&layer=LANDCOVER.FORESTINVENTORY.V2&style=normal&tilematrixset=PM&Service=WMTS&Request=GetTile&Version=1.0.0&Format=image%2Fpng&TileMatrix={z}&TileCol={x}&TileRow={y}' },
+                    { id: 'lidar-mns', url: 'https://data.geopf.fr/private/wmts?apikey=ign_scan_ws&layer=IGNF_LIDAR-HD_MNS_ELEVATION.ELEVATIONGRIDCOVERAGE.SHADOW&style=normal&tilematrixset=PM&Service=WMTS&Request=GetTile&Version=1.0.0&Format=image%2Fpng&TileMatrix={z}&TileCol={x}&TileRow={y}' },
+                    { id: 'lidar-mnt', url: 'https://data.geopf.fr/private/wmts?apikey=ign_scan_ws&layer=IGNF_LIDAR-HD_MNT_ELEVATION.ELEVATIONGRIDCOVERAGE.SHADOW&style=normal&tilematrixset=PM&Service=WMTS&Request=GetTile&Version=1.0.0&Format=image%2Fpng&TileMatrix={z}&TileCol={x}&TileRow={y}' }
+                ];
+                imagery.forEach(({ id, url }) => {
+                    if (!map.getSource(id)) {
+                        map.addSource(id, { type: 'raster', tiles: [url], tileSize: 256 });
+                        map.addLayer({
+                            id, type: 'raster', source: id,
+                            layout: { visibility: 'none' },
+                            paint: { 'raster-opacity': 1 }
+                        });
+                    }
+                });
+                markDone('s6-all-imagery', '10 hidden imagery sources/layers added');
+            };
+
+            // Reset
+            document.getElementById('reset').onclick = () => location.reload();
+        }
+
+        init();
+    </script>
+</body>
+
+</html>

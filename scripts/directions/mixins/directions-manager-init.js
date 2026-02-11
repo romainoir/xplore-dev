@@ -471,52 +471,76 @@ export class DirectionsManagerInitMixin {
 
   moveRouteLayersToTop() {
     if (!this.map) return;
+    if (!this._routeLayersDirty) return; // Skip if layers haven't changed
+    this._movingLayersToTop = true; // Block re-entrant styledata events
+    try {
 
-    // Line layers should be above terrain but below map labels/symbols
-    const lineLayers = [
-      'route-line-casing',
-      'route-line',
-      'route-line-manual-bg',
-      'route-line-manual',
-      'route-segment-hover'
-    ];
+      // Line layers should be above terrain but below map labels/symbols
+      const lineLayers = [
+        'route-line-casing',
+        'route-line',
+        'route-line-manual-bg',
+        'route-line-manual',
+        'route-segment-hover'
+      ];
 
-    // Marker/Symbol layers should stay at the absolute top
-    const markerLayers = [
-      'distance-markers',
-      'waypoints-hit-area',
-      'route-poi',
-      'route-poi-icon',
-      'route-poi-label',
-      'segment-markers',
-      'waypoints',
-      'waypoint-hover-drag',
-      'route-hover-point',
-      'drag-preview-line'
-    ];
+      // Marker/Symbol layers should stay at the absolute top
+      const markerLayers = [
+        'distance-markers',
+        'waypoints-hit-area',
+        'route-poi',
+        'route-poi-icon',
+        'route-poi-label',
+        'segment-markers',
+        'waypoints',
+        'waypoint-hover-drag',
+        'route-hover-point',
+        'drag-preview-line'
+      ];
 
-    // Find first symbol layer that isn't one of ours
-    const firstSymbolLayer = this.map.getStyle?.()?.layers?.find((l) =>
-      l.type === 'symbol' && !markerLayers.includes(l.id) && !lineLayers.includes(l.id)
-    );
-
-    // 1. Position line layers before map symbols
-    lineLayers.forEach((id) => {
-      if (this.map.getLayer(id)) {
-        if (firstSymbolLayer) {
-          this.map.moveLayer(id, firstSymbolLayer.id);
-        } else {
-          this.map.moveLayer(id);
+      // Use cached first symbol layer or find it
+      const ownLayers = new Set([...lineLayers, ...markerLayers]);
+      if (!this._cachedFirstSymbolId) {
+        const allLayers = this.map.getStyle?.()?.layers;
+        if (allLayers) {
+          const sym = allLayers.find(l => l.type === 'symbol' && !ownLayers.has(l.id));
+          this._cachedFirstSymbolId = sym?.id || null;
         }
       }
-    });
+      const beforeId = this._cachedFirstSymbolId || undefined;
 
-    // 2. Move markers to the absolute top (in order)
-    markerLayers.forEach((id) => {
-      if (this.map.getLayer(id)) {
-        this.map.moveLayer(id);
-      }
-    });
+      // 1. Position line layers before map symbols
+      lineLayers.forEach((id) => {
+        if (this.map.getLayer(id)) {
+          if (beforeId) {
+            this.map.moveLayer(id, beforeId);
+          } else {
+            this.map.moveLayer(id);
+          }
+        }
+      });
+
+      // 2. Move markers to the absolute top (in order)
+      markerLayers.forEach((id) => {
+        if (this.map.getLayer(id)) {
+          this.map.moveLayer(id);
+        }
+      });
+
+      this._routeLayersDirty = false; // Mark as clean
+
+    } finally {
+      this._movingLayersToTop = false; // Always reset flag
+    }
+  }
+
+  /**
+   * Mark route layers as needing reordering. Call this when external layers
+   * are added/removed/toggled so moveRouteLayersToTop runs on next call.
+   */
+  markRouteLayersDirty() {
+    this._routeLayersDirty = true;
+    this._cachedFirstSymbolId = null;
   }
 
   setupUIHandlers() {

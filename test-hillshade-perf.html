@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Hillshade Perf — Fork vs Stock</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: -apple-system, sans-serif;
+        }
+
+        #map {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+        }
+
+        #panel {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            z-index: 10;
+            background: rgba(0, 0, 0, 0.85);
+            color: #fff;
+            padding: 14px 18px;
+            border-radius: 12px;
+            font-size: 13px;
+            max-width: 300px;
+        }
+
+        #panel h3 {
+            margin: 0 0 8px;
+            font-size: 15px;
+        }
+
+        #panel .lib-badge {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 6px;
+            font-weight: bold;
+            font-size: 13px;
+            margin-bottom: 8px;
+        }
+
+        .lib-fork {
+            background: #e74c3c;
+        }
+
+        .lib-cdn {
+            background: #2ecc71;
+            color: #000;
+        }
+
+        .row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin: 5px 0;
+        }
+
+        .row label {
+            flex: 1;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        #fps {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            z-index: 99;
+            background: rgba(0, 0, 0, 0.85);
+            color: #2ecc71;
+            padding: 8px 14px;
+            font: bold 28px monospace;
+            border-radius: 8px;
+            pointer-events: none;
+        }
+
+        .switch-link {
+            display: block;
+            margin-top: 10px;
+            padding: 8px 12px;
+            background: #3498db;
+            color: #fff;
+            text-align: center;
+            border-radius: 6px;
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .switch-link:hover {
+            background: #2980b9;
+        }
+
+        #info {
+            position: fixed;
+            bottom: 10px;
+            left: 10px;
+            z-index: 10;
+            background: rgba(0, 0, 0, 0.75);
+            color: #ccc;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font: 12px monospace;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="map"></div>
+    <div id="fps">-- FPS</div>
+    <div id="panel">
+        <h3>🔬 Hillshade Perf Test</h3>
+        <div id="lib-info"></div>
+        <div id="controls"></div>
+        <div id="switch-area"></div>
+    </div>
+    <div id="info">Loading...</div>
+
+    <script>
+        // Determine which library to load
+        const params = new URLSearchParams(window.location.search);
+        const useFork = params.get('lib') !== 'cdn';
+        const libUrl = useFork
+            ? './libs/maplibre-gl.js'
+            : 'https://unpkg.com/maplibre-gl@5.1.0/dist/maplibre-gl.js';
+        const cssUrl = useFork
+            ? './libs/maplibre-gl.css'
+            : 'https://unpkg.com/maplibre-gl@5.1.0/dist/maplibre-gl.css';
+
+        // Load CSS
+        const link = document.createElement('link');
+        link.rel = 'stylesheet'; link.href = cssUrl;
+        document.head.appendChild(link);
+
+        // Load JS then init
+        const script = document.createElement('script');
+        script.src = libUrl;
+        script.onload = init;
+        document.head.appendChild(script);
+
+        // Show lib info
+        const libLabel = useFork ? 'FORK (local)' : 'STOCK CDN (5.1.0)';
+        document.getElementById('lib-info').innerHTML =
+            `<span class="lib-badge ${useFork ? 'lib-fork' : 'lib-cdn'}">${libLabel}</span>`;
+
+        // Switch link
+        const otherLib = useFork ? 'cdn' : 'fork';
+        const otherLabel = useFork ? 'Switch to STOCK CDN →' : 'Switch to FORK →';
+        const switchUrl = `?lib=${otherLib}${window.location.hash}`;
+        document.getElementById('switch-area').innerHTML =
+            `<a class="switch-link" href="${switchUrl}">${otherLabel}</a>`;
+
+        // FPS
+        const fpsEl = document.getElementById('fps');
+        let frames = [], lt = performance.now();
+        (function fps() {
+            const n = performance.now(); frames.push(n - lt); lt = n;
+            if (frames.length > 60) frames.shift();
+            const f = Math.round(1000 / (frames.reduce((a, b) => a + b) / frames.length));
+            fpsEl.textContent = f + ' FPS';
+            fpsEl.style.color = f > 40 ? '#2ecc71' : f > 20 ? '#f1c40f' : '#e74c3c';
+            requestAnimationFrame(fps);
+        })();
+
+        function init() {
+            const DEM_URL = 'https://tiles.mapterhorn.com/{z}/{x}/{y}.webp';
+            const DEM_MAXZOOM = 12;
+
+            fetch('./osm_liberty.json', { cache: 'no-store' })
+                .then(r => r.json())
+                .then(style => {
+                    style.glyphs = 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf';
+                    style.sprite = 'https://maputnik.github.io/osm-liberty/sprites/osm-liberty';
+                    style.projection = { type: 'mercator' };
+
+                    const map = new maplibregl.Map({
+                        container: 'map', style,
+                        center: [7.36, 46.02], zoom: 12.7,
+                        pitch: 75, bearing: 0,
+                        hash: true, maxPitch: 85,
+                        fadeDuration: 800,
+                        maxTileCacheSize: 1000,
+                        attributionControl: false
+                    });
+                    window.map = map;
+
+                    map.addControl(new maplibregl.NavigationControl());
+
+                    map.on('load', () => {
+                        // Terrain DEM
+                        map.addSource('terrainSource', {
+                            type: 'raster-dem', tiles: [DEM_URL],
+                            encoding: 'terrarium', tileSize: 512,
+                            maxzoom: DEM_MAXZOOM
+                        });
+                        // Hillshade DEM (separate to isolate toggle)
+                        map.addSource('hillshadeSource', {
+                            type: 'raster-dem', tiles: [DEM_URL],
+                            encoding: 'terrarium', tileSize: 512,
+                            maxzoom: DEM_MAXZOOM
+                        });
+
+                        // 3D terrain
+                        map.setTerrain({ source: 'terrainSource', exaggeration: 1 });
+
+                        const topLabel = (() => {
+                            for (const l of [...map.getStyle().layers].reverse()) {
+                                if (l.type === 'symbol') return l.id;
+                            }
+                            return undefined;
+                        })();
+
+                        // Hillshade layer
+                        map.addLayer({
+                            id: 'hillshade', type: 'hillshade',
+                            source: 'hillshadeSource',
+                            paint: {
+                                'hillshade-highlight-color': 'rgba(255,255,255,0.9)',
+                                'hillshade-accent-color': 'rgba(0,0,0,0.55)',
+                                'hillshade-exaggeration': 0.23,
+                                'hillshade-shadow-color': 'rgba(0,0,0,0.55)'
+                            }
+                        }, topLabel);
+
+                        // Build controls
+                        buildControls(map);
+
+                        // Update info
+                        const s = map.getStyle();
+                        document.getElementById('info').textContent =
+                            `${useFork ? 'FORK' : 'CDN'} | Sources: ${Object.keys(s.sources).length} | Layers: ${s.layers.length}`;
+                    });
+                });
+        }
+
+        function buildControls(map) {
+            const container = document.getElementById('controls');
+
+            // Terrain toggle
+            addToggle(container, '3D Terrain', true, (on) => {
+                map.setTerrain(on ? { source: 'terrainSource', exaggeration: 1 } : null);
+            });
+
+            // Hillshade toggle
+            addToggle(container, 'Hillshade', true, (on) => {
+                map.setLayoutProperty('hillshade', 'visibility', on ? 'visible' : 'none');
+            });
+
+            // Vector layers toggle
+            addToggle(container, 'Vector Layers', true, (on) => {
+                const types = new Set(['fill', 'line', 'symbol', 'circle', 'fill-extrusion']);
+                for (const l of map.getStyle().layers) {
+                    if (types.has(l.type)) {
+                        map.setLayoutProperty(l.id, 'visibility', on ? 'visible' : 'none');
+                    }
+                }
+            });
+
+            // DEM maxzoom slider
+            const zoomRow = document.createElement('div');
+            zoomRow.style.marginTop = '8px';
+            zoomRow.innerHTML = '<label style="font-size:11px">DEM maxzoom: <span id="zmv">12</span></label>';
+            const zoomSlider = document.createElement('input');
+            zoomSlider.type = 'range'; zoomSlider.min = 8; zoomSlider.max = 17;
+            zoomSlider.value = 12; zoomSlider.style.width = '100%';
+            zoomSlider.oninput = () => {
+                const mz = +zoomSlider.value;
+                document.getElementById('zmv').textContent = mz;
+                // Recreate sources with new maxzoom
+                map.setTerrain(null);
+                if (map.getLayer('hillshade')) map.removeLayer('hillshade');
+                map.removeSource('terrainSource');
+                map.removeSource('hillshadeSource');
+
+                map.addSource('terrainSource', {
+                    type: 'raster-dem', tiles: ['https://tiles.mapterhorn.com/{z}/{x}/{y}.webp'],
+                    encoding: 'terrarium', tileSize: 512, maxzoom: mz
+                });
+                map.addSource('hillshadeSource', {
+                    type: 'raster-dem', tiles: ['https://tiles.mapterhorn.com/{z}/{x}/{y}.webp'],
+                    encoding: 'terrarium', tileSize: 512, maxzoom: mz
+                });
+                map.setTerrain({ source: 'terrainSource', exaggeration: 1 });
+                const topLabel = (() => {
+                    for (const l of [...map.getStyle().layers].reverse()) {
+                        if (l.type === 'symbol') return l.id;
+                    }
+                    return undefined;
+                })();
+                map.addLayer({
+                    id: 'hillshade', type: 'hillshade', source: 'hillshadeSource',
+                    paint: {
+                        'hillshade-highlight-color': 'rgba(255,255,255,0.9)',
+                        'hillshade-accent-color': 'rgba(0,0,0,0.55)',
+                        'hillshade-exaggeration': 0.23,
+                        'hillshade-shadow-color': 'rgba(0,0,0,0.55)'
+                    }
+                }, topLabel);
+            };
+            zoomRow.appendChild(zoomSlider);
+            container.appendChild(zoomRow);
+
+            // Pitch slider
+            const pitchRow = document.createElement('div');
+            pitchRow.style.marginTop = '4px';
+            pitchRow.innerHTML = '<label style="font-size:11px">Pitch: <span id="pv">75</span>°</label>';
+            const pitchSlider = document.createElement('input');
+            pitchSlider.type = 'range'; pitchSlider.min = 0; pitchSlider.max = 85;
+            pitchSlider.value = 75; pitchSlider.style.width = '100%';
+            pitchSlider.oninput = () => {
+                map.setPitch(+pitchSlider.value);
+                document.getElementById('pv').textContent = pitchSlider.value;
+            };
+            pitchRow.appendChild(pitchSlider);
+            container.appendChild(pitchRow);
+        }
+
+        function addToggle(container, label, defaultOn, callback) {
+            const row = document.createElement('div');
+            row.className = 'row';
+            const cb = document.createElement('input');
+            cb.type = 'checkbox'; cb.checked = defaultOn;
+            cb.onchange = () => callback(cb.checked);
+            const lbl = document.createElement('label');
+            lbl.textContent = label;
+            row.append(cb, lbl);
+            container.appendChild(row);
+        }
+    </script>
+</body>
+
+</html>

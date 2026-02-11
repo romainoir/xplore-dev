@@ -8,10 +8,19 @@
   <link rel="apple-touch-icon" href="./data/logos/Xplore.png" />
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
 
-  <!-- MapLibre GL JS - FORKED LOCAL BUILD -->
+  <!-- MapLibre GL JS - Use ?stock in URL for CDN version, otherwise FORKED LOCAL BUILD -->
   <!-- Original: https://unpkg.com/maplibre-gl@5.15.0/dist/maplibre-gl.js -->
   <link href="https://unpkg.com/maplibre-gl@5.15.0/dist/maplibre-gl.css" rel="stylesheet" />
-  <script src="./libs/maplibre-gl.js?v=1737468312"></script>
+  <script>
+    // ?stock → use CDN stock MapLibre. Otherwise → use local fork.
+    const useStock = new URLSearchParams(window.location.search).has('stock');
+    const src = useStock
+      ? 'https://unpkg.com/maplibre-gl@latest/dist/maplibre-gl.js'
+      : './libs/maplibre-gl.js?v=1737468312';
+    document.write(`<scr` + `ipt src="${src}"></scr` + `ipt>`);
+    if (useStock) console.log('%c[PERF TEST] Using STOCK MapLibre from CDN', 'color: #2ecc71; font-size: 16px; font-weight: bold');
+    else console.log('%c[PERF TEST] Using FORKED MapLibre (local)', 'color: #e74c3c; font-size: 16px; font-weight: bold');
+  </script>
 
   <!-- PMTiles v4 -->
   <script src="https://unpkg.com/pmtiles@4.3.0/dist/pmtiles.js"></script>
@@ -333,13 +342,6 @@
       </button>
     </div>
     <div class="imagery-panel__drawer" id="imageryPanelDrawer" hidden aria-hidden="true">
-      <div
-        style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid rgba(255,255,255,0.1);">
-        <label for="vectorToggle" style="color:#ccc;font-size:12px;font-weight:500;cursor:pointer;flex:1;">Vector
-          Map</label>
-        <input type="checkbox" id="vectorToggle" checked
-          style="accent-color:#4a9eff;width:16px;height:16px;cursor:pointer;">
-      </div>
       <div class="imagery-toggle" id="imageryToggle" role="group" aria-label="Imagery layers"></div>
     </div>
   </div>

@@ -1,0 +1,885 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>Custom Shader Performance Diagnostic</title>
+    <link rel="stylesheet" href="maplibre-gl-js/dist/maplibre-gl.css">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+        }
+
+        #map {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 100%;
+        }
+
+        #panel {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 999;
+            background: rgba(20, 20, 30, 0.92);
+            color: #fff;
+            padding: 14px 18px;
+            font-family: monospace;
+            font-size: 12px;
+            border-radius: 10px;
+            max-height: 90vh;
+            overflow-y: auto;
+            min-width: 300px;
+        }
+
+        #panel .big {
+            font-size: 36px;
+            font-weight: bold;
+            color: #4ecdc4;
+        }
+
+        #panel .warn {
+            color: #fbbf24;
+        }
+
+        #panel .bad {
+            color: #f87171;
+        }
+
+        #panel .ok {
+            color: #4ade80;
+        }
+
+        #panel hr {
+            border: none;
+            border-top: 1px solid #444;
+            margin: 8px 0;
+        }
+
+        button {
+            display: block;
+            width: 100%;
+            margin: 4px 0;
+            padding: 8px;
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            font-size: 12px;
+            font-weight: 600;
+            color: white;
+            text-align: left;
+        }
+
+        .btn-terrain {
+            background: #e67e22;
+        }
+
+        .btn-terrain:hover {
+            background: #d35400;
+        }
+
+        .btn-base {
+            background: #3498db;
+        }
+
+        .btn-base:hover {
+            background: #2980b9;
+        }
+
+        .btn-shader {
+            background: #9b59b6;
+        }
+
+        .btn-shader:hover {
+            background: #8e44ad;
+        }
+
+        .btn-shader.active,
+        .btn-base.active {
+            background: #27ae60;
+        }
+
+        .btn-danger {
+            background: #e74c3c;
+        }
+
+        .btn-danger:hover {
+            background: #c0392b;
+        }
+
+        .btn-danger.active {
+            background: #27ae60;
+        }
+
+        .btn-reset {
+            background: #7f8c8d;
+        }
+
+        .btn-reset:hover {
+            background: #6c7a7b;
+        }
+
+        .result {
+            padding: 3px 0;
+            font-size: 11px;
+        }
+
+        .result .label {
+            color: #aaa;
+            display: inline-block;
+            width: 200px;
+        }
+
+        .section-title {
+            font-weight: bold;
+            margin: 8px 0 4px;
+            color: #fbbf24;
+        }
+
+        .time-slider {
+            width: 100%;
+            margin: 4px 0;
+            accent-color: #e67e22;
+        }
+
+        .sun-info {
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            color: #aaa;
+            margin: 2px 0;
+        }
+
+        .sun-info .value {
+            color: #fbbf24;
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="map"></div>
+    <div id="panel">
+        <span style="background:#9b59b6;padding:2px 6px;border-radius:3px;font-size:10px">SHADER DIAGNOSTIC</span>
+        <div>FPS <span class="big" id="fps">--</span></div>
+        <div class="result"><span class="label">Mode</span> <span id="mode">2D</span></div>
+        <div class="result"><span class="label">Visible layers</span> <span id="layer-count">0</span></div>
+        <div class="result"><span class="label">RTT layers</span> <span id="rtt-count">?</span></div>
+        <div class="result"><span class="label">PixelRatio</span> <span id="dpr-info">?</span></div>
+        <hr>
+
+        <div class="section-title">⚙️ Map Baseline Mode</div>
+        <p style="font-size:10px;color:#888;margin:2px 0">Choose what base style the map loads (reload required)</p>
+        <div style="display:flex;gap:4px">
+            <button class="btn-base active" id="mode-empty" style="flex:1">Empty (fast)</button>
+            <button class="btn-danger" id="mode-full" style="flex:1">Full OSM Liberty (196 layers)</button>
+        </div>
+        <div style="display:flex;gap:4px;margin-top:4px">
+            <button class="btn-base" id="toggle-retina" style="flex:1">Retina: OFF (1x)</button>
+            <button class="btn-base" id="toggle-antialias" style="flex:1">Antialias: OFF</button>
+        </div>
+
+        <hr>
+        <button class="btn-terrain" id="toggle-terrain">Toggle Terrain (3D)</button>
+
+        <hr>
+        <div class="section-title">📦 Base Layers</div>
+        <button class="btn-base" id="add-hillshade">Add hillshade (combined)</button>
+
+        <hr>
+        <div class="section-title">🎨 Custom Terrain Analysis Shaders</div>
+        <p style="font-size:10px;color:#888;margin:2px 0">Layer IDs trigger method-forcing in hillshade_program.ts</p>
+
+        <button class="btn-shader" id="toggle-slope">slope-native (method=SLOPE)</button>
+        <button class="btn-shader" id="toggle-aspect">aspect-native (method=ASPECT)</button>
+        <button class="btn-shader" id="toggle-avalanche">avalanche-native (method=AVALANCHE)</button>
+        <button class="btn-shader" id="toggle-snow">snow-native (method=SNOW)</button>
+        <button class="btn-shader" id="toggle-normalmap">normalmap (method=NORMALMAP)</button>
+
+        <hr>
+        <div class="section-title">☀️ Shadow Layer (raymarching)</div>
+        <p style="font-size:10px;color:#888;margin:2px 0">~230 line raymarching loop + 8 neighbor textures per tile</p>
+        <button class="btn-danger" id="toggle-shadow">shadow-native (method=SHADOW)</button>
+        <button class="btn-danger" id="toggle-detail">detail-native (method=SHADOW/detail)</button>
+
+        <hr>
+        <div class="section-title">🕐 Sun Position (Time of Day)</div>
+        <input type="range" id="time-slider" class="time-slider" min="360" max="1200" value="720" step="5">
+        <div class="sun-info">
+            <span>Time: <span class="value" id="time-label">12:00</span></span>
+            <span>Az: <span class="value" id="az-label">180°</span></span>
+            <span>Alt: <span class="value" id="alt-label">45°</span></span>
+        </div>
+        <div style="display:flex;gap:4px;margin-top:4px">
+            <button class="btn-terrain" id="animate-sun" style="flex:1">▶ Animate Sun</button>
+            <button class="btn-reset" id="stop-sun" style="flex:1">⏹ Stop</button>
+        </div>
+
+        <hr>
+        <div class="section-title">🌫️ Atmosphere / Fog / Sky</div>
+        <p style="font-size:10px;color:#888;margin:2px 0">Replicates what the main app's 3D toggle enables</p>
+        <button class="btn-base" id="toggle-sky">Enable Sky</button>
+        <button class="btn-base" id="toggle-fog">Enable Fog (volumetric)</button>
+        <button class="btn-base" id="toggle-light">Enable Dynamic Light</button>
+        <button class="btn-danger" id="toggle-glare">Enable Glare (fog update on move)</button>
+        <button class="btn-shader" id="toggle-all-atmo">Enable ALL atmosphere</button>
+
+        <hr>
+        <div class="section-title">🔬 All shaders at once</div>
+        <button class="btn-shader" id="enable-all-analysis">Enable ALL analysis layers</button>
+        <button class="btn-danger" id="enable-all-plus-shadow">Enable ALL + shadow</button>
+
+        <hr>
+        <div class="section-title">💥 Full App Simulation</div>
+        <button class="btn-danger" id="full-sim">Shadow + ALL atmosphere + hillshade</button>
+
+        <hr>
+        <button class="btn-reset" id="reset-all">Reset (reload page)</button>
+
+        <hr>
+        <div style="font-weight:bold;margin-bottom:4px">Results log:</div>
+        <div id="results"></div>
+    </div>
+
+    <script src="maplibre-gl-js/dist/maplibre-gl.js"></script>
+    <script>
+        const TILE_URL = 'https://tiles.mapterhorn.com/{z}/{x}/{y}.webp';
+        const DEM_MAX_ZOOM = 12;
+
+        // Read config from URL params: ?style=full&retina=1&aa=1
+        const params = new URLSearchParams(location.search);
+        const useFullStyle = params.get('style') === 'full';
+        const useRetina = params.get('retina') === '1';
+        const useAntialias = params.get('aa') === '1';
+
+        // DEM sources that get added to any style
+        const demSources = {
+            'terrain-dem': {
+                type: 'raster-dem',
+                tiles: [TILE_URL],
+                encoding: 'terrarium',
+                tileSize: 512,
+                maxzoom: DEM_MAX_ZOOM
+            },
+            'hillshade-dem': {
+                type: 'raster-dem',
+                tiles: [TILE_URL],
+                encoding: 'terrarium',
+                tileSize: 512,
+                maxzoom: DEM_MAX_ZOOM
+            }
+        };
+
+        const emptyStyle = {
+            version: 8,
+            sources: demSources,
+            layers: []
+        };
+
+        async function loadStyle() {
+            if (useFullStyle) {
+                try {
+                    const resp = await fetch('./osm_liberty.json');
+                    const style = await resp.json();
+                    style.glyphs = 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf';
+                    // Merge DEM sources into the base style
+                    Object.assign(style.sources, demSources);
+                    return style;
+                } catch (e) {
+                    console.warn('Failed to load osm_liberty.json, using empty style', e);
+                    return emptyStyle;
+                }
+            }
+            return emptyStyle;
+        }
+
+        async function init() {
+            const style = await loadStyle();
+
+            const map = window.map = new maplibregl.Map({
+                container: 'map',
+                pixelRatio: useRetina ? window.devicePixelRatio : 1.0,
+                antialias: useAntialias,
+                style: style,
+                center: [7.6586, 45.9763],  // Matterhorn area
+                zoom: 12,
+                maxPitch: 85
+            });
+
+            // FPS tracking
+            let frames = [];
+            let lastTime = performance.now();
+            const fpsEl = document.getElementById('fps');
+            const resultsEl = document.getElementById('results');
+
+            function updateFPS() {
+                const now = performance.now();
+                const delta = now - lastTime;
+                lastTime = now;
+                if (delta > 0) {
+                    const fps = Math.round(1000 / delta);
+                    frames.push({ fps, time: now });
+                    // Keep 3 seconds of samples
+                    frames = frames.filter(f => f.time > now - 3000);
+                    const avg = Math.round(frames.reduce((s, f) => s + f.fps, 0) / frames.length);
+                    fpsEl.textContent = avg;
+                    fpsEl.className = avg >= 50 ? 'big ok' : avg >= 30 ? 'big warn' : 'big bad';
+                }
+                requestAnimationFrame(updateFPS);
+            }
+            requestAnimationFrame(updateFPS);
+
+            // Force continuous repaints for accurate FPS measuring
+            map.on('load', () => {
+                (function repaint() { map.triggerRepaint(); requestAnimationFrame(repaint); })();
+            });
+
+            function getAvgFPS() {
+                return frames.length > 0 ? Math.round(frames.reduce((s, f) => s + f.fps, 0) / frames.length) : 0;
+            }
+
+            function updateCounts() {
+                const style = map.getStyle();
+                const visible = style.layers.filter(l => {
+                    const vis = l.layout && l.layout.visibility;
+                    return vis !== 'none';
+                }).length;
+                document.getElementById('layer-count').textContent = `${visible} / ${style.layers.length}`;
+            }
+
+            function log(msg) {
+                const avg = getAvgFPS();
+                const cls = avg >= 50 ? 'ok' : avg >= 30 ? 'warn' : 'bad';
+                const div = document.createElement('div');
+                div.className = 'result';
+                div.innerHTML = `<span class="${cls}">${avg} FPS</span> — ${msg}`;
+                resultsEl.prepend(div);  // newest first
+            }
+
+            function wait(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+            // ============ TERRAIN TOGGLE ============
+            let terrainOn = false;
+
+            document.getElementById('toggle-terrain').addEventListener('click', async () => {
+                if (!terrainOn) {
+                    map.setTerrain({ source: 'terrain-dem', exaggeration: 1.5 });
+                    map.easeTo({ pitch: 60, duration: 500 });
+                    terrainOn = true;
+                    document.getElementById('mode').textContent = '3D (60°)';
+                    document.getElementById('toggle-terrain').textContent = 'Disable Terrain (2D)';
+                } else {
+                    map.setTerrain(null);
+                    map.easeTo({ pitch: 0, duration: 500 });
+                    terrainOn = false;
+                    document.getElementById('mode').textContent = '2D';
+                    document.getElementById('toggle-terrain').textContent = 'Toggle Terrain (3D)';
+                }
+                await wait(3000);
+                frames = [];
+                await wait(2000);
+                log(`Terrain ${terrainOn ? 'ON (3D)' : 'OFF (2D)'}`);
+                updateCounts();
+            });
+
+            // ============ BASE HILLSHADE ============
+            document.getElementById('add-hillshade').addEventListener('click', async function () {
+                if (!map.getLayer('hillshade')) {
+                    map.addLayer({
+                        id: 'hillshade',
+                        type: 'hillshade',
+                        source: 'hillshade-dem',
+                        paint: {
+                            'hillshade-method': 'combined',
+                            'hillshade-illumination-anchor': 'map',
+                            'hillshade-illumination-direction': [270, 315, 0, 45],
+                            'hillshade-illumination-altitude': [30, 30, 30, 30],
+                            'hillshade-highlight-color': 'rgba(255,255,255,0.98)',
+                            'hillshade-shadow-color': 'rgba(0,0,0,0.85)',
+                            'hillshade-accent-color': 'rgba(0,0,0,0.8)',
+                            'hillshade-exaggeration': ['interpolate', ['linear'], ['zoom'], 6, 2.0, 12, 1.4, 16, 0.8]
+                        }
+                    });
+                }
+                this.classList.add('active');
+                this.textContent = '✓ hillshade (combined) added';
+                await wait(2000); frames = []; await wait(2000);
+                log('+ hillshade (combined method)');
+                updateCounts();
+            });
+
+            // ============ CUSTOM SHADER TOGGLE HELPER ============
+            function createShaderToggle(buttonId, layerId, label, extraPaint) {
+                document.getElementById(buttonId).addEventListener('click', async function () {
+                    if (!map.getLayer(layerId)) {
+                        // Create the layer (hidden by default, then toggle)
+                        const paint = { 'hillshade-exaggeration': 1.0 };
+                        if (extraPaint) Object.assign(paint, extraPaint);
+                        map.addLayer({
+                            id: layerId,
+                            type: 'hillshade',
+                            source: 'hillshade-dem',
+                            layout: { visibility: 'visible' },
+                            paint: paint
+                        });
+                        this.classList.add('active');
+                        this.textContent = `✓ ${label} (VISIBLE)`;
+                    } else {
+                        // Toggle visibility
+                        const currentVis = map.getLayoutProperty(layerId, 'visibility');
+                        if (currentVis === 'none') {
+                            map.setLayoutProperty(layerId, 'visibility', 'visible');
+                            this.classList.add('active');
+                            this.textContent = `✓ ${label} (VISIBLE)`;
+                        } else {
+                            map.setLayoutProperty(layerId, 'visibility', 'none');
+                            this.classList.remove('active');
+                            this.textContent = `${label} (hidden)`;
+                        }
+                    }
+                    await wait(2000); frames = []; await wait(2000);
+                    const vis = map.getLayoutProperty(layerId, 'visibility');
+                    log(`${label}: ${vis}`);
+                    updateCounts();
+                });
+            }
+
+            // ============ CUSTOM ANALYSIS SHADERS ============
+            // These layer IDs are matched in hillshade_program.ts to force the correct method
+            createShaderToggle('toggle-slope', 'slope-native', 'slope-native');
+            createShaderToggle('toggle-aspect', 'aspect-native', 'aspect-native');
+            createShaderToggle('toggle-avalanche', 'avalanche-native', 'avalanche-native');
+            createShaderToggle('toggle-snow', 'snow-native', 'snow-native');
+            createShaderToggle('toggle-normalmap', 'normalmap', 'normalmap');
+
+            // ============ SHADOW LAYERS ============
+            // shadow-native: Full raymarching shadow with 256-step loop + 8 neighbor textures
+            createShaderToggle('toggle-shadow', 'shadow-native', 'shadow-native', {
+                'hillshade-illumination-anchor': 'map'
+            });
+
+            // detail-native: Shadow with detail mode (shorter raymarching)
+            createShaderToggle('toggle-detail', 'detail-native', 'detail-native', {
+                'hillshade-illumination-anchor': 'map',
+                'hillshade-accent-color': '#00ff00'  // Green accent flags detail mode
+            });
+
+            // ============ BATCH TOGGLES ============
+            document.getElementById('enable-all-analysis').addEventListener('click', async function () {
+                const layers = ['slope-native', 'aspect-native', 'avalanche-native', 'snow-native', 'normalmap'];
+                for (const id of layers) {
+                    if (!map.getLayer(id)) {
+                        map.addLayer({
+                            id: id,
+                            type: 'hillshade',
+                            source: 'hillshade-dem',
+                            layout: { visibility: 'visible' },
+                            paint: { 'hillshade-exaggeration': 1.0 }
+                        });
+                    } else {
+                        map.setLayoutProperty(id, 'visibility', 'visible');
+                    }
+                }
+                // Update individual button states
+                document.querySelectorAll('.btn-shader').forEach(btn => {
+                    if (btn.id !== 'enable-all-analysis') btn.classList.add('active');
+                });
+                this.classList.add('active');
+                this.textContent = '✓ ALL analysis layers visible';
+                await wait(2000); frames = []; await wait(2000);
+                log('ALL analysis layers ON');
+                updateCounts();
+            });
+
+            document.getElementById('enable-all-plus-shadow').addEventListener('click', async function () {
+                // Enable all analysis layers
+                const allLayers = ['slope-native', 'aspect-native', 'avalanche-native', 'snow-native', 'normalmap', 'shadow-native', 'detail-native'];
+                for (const id of allLayers) {
+                    const extraPaint = {};
+                    if (id === 'shadow-native') extraPaint['hillshade-illumination-anchor'] = 'map';
+                    if (id === 'detail-native') {
+                        extraPaint['hillshade-illumination-anchor'] = 'map';
+                        extraPaint['hillshade-accent-color'] = '#00ff00';
+                    }
+                    if (!map.getLayer(id)) {
+                        map.addLayer({
+                            id: id,
+                            type: 'hillshade',
+                            source: 'hillshade-dem',
+                            layout: { visibility: 'visible' },
+                            paint: { 'hillshade-exaggeration': 1.0, ...extraPaint }
+                        });
+                    } else {
+                        map.setLayoutProperty(id, 'visibility', 'visible');
+                    }
+                }
+                document.querySelectorAll('.btn-shader, .btn-danger').forEach(btn => btn.classList.add('active'));
+                this.textContent = '✓ ALL + shadow visible';
+                await wait(2000); frames = []; await wait(2000);
+                log('ALL layers + shadow ON');
+                updateCounts();
+            });
+
+            // ============ SUN POSITION / TIME SLIDER ============
+            // Initialize sunConfig (read by hillshade_program.ts)
+            window.sunConfig = { azimuth: 180, altitude: 45 };
+
+            const timeSlider = document.getElementById('time-slider');
+            const timeLabel = document.getElementById('time-label');
+            const azLabel = document.getElementById('az-label');
+            const altLabel = document.getElementById('alt-label');
+
+            // Simple sun position model for ~46°N latitude (Alps)
+            function computeSunPosition(minutesFromMidnight) {
+                const hour = minutesFromMidnight / 60;
+                // Sunrise ~6:00, sunset ~20:00 (summer rough model)
+                const sunrise = 6, sunset = 20;
+                const dayLength = sunset - sunrise;
+                const t = (hour - sunrise) / dayLength; // 0 at sunrise, 1 at sunset
+
+                // Altitude: bell curve peaking at solar noon
+                const altitude = Math.max(0, Math.sin(t * Math.PI) * 62); // max ~62° at noon
+
+                // Azimuth: 90° (East) at sunrise → 180° (South) at noon → 270° (West) at sunset
+                const azimuth = 90 + t * 180;
+
+                return { azimuth, altitude };
+            }
+
+            function updateSunFromSlider() {
+                const minutes = parseInt(timeSlider.value);
+                const h = Math.floor(minutes / 60);
+                const m = minutes % 60;
+                timeLabel.textContent = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+
+                const sun = computeSunPosition(minutes);
+                azLabel.textContent = `${Math.round(sun.azimuth)}°`;
+                altLabel.textContent = `${Math.round(sun.altitude)}°`;
+
+                // Set global config (read by hillshade_program.ts shader uniforms)
+                window.sunConfig = { azimuth: sun.azimuth, altitude: sun.altitude };
+
+                // Also update hillshade illumination direction for the visible hillshade layer
+                if (map.getLayer('hillshade')) {
+                    map.setPaintProperty('hillshade', 'hillshade-illumination-direction', [sun.azimuth]);
+                    map.setPaintProperty('hillshade', 'hillshade-illumination-altitude', [sun.altitude * Math.PI / 180]);
+                }
+                // Update shadow/detail layers illumination
+                ['shadow-native', 'detail-native'].forEach(id => {
+                    if (map.getLayer(id)) {
+                        map.setPaintProperty(id, 'hillshade-illumination-direction', [sun.azimuth]);
+                        map.setPaintProperty(id, 'hillshade-illumination-altitude', [sun.altitude * Math.PI / 180]);
+                    }
+                });
+
+                map.triggerRepaint();
+            }
+
+            timeSlider.addEventListener('input', updateSunFromSlider);
+            updateSunFromSlider(); // Initialize
+
+            // Animate sun across the day
+            let sunAnimId = null;
+            document.getElementById('animate-sun').addEventListener('click', () => {
+                if (sunAnimId) return; // already running
+                const speed = 3; // minutes per frame
+                function step() {
+                    let val = parseInt(timeSlider.value) + speed;
+                    if (val > 1200) val = 360; // wrap around
+                    timeSlider.value = val;
+                    updateSunFromSlider();
+                    sunAnimId = requestAnimationFrame(step);
+                }
+                sunAnimId = requestAnimationFrame(step);
+                document.getElementById('animate-sun').textContent = '▶ Running...';
+            });
+
+            document.getElementById('stop-sun').addEventListener('click', () => {
+                if (sunAnimId) {
+                    cancelAnimationFrame(sunAnimId);
+                    sunAnimId = null;
+                    document.getElementById('animate-sun').textContent = '▶ Animate Sun';
+                }
+            });
+
+            // ============ ATMOSPHERE / FOG / SKY ============
+            let skyEnabled = false;
+            let fogEnabled = false;
+            let lightEnabled = false;
+            let glareEnabled = false;
+            let glareHandler = null;
+
+            document.getElementById('toggle-sky').addEventListener('click', async function () {
+                skyEnabled = !skyEnabled;
+                if (skyEnabled) {
+                    map.setSky({
+                        'sky-color': '#88b0d8',
+                        'horizon-color': '#d0e0f0',
+                        'fog-color': '#b0cce8',
+                        'atmosphere-blend': 0.85
+                    });
+                    this.classList.add('active');
+                    this.textContent = '✓ Sky ON';
+                } else {
+                    map.setSky({});
+                    this.classList.remove('active');
+                    this.textContent = 'Enable Sky';
+                }
+                await wait(2000); frames = []; await wait(2000);
+                log(`Sky: ${skyEnabled ? 'ON' : 'OFF'}`);
+            });
+
+            document.getElementById('toggle-fog').addEventListener('click', async function () {
+                fogEnabled = !fogEnabled;
+                if (fogEnabled) {
+                    map.setFog({
+                        'range': [0.3, 4.0],
+                        'color': '#b0cce8',
+                        'horizon-blend': 0.15,
+                        'high-color': '#3868c0',
+                        'space-color': '#405060',
+                        'star-intensity': 0
+                    });
+                    this.classList.add('active');
+                    this.textContent = '✓ Fog ON';
+                } else {
+                    map.setFog(null);
+                    this.classList.remove('active');
+                    this.textContent = 'Enable Fog (volumetric)';
+                }
+                await wait(2000); frames = []; await wait(2000);
+                log(`Fog: ${fogEnabled ? 'ON' : 'OFF'}`);
+            });
+
+            document.getElementById('toggle-light').addEventListener('click', async function () {
+                lightEnabled = !lightEnabled;
+                if (lightEnabled) {
+                    map.setLight({
+                        'position': [1.5, 180, 45],
+                        'anchor': 'map',
+                        'color': '#ffffff',
+                        'intensity': 0.85
+                    });
+                    this.classList.add('active');
+                    this.textContent = '✓ Dynamic Light ON';
+                } else {
+                    map.setLight({ 'anchor': 'viewport' });
+                    this.classList.remove('active');
+                    this.textContent = 'Enable Dynamic Light';
+                }
+                await wait(2000); frames = []; await wait(2000);
+                log(`Light: ${lightEnabled ? 'ON' : 'OFF'}`);
+            });
+
+            // Glare effect: update fog on every camera move (like the main app)
+            document.getElementById('toggle-glare').addEventListener('click', async function () {
+                glareEnabled = !glareEnabled;
+                if (glareEnabled && !glareHandler) {
+                    let lastGlareUpdate = 0;
+                    glareHandler = () => {
+                        const now = Date.now();
+                        if (now - lastGlareUpdate < 50) return;
+                        lastGlareUpdate = now;
+
+                        // Simulate the main app's fog glare update
+                        const minutes = parseInt(timeSlider.value);
+                        const sun = computeSunPosition(minutes);
+                        const cameraBearing = map.getBearing();
+                        let angleDiff = Math.abs(sun.azimuth - cameraBearing);
+                        if (angleDiff > 180) angleDiff = 360 - angleDiff;
+
+                        let fogNear = 0.3, fogFar = 4.0;
+                        let fogColor = '#b0cce8';
+
+                        if (angleDiff < 60 && sun.altitude < 15) {
+                            const glareFromAngle = 1.0 - (angleDiff / 60);
+                            const sunLowness = sun.altitude < 5 ? 1.0 : Math.max(0, (15 - sun.altitude) / 10);
+                            const glareIntensity = glareFromAngle * sunLowness;
+                            fogNear = Math.max(-0.5, fogNear - glareIntensity * 0.4);
+                            fogFar = Math.max(0.5, fogFar - glareIntensity * 2.0);
+                        }
+
+                        map.setFog({
+                            'range': [fogNear, fogFar],
+                            'color': fogColor,
+                            'horizon-blend': 0.15,
+                            'high-color': '#3868c0',
+                            'space-color': '#405060',
+                            'star-intensity': 0
+                        });
+                    };
+                    map.on('move', glareHandler);
+                    this.classList.add('active');
+                    this.textContent = '✓ Glare ON (fog updates on move)';
+                } else {
+                    if (glareHandler) {
+                        map.off('move', glareHandler);
+                        glareHandler = null;
+                    }
+                    glareEnabled = false;
+                    this.classList.remove('active');
+                    this.textContent = 'Enable Glare (fog update on move)';
+                }
+                await wait(2000); frames = []; await wait(2000);
+                log(`Glare: ${glareEnabled ? 'ON' : 'OFF'}`);
+            });
+
+            // Enable all atmosphere features at once
+            document.getElementById('toggle-all-atmo').addEventListener('click', async function () {
+                // Sky
+                map.setSky({
+                    'sky-color': '#88b0d8', 'horizon-color': '#d0e0f0',
+                    'fog-color': '#b0cce8', 'atmosphere-blend': 0.85
+                });
+                // Fog
+                map.setFog({
+                    'range': [0.3, 4.0], 'color': '#b0cce8',
+                    'horizon-blend': 0.15, 'high-color': '#3868c0',
+                    'space-color': '#405060', 'star-intensity': 0
+                });
+                // Light
+                map.setLight({
+                    'position': [1.5, 180, 45], 'anchor': 'map',
+                    'color': '#ffffff', 'intensity': 0.85
+                });
+                skyEnabled = fogEnabled = lightEnabled = true;
+                document.getElementById('toggle-sky').classList.add('active');
+                document.getElementById('toggle-fog').classList.add('active');
+                document.getElementById('toggle-light').classList.add('active');
+                this.classList.add('active');
+                this.textContent = '✓ ALL atmosphere ON';
+                await wait(2000); frames = []; await wait(2000);
+                log('ALL atmosphere ON');
+            });
+
+            // Full app simulation: shadow + all atmosphere + hillshade
+            document.getElementById('full-sim').addEventListener('click', async function () {
+                // Add hillshade if not present
+                if (!map.getLayer('hillshade')) {
+                    map.addLayer({
+                        id: 'hillshade', type: 'hillshade', source: 'hillshade-dem',
+                        paint: {
+                            'hillshade-method': 'combined',
+                            'hillshade-illumination-anchor': 'map',
+                            'hillshade-illumination-direction': [270, 315, 0, 45],
+                            'hillshade-illumination-altitude': [30, 30, 30, 30],
+                            'hillshade-highlight-color': 'rgba(255,255,255,0.98)',
+                            'hillshade-shadow-color': 'rgba(0,0,0,0.85)',
+                            'hillshade-exaggeration': 1.4
+                        }
+                    });
+                }
+                // Add shadow
+                if (!map.getLayer('shadow-native')) {
+                    map.addLayer({
+                        id: 'shadow-native', type: 'hillshade', source: 'hillshade-dem',
+                        layout: { visibility: 'visible' },
+                        paint: { 'hillshade-exaggeration': 1.0, 'hillshade-illumination-anchor': 'map' }
+                    });
+                } else {
+                    map.setLayoutProperty('shadow-native', 'visibility', 'visible');
+                }
+                // Sky + Fog + Light
+                map.setSky({
+                    'sky-color': '#88b0d8', 'horizon-color': '#d0e0f0',
+                    'fog-color': '#b0cce8', 'atmosphere-blend': 0.85
+                });
+                map.setFog({
+                    'range': [0.3, 4.0], 'color': '#b0cce8',
+                    'horizon-blend': 0.15, 'high-color': '#3868c0',
+                    'space-color': '#405060', 'star-intensity': 0
+                });
+                map.setLight({
+                    'position': [1.5, 180, 45], 'anchor': 'map',
+                    'color': '#ffffff', 'intensity': 0.85
+                });
+                // Enable glare
+                if (!glareHandler) {
+                    let lastGlareUpdate = 0;
+                    glareHandler = () => {
+                        const now = Date.now();
+                        if (now - lastGlareUpdate < 50) return;
+                        lastGlareUpdate = now;
+                        const minutes = parseInt(timeSlider.value);
+                        const sun = computeSunPosition(minutes);
+                        const cameraBearing = map.getBearing();
+                        let angleDiff = Math.abs(sun.azimuth - cameraBearing);
+                        if (angleDiff > 180) angleDiff = 360 - angleDiff;
+                        let fogNear = 0.3, fogFar = 4.0;
+                        if (angleDiff < 60 && sun.altitude < 15) {
+                            const g = (1.0 - angleDiff / 60) * (sun.altitude < 5 ? 1.0 : Math.max(0, (15 - sun.altitude) / 10));
+                            fogNear = Math.max(-0.5, fogNear - g * 0.4);
+                            fogFar = Math.max(0.5, fogFar - g * 2.0);
+                        }
+                        map.setFog({ 'range': [fogNear, fogFar], 'color': '#b0cce8', 'horizon-blend': 0.15, 'high-color': '#3868c0', 'space-color': '#405060', 'star-intensity': 0 });
+                    };
+                    map.on('move', glareHandler);
+                }
+                this.classList.add('active');
+                this.textContent = '✓ FULL SIM running';
+                await wait(3000); frames = []; await wait(2000);
+                log('FULL SIM: shadow + atmosphere + hillshade + glare');
+                updateCounts();
+            });
+
+            // ============ RESET ============
+            document.getElementById('reset-all').addEventListener('click', () => location.reload());
+
+            // ============ UPDATE INFO DISPLAY ============
+            document.getElementById('dpr-info').textContent = `${useRetina ? window.devicePixelRatio + 'x (Retina)' : '1x'}${useAntialias ? ' + MSAA' : ''}`;
+
+            function updateRttCount() {
+                const style = map.getStyle();
+                const rttTypes = ['background', 'fill', 'line', 'raster', 'hillshade', 'color-relief'];
+                const rttLayers = style.layers.filter(l => rttTypes.includes(l.type) && (!l.layout || l.layout.visibility !== 'none'));
+                document.getElementById('rtt-count').textContent = `${rttLayers.length} / ${style.layers.length}`;
+            }
+
+            map.on('idle', updateRttCount);
+            map.on('load', () => { updateCounts(); updateRttCount(); });
+
+        } // end init()
+
+        // ============ MODE SELECTION BUTTONS ============
+        document.getElementById('mode-empty').addEventListener('click', () => {
+            const p = new URLSearchParams(location.search);
+            p.delete('style');
+            location.search = p.toString();
+        });
+        document.getElementById('mode-full').addEventListener('click', () => {
+            const p = new URLSearchParams(location.search);
+            p.set('style', 'full');
+            location.search = p.toString();
+        });
+        document.getElementById('toggle-retina').addEventListener('click', () => {
+            const p = new URLSearchParams(location.search);
+            p.set('retina', params.get('retina') === '1' ? '0' : '1');
+            location.search = p.toString();
+        });
+        document.getElementById('toggle-antialias').addEventListener('click', () => {
+            const p = new URLSearchParams(location.search);
+            p.set('aa', params.get('aa') === '1' ? '0' : '1');
+            location.search = p.toString();
+        });
+
+        // Update button states
+        if (useFullStyle) {
+            document.getElementById('mode-empty').classList.remove('active');
+            document.getElementById('mode-full').classList.add('active');
+        }
+        if (useRetina) {
+            document.getElementById('toggle-retina').classList.add('active');
+            document.getElementById('toggle-retina').textContent = `Retina: ON (${window.devicePixelRatio}x)`;
+        }
+        if (useAntialias) {
+            document.getElementById('toggle-antialias').classList.add('active');
+            document.getElementById('toggle-antialias').textContent = 'Antialias: ON';
+        }
+
+        init();
+    </script>
+</body>
+
+</html>

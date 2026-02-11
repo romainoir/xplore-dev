@@ -1,11 +1,16 @@
 import {
+  COLOR_RELIEF_COLOR_RAMP,
+  BASE_STYLE_RELIEF_OPACITY,
   DEFAULT_3D_ORIENTATION,
+  RELIEF_OPACITY,
+  MAPLIBRE_SPRITE_URL,
   S2C_URL,
   S2_FADE_DURATION,
   S2_OPACITY,
   SKY_SETTINGS,
   TILE_FADE_DURATION,
   VIEW_MODES,
+  VERSATILES_LOCAL_JSON,
   MAPTERHORN_TILE_URL,
   MAPTERHORN_ATTRIBUTION
 } from '../config/map-config.js';
@@ -359,7 +364,7 @@ const LAYER_GROUPS = Object.freeze([
     id: 'sun-analysis',
     label: 'Sun Analysis',
     exclusive: true,
-    members: ['shadow']
+    members: ['shadow', 'detail-shading']
   },
   {
     id: 'vector',
@@ -808,11 +813,34 @@ async function init() {
   await unregisterLegacyServiceWorker();
 
   const searchParams = new URLSearchParams(window.location.search);
+
+  // === PERFORMANCE DIAGNOSTIC MODE ===
+  // Use ?perfmode=N to progressively enable initialization sections
+  // Level 0: Map only (no terrain, no sources, no events) 
+  // Level 1: + Terrain & DEM sources
+  // Level 2: + Hillshade & analysis layers
+  // Level 3: + Sky, Fog, Sun, Event handlers (move/mousemove)
+  // Level 4: + LOD, HD mode, contours, imagery
+  // Level 5: + Directions, UI controls, everything else
+  // No param = full init (default)
+  const perfMode = searchParams.has('perfmode') ? parseInt(searchParams.get('perfmode') || '0', 10) : Infinity;
+  if (perfMode < Infinity) {
+    console.log(`%c[PERF MODE ${perfMode}] Active — sections beyond level ${perfMode} are DISABLED`, 'color: red; font-size: 14px; font-weight: bold');
+    console.log('[PERF MODE] Levels: 0=map, 1=+terrain/DEM, 2=+layers, 3=+events, 4=+LOD/contours, 5=+UI/directions');
+    // Add FPS counter overlay
+    const fpsDiv = document.createElement('div');
+    fpsDiv.style.cssText = 'position:fixed;top:10px;right:10px;z-index:99999;background:rgba(0,0,0,0.85);color:#2ecc71;padding:8px 14px;font:bold 24px monospace;border-radius:8px;pointer-events:none';
+    document.body.appendChild(fpsDiv);
+    let frames = [], lt = performance.now();
+    (function fpsTick() { const n = performance.now(); frames.push(n - lt); lt = n; if (frames.length > 60) frames.shift(); const fps = Math.round(1000 / (frames.reduce((a, b) => a + b) / frames.length)); fpsDiv.textContent = fps + ' FPS'; fpsDiv.style.color = fps > 40 ? '#2ecc71' : fps > 20 ? '#f1c40f' : '#e74c3c'; requestAnimationFrame(fpsTick); })();
+  }
   const networkSourceParam = searchParams.get('networkSource');
   const preferOpenFreeMapNetwork = networkSourceParam === 'openfreemap'
     || (!networkSourceParam && searchParams.has('openfreemapNetwork'));
 
-  const versaStyle = await fetch('https://tiles.openfreemap.org/styles/liberty', { cache: 'no-store' }).then(r => r.json());
+  const versaStyle = await fetch(VERSATILES_LOCAL_JSON, { cache: 'no-store' }).then(r => r.json());
+  versaStyle.glyphs = 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf';
+  versaStyle.sprite = MAPLIBRE_SPRITE_URL;
 
   // Use Mercator projection (flat map) - faster performance than globe
   versaStyle.projection = { type: 'mercator' };
@@ -875,9 +903,9 @@ async function init() {
     minZoom: 6,
     maxZoom: 18,
     maxPitch: 85,
-    antialias: true, // Always enable for visual quality
+    antialias: dprEnabled, // Performance: Disable MSAA if HD is off
     fadeDuration: TILE_FADE_DURATION,
-    maxTileCacheSize: 200, // Reduced from 1000 (shadow neighbors removed)
+    maxTileCacheSize: 1000, // Performance: Large cache for Omni-Lookup neighbors
     refreshExpiredTiles: false, // Performance: Prevent cyclical reloads for short TTL tiles
     attributionControl: false
   });
@@ -1891,6 +1919,13 @@ async function init() {
   // Functions removed as they are no longer needed for the consolidated bar
 
   map.on('load', async () => {
+    // PERF DIAGNOSTIC: Skip all post-load init when perfmode=0
+    if (perfMode === 0) {
+      console.log('%c[PERF MODE 0] Map loaded — ALL post-load init SKIPPED. Measure baseline FPS now.', 'color: orange; font-size: 14px');
+      console.log('[PERF MODE 0] Try: ?perfmode=1 to add terrain+DEM, ?perfmode=2 for +layers, etc.');
+      return;
+    }
+
     // Terrain Analysis Hover Readout
     const terrainHoverInfo = document.getElementById('terrainHoverInfo');
 
@@ -2074,6 +2109,12 @@ async function init() {
     }
   });
 
+  // PERF DIAGNOSTIC: Skip ALL remaining init (DEM, layers, viewModeController, etc.)
+  if (perfMode === 0) {
+    console.log('%c[PERF MODE 0] Skipping ALL terrain/DEM/layer/event init. Bare map only.', 'color: orange; font-size: 12px');
+    return; // Exit init() entirely
+  }
+
   map.on('style.load', () => {
     offlineNetworkCoverage = null;
     offlineNetworkRefreshPromise = null;
@@ -2248,6 +2289,12 @@ async function init() {
   });
   demSource.setupMaplibre(maplibregl);
 
+  // PERF DIAGNOSTIC: Level 1 = style.load + contour + styleimagemissing only
+  if (perfMode <= 1) {
+    console.log('%c[PERF MODE 1] Skipping viewModeController, DEM sources, terrain layers', 'color: orange; font-size: 12px');
+    return;
+  }
+
   const vignetteEl = document.querySelector('.vignette');
   const viewToggleBtn = document.getElementById('toggle3D');
 
@@ -2258,7 +2305,7 @@ async function init() {
     defaultMode: VIEW_MODES.THREED,
     defaultOrientation: DEFAULT_3D_ORIENTATION,
     terrainSourceId: 'terrainSource',
-    hdSources: ['terrainSource', 'hillshadeSource', 'reliefDem']
+    hdSources: ['terrainSource', 'hillshadeSource', 'reliefDem', 'color-relief']
   });
 
 
@@ -2396,40 +2443,6 @@ async function init() {
   const imageryPanelDrawer = document.getElementById('imageryPanelDrawer');
   const imageryToggle = document.getElementById('imageryToggle');
   const imageryControls = new Map();
-
-  // === Vector Data Toggle (entire OSM Liberty layer) ===
-  const vectorToggle = document.getElementById('vectorToggle');
-  if (vectorToggle) {
-    // Restore persisted state
-    const vectorVisible = localStorage.getItem('xplore_vector_visible') !== 'false';
-    vectorToggle.checked = vectorVisible;
-
-    const applyVectorVisibility = (visible) => {
-      // Hide ALL layers from vector tile sources (the full OSM Liberty stack)
-      const style = map.getStyle();
-      if (!style) return;
-      const vectorSourceIds = new Set();
-      for (const [id, src] of Object.entries(style.sources || {})) {
-        if (src.type === 'vector') vectorSourceIds.add(id);
-      }
-      (style.layers || []).forEach((layer) => {
-        if (layer.source && vectorSourceIds.has(layer.source)) {
-          map.setLayoutProperty(layer.id, 'visibility', visible ? 'visible' : 'none');
-        }
-      });
-    };
-
-    // Apply on first load (after style loads)
-    if (!vectorVisible) {
-      map.once('style.load', () => applyVectorVisibility(false));
-    }
-
-    vectorToggle.addEventListener('change', () => {
-      const visible = vectorToggle.checked;
-      localStorage.setItem('xplore_vector_visible', String(visible));
-      applyVectorVisibility(visible);
-    });
-  }
 
   // Build imageryOrder with group members kept contiguous
   // When we encounter a group member, insert all members of that group together
@@ -4018,7 +4031,15 @@ async function init() {
 
   // Hillshade uses 'combined' method only (no cycling)
 
+  // PERF DIAGNOSTIC: Level 2 = everything up to applyOverlays
+  if (perfMode <= 2) {
+    console.log('%c[PERF MODE 2] Skipping DEM sources, terrain layers, applyOverlays', 'color: orange; font-size: 12px');
+    return;
+  }
+
   async function applyOverlays() {
+    console.log('[App] Applying overlay sources and layers (terrain, hillshade, imagery)...');
+    // Remove any existing sources/layers from prior loads
     const rmL = id => { if (map.getLayer(id)) map.removeLayer(id); };
     const rmS = id => { if (map.getSource(id)) map.removeSource(id); };
 
@@ -4029,6 +4050,7 @@ async function init() {
     }
 
     rmL('hillshade');
+    rmL('color-relief');
     IMAGERY_OPTIONS.forEach((option) => {
       const layerIds = [];
       if (typeof option.layerId === 'string') layerIds.push(option.layerId);
@@ -4090,11 +4112,30 @@ async function init() {
       attribution: MAPTERHORN_ATTRIBUTION
     });
 
+    map.addSource('color-relief', {
+      type: 'raster-dem',
+      tiles: [MAPTERHORN_TILE_URL],
+      encoding: 'terrarium',
+      tileSize: 512,
+      maxzoom: DEM_SOURCE_MAX_ZOOM,
+      attribution: MAPTERHORN_ATTRIBUTION
+    });
+
     map.addLayer({
       id: 'terrain',
       type: 'raster',
       source: 'terrainSource'
     });
+
+    map.addLayer({
+      id: 'color-relief',
+      type: 'color-relief',
+      source: 'color-relief',
+      paint: {
+        'color-relief-color': COLOR_RELIEF_COLOR_RAMP,
+        'color-relief-opacity': RELIEF_OPACITY
+      }
+    }, topLabelId || undefined);
 
     IMAGERY_OPTIONS.forEach((option) => {
       if (option.type === 'base-style') {

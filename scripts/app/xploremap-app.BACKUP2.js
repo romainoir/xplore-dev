@@ -1,11 +1,16 @@
 import {
+  COLOR_RELIEF_COLOR_RAMP,
+  BASE_STYLE_RELIEF_OPACITY,
   DEFAULT_3D_ORIENTATION,
+  RELIEF_OPACITY,
+  MAPLIBRE_SPRITE_URL,
   S2C_URL,
   S2_FADE_DURATION,
   S2_OPACITY,
   SKY_SETTINGS,
   TILE_FADE_DURATION,
   VIEW_MODES,
+  VERSATILES_LOCAL_JSON,
   MAPTERHORN_TILE_URL,
   MAPTERHORN_ATTRIBUTION
 } from '../config/map-config.js';
@@ -359,7 +364,7 @@ const LAYER_GROUPS = Object.freeze([
     id: 'sun-analysis',
     label: 'Sun Analysis',
     exclusive: true,
-    members: ['shadow']
+    members: ['shadow', 'detail-shading']
   },
   {
     id: 'vector',
@@ -808,19 +813,32 @@ async function init() {
   await unregisterLegacyServiceWorker();
 
   const searchParams = new URLSearchParams(window.location.search);
+
+  // === FEATURE TOGGLE for perf debugging ===
+  // Use ?skip=analysis,sky,shadows to disable feature groups
+  // Example: index.html?skip=shadows,sky → base app + analysis only 
+  const _skipSet = new Set((searchParams.get('skip') || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean));
+  const FEAT = {
+    analysis: _skipSet.has('analysis') ? false : !_skipSet.has('noanalysis'),   // OFF by default for perf testing
+    sky: false,                                                             // OFF — sky/fog/atmosphere disabled
+    shadows: false,                                                             // OFF — shadow layers disabled
+  };
+  // To re-enable: index.html?enable=analysis or just remove the skip param
+  if (_skipSet.size > 0) {
+    console.log(`%c[PERF] Disabled features: ${[..._skipSet].join(', ')}`, 'color: red; font-size: 14px; font-weight: bold');
+    console.log('[PERF] Active features:', Object.entries(FEAT).filter(([, v]) => v).map(([k]) => k).join(', ') || 'base only');
+  }
   const networkSourceParam = searchParams.get('networkSource');
   const preferOpenFreeMapNetwork = networkSourceParam === 'openfreemap'
     || (!networkSourceParam && searchParams.has('openfreemapNetwork'));
 
-  const versaStyle = await fetch('https://tiles.openfreemap.org/styles/liberty', { cache: 'no-store' }).then(r => r.json());
+  const versaStyle = await fetch(VERSATILES_LOCAL_JSON, { cache: 'no-store' }).then(r => r.json());
+  versaStyle.glyphs = 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf';
+  versaStyle.sprite = MAPLIBRE_SPRITE_URL;
 
   // Use Mercator projection (flat map) - faster performance than globe
   versaStyle.projection = { type: 'mercator' };
-  versaStyle.sky = {
-    'sky-color': '#bcd0e6',
-    'horizon-color': '#e6effa',
-    'sky-horizon-blend': 0.5
-  };
+  // Sky and light removed for performance debugging
   versaStyle.light = {
     'anchor': 'map',
     'position': [1.5, 90, 80]
@@ -875,15 +893,42 @@ async function init() {
     minZoom: 6,
     maxZoom: 18,
     maxPitch: 85,
-    antialias: true, // Always enable for visual quality
+    antialias: dprEnabled,
     fadeDuration: TILE_FADE_DURATION,
-    maxTileCacheSize: 200, // Reduced from 1000 (shadow neighbors removed)
-    refreshExpiredTiles: false, // Performance: Prevent cyclical reloads for short TTL tiles
+    maxTileCacheSize: 1000,
+    refreshExpiredTiles: false,
     attributionControl: false
   });
 
   // Store map globally for access from UI controls
   window.xploreMap = map;
+
+  // === INIT LEVEL BISECTION ===
+  // ?level=0 → map only, ?level=1 → +preload/geocoder, ?level=2 → +directions, etc.
+  const initLevel = searchParams.has('level') ? parseInt(searchParams.get('level') || '0', 10) : Infinity;
+  if (initLevel < Infinity) {
+    console.log(`%c[LEVEL ${initLevel}] Init bisection active`, 'color: red; font-size: 14px; font-weight: bold');
+    // Add FPS counter
+    const fd = document.createElement('div');
+    fd.style.cssText = 'position:fixed;top:10px;right:10px;z-index:99999;background:rgba(0,0,0,0.85);color:#2ecc71;padding:8px 14px;font:bold 24px monospace;border-radius:8px;pointer-events:none';
+    document.body.appendChild(fd);
+    let fr = [], lt2 = performance.now();
+    (function ft() { const n = performance.now(); fr.push(n - lt2); lt2 = n; if (fr.length > 60) fr.shift(); const f = Math.round(1000 / (fr.reduce((a, b) => a + b) / fr.length)); fd.textContent = f + ' FPS'; fd.style.color = f > 40 ? '#2ecc71' : f > 20 ? '#f1c40f' : '#e74c3c'; requestAnimationFrame(ft); })();
+  }
+  if (initLevel === 0) {
+    console.log('[LEVEL 0] Bare map — no preload, no geocoder, no controls, no events');
+    map.on('load', () => {
+      map.addSource('terrainSource', { type: 'raster-dem', tiles: ['https://tiles.mapterhorn.com/{z}/{x}/{y}.webp'], encoding: 'terrarium', tileSize: 512, maxzoom: 12 });
+      map.addSource('hillshadeSource', { type: 'raster-dem', tiles: ['https://tiles.mapterhorn.com/{z}/{x}/{y}.webp'], encoding: 'terrarium', tileSize: 512, maxzoom: 12 });
+      map.setTerrain({ source: 'terrainSource', exaggeration: 1 });
+      const layers = map.getStyle().layers; let top = null;
+      for (let i = layers.length - 1; i >= 0; i--) { if (layers[i].type === 'symbol') { top = layers[i].id; break; } }
+      map.addLayer({ id: 'hillshade', type: 'hillshade', source: 'hillshadeSource', paint: { 'hillshade-exaggeration': 0.23 } }, top);
+      console.log('[LEVEL 0] Terrain + hillshade added. Sources:', Object.keys(map.getStyle().sources).length);
+      map.addControl(new MapboxFPS.FPSControl(), 'bottom-left');
+    });
+    return;
+  }
 
   maplibrePreload(map, {
     text: 'Xplore',
@@ -1890,6 +1935,20 @@ async function init() {
   // --- Routing Panel Utilities (DEPRECATED) ---
   // Functions removed as they are no longer needed for the consolidated bar
 
+  // LEVEL 1: preload, geocoder, controls, directions, GPX all set up
+  if (initLevel === 1) {
+    console.log('[LEVEL 1] Stopped before map.on(load). Directions/GPX ready but no terrain/overlay sources.');
+    map.on('load', () => {
+      map.addSource('terrainSource', { type: 'raster-dem', tiles: ['https://tiles.mapterhorn.com/{z}/{x}/{y}.webp'], encoding: 'terrarium', tileSize: 512, maxzoom: 12 });
+      map.addSource('hillshadeSource', { type: 'raster-dem', tiles: ['https://tiles.mapterhorn.com/{z}/{x}/{y}.webp'], encoding: 'terrarium', tileSize: 512, maxzoom: 12 });
+      map.setTerrain({ source: 'terrainSource', exaggeration: 1 });
+      const layers = map.getStyle().layers; let top = null;
+      for (let i = layers.length - 1; i >= 0; i--) { if (layers[i].type === 'symbol') { top = layers[i].id; break; } }
+      map.addLayer({ id: 'hillshade', type: 'hillshade', source: 'hillshadeSource', paint: { 'hillshade-exaggeration': 0.23 } }, top);
+    });
+    return;
+  }
+
   map.on('load', async () => {
     // Terrain Analysis Hover Readout
     const terrainHoverInfo = document.getElementById('terrainHoverInfo');
@@ -1955,6 +2014,14 @@ async function init() {
 
     // Manually add AttributionControl in compact mode after load
     map.addControl(new maplibregl.AttributionControl({ compact: true }));
+
+    // LEVEL 5: map.on('load') fired, mousemove registered — but NO directions manager
+    if (initLevel === 5) {
+      console.log('[LEVEL 5] Inside load handler. Mousemove active. NO directions manager.');
+      return; // skip directions manager init
+    }
+
+    // PERF TEST: DirectionsManager enabled
     try {
       directionsManager = new DirectionsManager(map, [
         directionsToggle,
@@ -2073,6 +2140,24 @@ async function init() {
       console.error('Failed to initialize directions manager', error);
     }
   });
+
+  // LEVEL 3: map.on('load') handler registered (with mousemove + directions init)
+  if (initLevel === 3) {
+    console.log('[LEVEL 3] Stopped after map.on(load). Mousemove + directions will fire when loaded.');
+    map.on('load', () => {
+      if (!map.getSource('terrainSource')) {
+        map.addSource('terrainSource', { type: 'raster-dem', tiles: ['https://tiles.mapterhorn.com/{z}/{x}/{y}.webp'], encoding: 'terrarium', tileSize: 512, maxzoom: 12 });
+      }
+      if (!map.getSource('hillshadeSource')) {
+        map.addSource('hillshadeSource', { type: 'raster-dem', tiles: ['https://tiles.mapterhorn.com/{z}/{x}/{y}.webp'], encoding: 'terrarium', tileSize: 512, maxzoom: 12 });
+      }
+      map.setTerrain({ source: 'terrainSource', exaggeration: 1 });
+      const layers = map.getStyle().layers; let top = null;
+      for (let i = layers.length - 1; i >= 0; i--) { if (layers[i].type === 'symbol') { top = layers[i].id; break; } }
+      if (!map.getLayer('hillshade')) map.addLayer({ id: 'hillshade', type: 'hillshade', source: 'hillshadeSource', paint: { 'hillshade-exaggeration': 0.23 } }, top);
+    });
+    return;
+  }
 
   map.on('style.load', () => {
     offlineNetworkCoverage = null;
@@ -2258,14 +2343,39 @@ async function init() {
     defaultMode: VIEW_MODES.THREED,
     defaultOrientation: DEFAULT_3D_ORIENTATION,
     terrainSourceId: 'terrainSource',
-    hdSources: ['terrainSource', 'hillshadeSource', 'reliefDem']
+    hdSources: ['terrainSource', 'hillshadeSource'],
+    skipSky: !FEAT.sky
   });
 
+  // LEVEL 4: + style.load + contour DemSource + viewModeController
+  if (initLevel === 4) {
+    console.log('[LEVEL 4] Stopped after viewModeController. Contour worker + move handler active.');
+    map.on('load', () => {
+      if (!map.getSource('terrainSource')) {
+        map.addSource('terrainSource', { type: 'raster-dem', tiles: ['https://tiles.mapterhorn.com/{z}/{x}/{y}.webp'], encoding: 'terrarium', tileSize: 512, maxzoom: 12 });
+      }
+      if (!map.getSource('hillshadeSource')) {
+        map.addSource('hillshadeSource', { type: 'raster-dem', tiles: ['https://tiles.mapterhorn.com/{z}/{x}/{y}.webp'], encoding: 'terrarium', tileSize: 512, maxzoom: 12 });
+      }
+      map.setTerrain({ source: 'terrainSource', exaggeration: 1 });
+      const layers = map.getStyle().layers; let top = null;
+      for (let i = layers.length - 1; i >= 0; i--) { if (layers[i].type === 'symbol') { top = layers[i].id; break; } }
+      if (!map.getLayer('hillshade')) map.addLayer({ id: 'hillshade', type: 'hillshade', source: 'hillshadeSource', paint: { 'hillshade-exaggeration': 0.23 } }, top);
+    });
+    return;
+  }
 
+
+  // LEVEL 6: viewModeController created, terrain set up — skip all UI handlers + applyOverlays
+  if (initLevel === 6) {
+    console.log('[LEVEL 6] viewModeController active. Skipping UI handlers + applyOverlays.');
+    return;
+  }
 
   // 5. Initialize Shadow & Time Controls
   const updateShadowTime = (date) => {
     if (!date || !(date instanceof Date)) return;
+    if (!FEAT.shadows) return; // Skip shadow updates when shadows disabled
 
     window.skySimulationDate = date.getTime();
 
@@ -2396,40 +2506,6 @@ async function init() {
   const imageryPanelDrawer = document.getElementById('imageryPanelDrawer');
   const imageryToggle = document.getElementById('imageryToggle');
   const imageryControls = new Map();
-
-  // === Vector Data Toggle (entire OSM Liberty layer) ===
-  const vectorToggle = document.getElementById('vectorToggle');
-  if (vectorToggle) {
-    // Restore persisted state
-    const vectorVisible = localStorage.getItem('xplore_vector_visible') !== 'false';
-    vectorToggle.checked = vectorVisible;
-
-    const applyVectorVisibility = (visible) => {
-      // Hide ALL layers from vector tile sources (the full OSM Liberty stack)
-      const style = map.getStyle();
-      if (!style) return;
-      const vectorSourceIds = new Set();
-      for (const [id, src] of Object.entries(style.sources || {})) {
-        if (src.type === 'vector') vectorSourceIds.add(id);
-      }
-      (style.layers || []).forEach((layer) => {
-        if (layer.source && vectorSourceIds.has(layer.source)) {
-          map.setLayoutProperty(layer.id, 'visibility', visible ? 'visible' : 'none');
-        }
-      });
-    };
-
-    // Apply on first load (after style loads)
-    if (!vectorVisible) {
-      map.once('style.load', () => applyVectorVisibility(false));
-    }
-
-    vectorToggle.addEventListener('change', () => {
-      const visible = vectorToggle.checked;
-      localStorage.setItem('xplore_vector_visible', String(visible));
-      applyVectorVisibility(visible);
-    });
-  }
 
   // Build imageryOrder with group members kept contiguous
   // When we encounter a group member, insert all members of that group together
@@ -2874,9 +2950,58 @@ async function init() {
         return;
       }
 
-      if (!option.layerId || !map.getLayer(option.layerId)) return;
+      if (!option.layerId) return;
+
+      // Lazy source/layer creation: if the layer doesn't exist yet and user is
+      // enabling it, create the source + layer now (they were skipped at startup for perf)
+      if (!map.getLayer(option.layerId) && visible) {
+        const topLabelId = (() => {
+          const layers = map.getStyle().layers || [];
+          for (let i = layers.length - 1; i >= 0; i--) {
+            if (layers[i].type === 'symbol') return layers[i].id;
+          }
+          return undefined;
+        })();
+
+        if (option.type === 'debug-tiles' && option.tilesUrl) {
+          if (!map.getSource(option.sourceId)) {
+            const sourceConfig = { type: 'raster', url: option.tilesUrl, tileSize: option.tileSize ?? 256, attribution: option.attribution };
+            if (option.maxzoom !== undefined) sourceConfig.maxzoom = option.maxzoom;
+            map.addSource(option.sourceId, sourceConfig);
+          }
+          map.addLayer({ id: option.layerId, type: 'raster', source: option.sourceId, layout: { visibility: 'visible' }, paint: { 'raster-opacity': opacity } });
+        } else if (option.tileTemplate && option.sourceId) {
+          if (!map.getSource(option.sourceId)) {
+            map.addSource(option.sourceId, {
+              type: 'raster', tiles: [option.tileTemplate],
+              tileSize: option.tileSize ?? 256, attribution: option.attribution,
+              minzoom: option.minZoom ?? 0, maxzoom: option.maxZoom ?? 19
+            });
+          }
+          const layerPaint = { 'raster-fade-duration': TILE_FADE_DURATION };
+          if (option.paint && typeof option.paint === 'object') Object.assign(layerPaint, option.paint);
+          layerPaint['raster-opacity'] = opacity;
+          map.addLayer({ id: option.layerId, type: 'raster', source: option.sourceId, paint: layerPaint, layout: { visibility: 'visible' } }, topLabelId);
+        }
+        // Mark route layers dirty so they get reordered above new layer
+        if (directionsManager && typeof directionsManager.markRouteLayersDirty === 'function') {
+          directionsManager.markRouteLayersDirty();
+          directionsManager.moveRouteLayersToTop();
+        }
+        return;
+      }
+
+      if (!map.getLayer(option.layerId)) return;
       map.setPaintProperty(option.layerId, 'raster-opacity', opacity);
       map.setLayoutProperty(option.layerId, 'visibility', visible ? 'visible' : 'none');
+
+      // If layer is being hidden, remove its source to free GPU/memory
+      if (!visible && map.getSource(option.sourceId)) {
+        try {
+          map.removeLayer(option.layerId);
+          map.removeSource(option.sourceId);
+        } catch (_) { }
+      }
     });
 
     // Hillshade appearance is handled by applyHillshadeAppearance() called after applyImageryState()
@@ -3304,6 +3429,11 @@ async function init() {
         setImageryPanelOpen(false);
       }
     });
+  }
+  // LEVEL 7: after imagery panel + UI handlers, before directions bar + applyOverlays
+  if (initLevel === 7) {
+    console.log('[LEVEL 7] Imagery panel setup done. Skipping directions bar + applyOverlays.');
+    return;
   }
 
   // 7. Directions Sidebar Bar Logic
@@ -4018,7 +4148,23 @@ async function init() {
 
   // Hillshade uses 'combined' method only (no cycling)
 
+  // LEVEL 2: load handler, viewModeController, UI handlers all set up, before applyOverlays
+  if (initLevel === 2) {
+    console.log('[LEVEL 2] Stopped before applyOverlays. viewModeController/UI ready but no DEM overlay sources.');
+    map.on('load', () => {
+      map.addSource('terrainSource', { type: 'raster-dem', tiles: ['https://tiles.mapterhorn.com/{z}/{x}/{y}.webp'], encoding: 'terrarium', tileSize: 512, maxzoom: 12 });
+      map.addSource('hillshadeSource', { type: 'raster-dem', tiles: ['https://tiles.mapterhorn.com/{z}/{x}/{y}.webp'], encoding: 'terrarium', tileSize: 512, maxzoom: 12 });
+      map.setTerrain({ source: 'terrainSource', exaggeration: 1 });
+      const layers = map.getStyle().layers; let top = null;
+      for (let i = layers.length - 1; i >= 0; i--) { if (layers[i].type === 'symbol') { top = layers[i].id; break; } }
+      map.addLayer({ id: 'hillshade', type: 'hillshade', source: 'hillshadeSource', paint: { 'hillshade-exaggeration': 0.23 } }, top);
+    });
+    return;
+  }
+
   async function applyOverlays() {
+    console.log('[App] Applying overlay sources and layers (terrain, hillshade, imagery)...');
+    // Remove any existing sources/layers from prior loads
     const rmL = id => { if (map.getLayer(id)) map.removeLayer(id); };
     const rmS = id => { if (map.getSource(id)) map.removeSource(id); };
 
@@ -4029,6 +4175,7 @@ async function init() {
     }
 
     rmL('hillshade');
+    rmL('color-relief');
     IMAGERY_OPTIONS.forEach((option) => {
       const layerIds = [];
       if (typeof option.layerId === 'string') layerIds.push(option.layerId);
@@ -4070,31 +4217,8 @@ async function init() {
       maxzoom: DEM_SOURCE_MAX_ZOOM,
       attribution: MAPTERHORN_ATTRIBUTION
     });
-    // Dedicated Shadow DEM Source with tileZoomOffset for long-distance shadow coverage
-    // tileZoomOffset: -1 means use tiles from one zoom level lower (Z-1)
-    map.addSource('shadowDemSource', {
-      type: 'raster-dem',
-      tiles: [MAPTERHORN_TILE_URL],
-      encoding: 'terrarium',
-      tileSize: 512,
-      maxzoom: SHADOW_DEM_MAX_ZOOM,
-      tileZoomOffset: 0, // Reverted to 0 per user request
-      attribution: MAPTERHORN_ATTRIBUTION
-    });
-    map.addSource('reliefDem', {
-      type: 'raster-dem',
-      tiles: [MAPTERHORN_TILE_URL],
-      encoding: 'terrarium',
-      tileSize: 512,
-      maxzoom: DEM_SOURCE_MAX_ZOOM,
-      attribution: MAPTERHORN_ATTRIBUTION
-    });
-
-    map.addLayer({
-      id: 'terrain',
-      type: 'raster',
-      source: 'terrainSource'
-    });
+    // shadowDemSource, reliefDem, color-relief, terrain raster layer REMOVED for perf debugging
+    // (see xploremap-app.BACKUP.js for full version)
 
     IMAGERY_OPTIONS.forEach((option) => {
       if (option.type === 'base-style') {
@@ -4174,6 +4298,9 @@ async function init() {
         const opacity = clampOpacity(state?.opacity ?? option.defaultOpacity ?? 1);
         const visible = Boolean(state?.enabled && opacity > 0);
 
+        // PERF: Skip creating source if layer is disabled (lazy load on toggle)
+        if (!visible) return;
+
         if (!map.getSource(option.sourceId)) {
           const sourceConfig = {
             type: 'raster',
@@ -4191,7 +4318,7 @@ async function init() {
             id: option.layerId,
             type: 'raster',
             source: option.sourceId,
-            layout: { visibility: visible ? 'visible' : 'none' },
+            layout: { visibility: 'visible' },
             paint: { 'raster-opacity': opacity }
           });
         }
@@ -4202,14 +4329,25 @@ async function init() {
         return;
       }
 
-      map.addSource(option.sourceId, {
-        type: 'raster',
-        tiles: [option.tileTemplate],
-        tileSize: option.tileSize ?? 256,
-        attribution: option.attribution,
-        minzoom: option.minZoom ?? 0,
-        maxzoom: option.maxZoom ?? 19
-      });
+      const state = imageryState.get(option.id);
+      const opacity = clampOpacity(state?.opacity ?? option.defaultOpacity ?? 1);
+      const visible = Boolean(state?.enabled && opacity > 0);
+
+      // PERF FIX: Don't create raster sources for disabled layers.
+      // MapLibre fetches tiles for ANY source that has a layer — even with visibility:none.
+      // Sources will be lazily created when the user toggles a layer on.
+      if (!visible) return;
+
+      if (!map.getSource(option.sourceId)) {
+        map.addSource(option.sourceId, {
+          type: 'raster',
+          tiles: [option.tileTemplate],
+          tileSize: option.tileSize ?? 256,
+          attribution: option.attribution,
+          minzoom: option.minZoom ?? 0,
+          maxzoom: option.maxZoom ?? 19
+        });
+      }
 
       const paint = {
         'raster-fade-duration': TILE_FADE_DURATION
@@ -4217,21 +4355,20 @@ async function init() {
       if (option.paint && typeof option.paint === 'object') {
         Object.assign(paint, option.paint);
       }
-      const state = imageryState.get(option.id);
       paint['raster-opacity'] = clampOpacity(state?.opacity ?? paint['raster-opacity'] ?? 1);
       if (!Number.isFinite(paint['raster-opacity'])) {
         paint['raster-opacity'] = 1;
       }
 
-      map.addLayer({
-        id: option.layerId,
-        type: 'raster',
-        source: option.sourceId,
-        paint,
-        layout: {
-          visibility: state?.enabled && state.opacity > 0 ? 'visible' : 'none'
-        }
-      }, topLabelId || undefined);
+      if (!map.getLayer(option.layerId)) {
+        map.addLayer({
+          id: option.layerId,
+          type: 'raster',
+          source: option.sourceId,
+          paint,
+          layout: { visibility: 'visible' }
+        }, topLabelId || undefined);
+      }
     });
 
     applyImageryLayerOrder();
@@ -4249,84 +4386,78 @@ async function init() {
       }
     }, topLabelId || undefined);
 
-    // Add normalmap layer (hillshade layer with method='normalmap')
-    // Uses the same hillshadeSource but displays terrain normals as RGB
-    map.addLayer({
-      id: 'normalmap',
-      type: 'hillshade',  // Uses hillshade type but with normalmap rendering method
-      source: 'hillshadeSource',
-      layout: {
-        'visibility': 'none'  // Start hidden
-      },
-      paint: {
-        'hillshade-exaggeration': 1.0
-      }
-    }, topLabelId || undefined);
+    // --- TERRAIN ANALYSIS layers (gated by FEAT.analysis) ---
+    if (FEAT.analysis) {
+      map.addLayer({
+        id: 'normalmap',
+        type: 'hillshade',
+        source: 'hillshadeSource',
+        layout: { 'visibility': 'none' },
+        paint: { 'hillshade-exaggeration': 1.0 }
+      }, topLabelId || undefined);
 
-    // Create helper to force normalmap method (bypasses style-spec)
-    // No longer needed - method is forced by layer.id in hillshade_program.ts
-    console.log('[App] Native terrain layers added (normalmap, aspect, slope, avalanche)');
+      map.addLayer({
+        id: 'snow-native',
+        type: 'hillshade',
+        source: 'hillshadeSource',
+        layout: { 'visibility': 'none' },
+        paint: { 'hillshade-exaggeration': 1.0 }
+      }, topLabelId || undefined);
 
-    // Add Snow layer (native)
-    map.addLayer({
-      id: 'snow-native',
-      type: 'hillshade',
-      source: 'hillshadeSource',
-      layout: { 'visibility': 'none' },
-      paint: { 'hillshade-exaggeration': 1.0 }
-    }, topLabelId || undefined);
+      map.addLayer({
+        id: 'aspect-native',
+        type: 'hillshade',
+        source: 'hillshadeSource',
+        layout: { 'visibility': 'none' },
+        paint: { 'hillshade-exaggeration': 1.0 }
+      }, topLabelId || undefined);
 
-    // Add Aspect layer (native)
-    map.addLayer({
-      id: 'aspect-native',
-      type: 'hillshade',
-      source: 'hillshadeSource',
-      layout: { 'visibility': 'none' },
-      paint: { 'hillshade-exaggeration': 1.0 }
-    }, topLabelId || undefined);
+      map.addLayer({
+        id: 'slope-native',
+        type: 'hillshade',
+        source: 'hillshadeSource',
+        layout: { 'visibility': 'none' },
+        paint: { 'hillshade-exaggeration': 1.0 }
+      }, topLabelId || undefined);
 
-    // Add Slope layer (native)
-    map.addLayer({
-      id: 'slope-native',
-      type: 'hillshade',
-      source: 'hillshadeSource',
-      layout: { 'visibility': 'none' },
-      paint: { 'hillshade-exaggeration': 1.0 }
-    }, topLabelId || undefined);
+      map.addLayer({
+        id: 'avalanche-native',
+        type: 'hillshade',
+        source: 'hillshadeSource',
+        layout: { 'visibility': 'none' },
+        paint: { 'hillshade-exaggeration': 1.0 }
+      }, topLabelId || undefined);
 
-    // Add Avalanche layer (native)
-    map.addLayer({
-      id: 'avalanche-native',
-      type: 'hillshade',
-      source: 'hillshadeSource',
-      layout: { 'visibility': 'none' },
-      paint: { 'hillshade-exaggeration': 1.0 }
-    }, topLabelId || undefined);
-    // Add Detail/Self-Shadow layer (native) - High Res, No Raymarching
-    // Uses Green Accent (#00ff00) as shader flag
-    map.addLayer({
-      id: 'detail-native',
-      type: 'hillshade',
-      source: 'hillshadeSource',
-      layout: { 'visibility': 'none' },
-      paint: {
-        'hillshade-exaggeration': 1.0,
-        'hillshade-illumination-anchor': 'map',
-        'hillshade-accent-color': '#00ff00'
-      }
-    }, topLabelId || undefined);
+      console.log('[App] Terrain analysis layers added (normalmap, snow, aspect, slope, avalanche)');
+    }
 
-    // Add Shadow layer (native) - uses dedicated low-zoom DEM source for full coverage
-    map.addLayer({
-      id: 'shadow-native',
-      type: 'hillshade',
-      source: 'shadowDemSource',
-      layout: { 'visibility': 'none' },
-      paint: {
-        'hillshade-exaggeration': 1.0,
-        'hillshade-illumination-anchor': 'map'
-      }
-    }, topLabelId || undefined);
+    // --- SHADOW layers (gated by FEAT.shadows) ---
+    if (FEAT.shadows) {
+      map.addLayer({
+        id: 'detail-native',
+        type: 'hillshade',
+        source: 'hillshadeSource',
+        layout: { 'visibility': 'none' },
+        paint: {
+          'hillshade-exaggeration': 1.0,
+          'hillshade-illumination-anchor': 'map',
+          'hillshade-accent-color': '#00ff00'
+        }
+      }, topLabelId || undefined);
+
+      map.addLayer({
+        id: 'shadow-native',
+        type: 'hillshade',
+        source: 'shadowDemSource',
+        layout: { 'visibility': 'none' },
+        paint: {
+          'hillshade-exaggeration': 1.0,
+          'hillshade-illumination-anchor': 'map'
+        }
+      }, topLabelId || undefined);
+
+      console.log('[App] Shadow layers added (detail-native, shadow-native)');
+    }
 
     // Now apply state (contours exist, hillshade exists)
     applyImageryState();

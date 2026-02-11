@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MapLibre 3D Performance Test — Vanilla CDN</title>
+    <!-- Pure vanilla MapLibre from CDN — completely independent from any fork -->
+    <script src="https://unpkg.com/maplibre-gl@5.16.0/dist/maplibre-gl.js"></script>
+    <link href="https://unpkg.com/maplibre-gl@5.16.0/dist/maplibre-gl.css" rel="stylesheet" />
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: system-ui, sans-serif;
+        }
+
+        #map {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 100%;
+        }
+
+        #controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 10;
+            background: rgba(0, 0, 0, 0.85);
+            color: #fff;
+            padding: 15px;
+            border-radius: 10px;
+            font-size: 14px;
+            min-width: 220px;
+            backdrop-filter: blur(10px);
+        }
+
+        #fps-display {
+            font-size: 36px;
+            font-weight: bold;
+            color: #4ade80;
+            margin: 5px 0;
+            font-variant-numeric: tabular-nums;
+        }
+
+        #fps-display.warning {
+            color: #fbbf24;
+        }
+
+        #fps-display.critical {
+            color: #f87171;
+        }
+
+        button {
+            display: block;
+            width: 100%;
+            padding: 10px;
+            margin: 6px 0;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        #toggle-3d {
+            background: #3b82f6;
+            color: white;
+        }
+
+        #toggle-3d:hover {
+            background: #2563eb;
+        }
+
+        #toggle-3d.active-3d {
+            background: #ef4444;
+        }
+
+        #toggle-3d.active-3d:hover {
+            background: #dc2626;
+        }
+
+        #toggle-hillshade {
+            background: #6366f1;
+            color: white;
+        }
+
+        #toggle-hillshade:hover {
+            background: #4f46e5;
+        }
+
+        #toggle-flat {
+            background: #059669;
+            color: white;
+        }
+
+        #toggle-flat:hover {
+            background: #047857;
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 2px 0;
+            font-size: 12px;
+            color: #aaa;
+        }
+
+        .info-row span:last-child {
+            font-weight: bold;
+            color: #fff;
+        }
+
+        hr {
+            border: none;
+            border-top: 1px solid #333;
+            margin: 8px 0;
+        }
+
+        .tag {
+            display: inline-block;
+            background: #22c55e;
+            color: #000;
+            font-size: 10px;
+            font-weight: bold;
+            padding: 2px 6px;
+            border-radius: 3px;
+            margin-bottom: 5px;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="map"></div>
+
+    <div id="controls">
+        <span class="tag">VANILLA CDN v5.16.0</span>
+        <div>FPS</div>
+        <div id="fps-display">--</div>
+        <div class="info-row">
+            <span>Min</span><span id="fps-min">--</span>
+        </div>
+        <div class="info-row">
+            <span>Max</span><span id="fps-max">--</span>
+        </div>
+        <div class="info-row">
+            <span>Avg (5s)</span><span id="fps-avg">--</span>
+        </div>
+
+        <hr>
+
+        <div class="info-row">
+            <span>Mode</span><span id="mode-display">2D</span>
+        </div>
+        <div class="info-row">
+            <span>Pitch</span><span id="pitch-display">0°</span>
+        </div>
+        <div class="info-row">
+            <span>Zoom</span><span id="zoom-display">--</span>
+        </div>
+
+        <hr>
+
+        <button id="toggle-3d">Switch to 3D (pitch 60°)</button>
+        <button id="toggle-flat">3D Flat (pitch 0°, terrain ON)</button>
+        <button id="toggle-hillshade">Hide Hillshade</button>
+
+        <div style="font-size: 10px; color: #555; margin-top: 8px;">
+            Matterhorn · Mapterhorn DEM · Terrarium
+        </div>
+    </div>
+
+    <script>
+        // ==========================================
+        // MAP SETUP — Using Mapterhorn DEM (terrarium)
+        // and OpenFreeMap for vector tiles (no API key needed)
+        // ==========================================
+        const map = new maplibregl.Map({
+            container: 'map',
+            style: {
+                version: 8,
+                sources: {
+                    'osm-tiles': {
+                        type: 'raster',
+                        tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+                        tileSize: 256,
+                        attribution: '© OpenStreetMap contributors'
+                    },
+                    'terrain-dem': {
+                        type: 'raster-dem',
+                        tiles: ['https://tiles.mapterhorn.com/{z}/{x}/{y}.webp'],
+                        encoding: 'terrarium',
+                        tileSize: 256,
+                        maxzoom: 14
+                    },
+                    'hillshade-dem': {
+                        type: 'raster-dem',
+                        tiles: ['https://tiles.mapterhorn.com/{z}/{x}/{y}.webp'],
+                        encoding: 'terrarium',
+                        tileSize: 256,
+                        maxzoom: 14
+                    }
+                },
+                layers: [
+                    {
+                        id: 'osm-raster',
+                        type: 'raster',
+                        source: 'osm-tiles'
+                    },
+                    {
+                        id: 'hillshade',
+                        type: 'hillshade',
+                        source: 'hillshade-dem',
+                        paint: {
+                            'hillshade-exaggeration': 0.3,
+                            'hillshade-shadow-color': 'rgba(0,0,0,0.5)',
+                            'hillshade-highlight-color': 'rgba(255,255,255,0.8)'
+                        }
+                    }
+                ]
+            },
+            center: [7.6586, 45.9763], // Matterhorn
+            zoom: 12,
+            pitch: 0,
+            maxPitch: 85
+        });
+
+        // ==========================================
+        // FPS COUNTER
+        // ==========================================
+        let frameCount = 0;
+        let lastTime = performance.now();
+        let fpsHistory = [];
+        let minFps = Infinity;
+        let maxFps = 0;
+        let is3D = false;
+        let hillshadeVisible = true;
+
+        const fpsDisplay = document.getElementById('fps-display');
+        const fpsMin = document.getElementById('fps-min');
+        const fpsMax = document.getElementById('fps-max');
+        const fpsAvg = document.getElementById('fps-avg');
+        const modeDisplay = document.getElementById('mode-display');
+        const pitchDisplay = document.getElementById('pitch-display');
+        const zoomDisplay = document.getElementById('zoom-display');
+
+        function resetStats() {
+            minFps = Infinity;
+            maxFps = 0;
+            fpsHistory = [];
+            fpsMin.textContent = '--';
+            fpsMax.textContent = '--';
+            fpsAvg.textContent = '--';
+        }
+
+        function updateFPS() {
+            frameCount++;
+            const now = performance.now();
+            const elapsed = now - lastTime;
+
+            if (elapsed >= 500) {
+                const fps = Math.round(frameCount / (elapsed / 1000));
+                frameCount = 0;
+                lastTime = now;
+
+                fpsDisplay.textContent = fps;
+                fpsDisplay.className = '';
+                if (fps < 15) fpsDisplay.classList.add('critical');
+                else if (fps < 30) fpsDisplay.classList.add('warning');
+
+                if (fps < minFps) { minFps = fps; fpsMin.textContent = fps; }
+                if (fps > maxFps) { maxFps = fps; fpsMax.textContent = fps; }
+
+                fpsHistory.push(fps);
+                if (fpsHistory.length > 10) fpsHistory.shift();
+                const avg = Math.round(fpsHistory.reduce((a, b) => a + b, 0) / fpsHistory.length);
+                fpsAvg.textContent = avg;
+            }
+
+            pitchDisplay.textContent = Math.round(map.getPitch()) + '°';
+            zoomDisplay.textContent = map.getZoom().toFixed(1);
+
+            requestAnimationFrame(updateFPS);
+        }
+
+        map.on('load', () => {
+            requestAnimationFrame(updateFPS);
+            // Force continuous repaints for accurate FPS
+            function repaint() {
+                map.triggerRepaint();
+                requestAnimationFrame(repaint);
+            }
+            repaint();
+            console.log('Map loaded. MapLibre version:', maplibregl.version);
+        });
+
+        // ==========================================
+        // CONTROLS
+        // ==========================================
+
+        // Toggle 3D (terrain + pitch)
+        document.getElementById('toggle-3d').addEventListener('click', () => {
+            is3D = !is3D;
+            resetStats();
+
+            if (is3D) {
+                map.setTerrain({ source: 'terrain-dem', exaggeration: 1.2 });
+                map.easeTo({ pitch: 60, duration: 1000 });
+                document.getElementById('toggle-3d').textContent = 'Switch to 2D';
+                document.getElementById('toggle-3d').classList.add('active-3d');
+                modeDisplay.textContent = '3D (60°)';
+            } else {
+                map.setTerrain(null);
+                map.easeTo({ pitch: 0, duration: 1000 });
+                document.getElementById('toggle-3d').textContent = 'Switch to 3D (pitch 60°)';
+                document.getElementById('toggle-3d').classList.remove('active-3d');
+                modeDisplay.textContent = '2D';
+            }
+        });
+
+        // Toggle 3D flat (terrain ON, pitch 0°) — to isolate terrain overhead from tilt
+        document.getElementById('toggle-flat').addEventListener('click', () => {
+            resetStats();
+            const hasTerrain = !!map.getTerrain();
+            if (hasTerrain) {
+                map.setTerrain(null);
+                map.easeTo({ pitch: 0, duration: 500 });
+                document.getElementById('toggle-flat').textContent = '3D Flat (pitch 0°, terrain ON)';
+                modeDisplay.textContent = '2D';
+            } else {
+                map.setTerrain({ source: 'terrain-dem', exaggeration: 1.2 });
+                map.easeTo({ pitch: 0, duration: 500 });
+                document.getElementById('toggle-flat').textContent = 'Disable Terrain';
+                modeDisplay.textContent = '3D flat (0°)';
+            }
+        });
+
+        // Toggle hillshade
+        document.getElementById('toggle-hillshade').addEventListener('click', () => {
+            hillshadeVisible = !hillshadeVisible;
+            map.setLayoutProperty('hillshade', 'visibility', hillshadeVisible ? 'visible' : 'none');
+            document.getElementById('toggle-hillshade').textContent = hillshadeVisible ? 'Hide Hillshade' : 'Show Hillshade';
+        });
+    </script>
+</body>
+
+</html>

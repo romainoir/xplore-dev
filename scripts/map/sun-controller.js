@@ -232,7 +232,7 @@ export function updateSunPosition(map, lat, lon, date) {
                 : 0.0;
 
         // 1. Sky settings
-        if (typeof map.setSky === 'function') {
+        if (typeof map.setSky === 'function' && !window._disableSkyUpdate) {
             map.setSky({
                 'sky-color': currentColors.sky,
                 'horizon-color': currentColors.horizon,
@@ -243,7 +243,7 @@ export function updateSunPosition(map, lat, lon, date) {
 
         // 2. Volumetric Fog with sun glare effect
         // Skip if manual override is active (user is debugging)
-        if (typeof map.setFog === 'function' && !window._fogManualOverride) {
+        if (typeof map.setFog === 'function' && !window._fogManualOverride && !window._disableFog) {
             // Base fog range
             let fogNear = sunAlt > 10 ? 0.3 : 0.5;
             let fogFar = sunAlt > 10 ? 4.0 : 2.5;

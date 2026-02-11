@@ -227,7 +227,13 @@ export class DirectionsManager {
     this.setupRouteLayers();
 
     // Ensure route layers stay on top when custom layers are toggled or style changes
-    this.map.on('styledata', () => {
+    // PERF FIX: Only reorder on style.load (not every styledata which fires per tile).
+    // Also track dirty flag so we only reorder when layers actually changed.
+    this._routeLayersDirty = true;
+    this._cachedFirstSymbolId = null;
+    this.map.on('style.load', () => {
+      this._routeLayersDirty = true;
+      this._cachedFirstSymbolId = null;
       if (typeof this.moveRouteLayersToTop === 'function') {
         this.moveRouteLayersToTop();
       }

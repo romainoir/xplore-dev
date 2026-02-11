@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Clean App Test — Same Sources, No App JS</title>
+    <link rel="stylesheet" href="./libs/maplibre-gl.css">
+    <style>
+        body {
+            margin: 0;
+            font-family: -apple-system, sans-serif;
+        }
+
+        #map {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+        }
+
+        #panel {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            z-index: 10;
+            background: rgba(0, 0, 0, 0.85);
+            color: #fff;
+            padding: 12px 16px;
+            border-radius: 10px;
+            font-size: 13px;
+            max-width: 260px;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        #panel h3 {
+            margin: 0 0 8px;
+            font-size: 14px;
+        }
+
+        .layer-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin: 3px 0;
+        }
+
+        .layer-row label {
+            flex: 1;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        #fps {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            z-index: 99999;
+            background: rgba(0, 0, 0, 0.85);
+            color: #2ecc71;
+            padding: 8px 14px;
+            font: bold 24px monospace;
+            border-radius: 8px;
+            pointer-events: none;
+        }
+
+        #info {
+            position: fixed;
+            bottom: 10px;
+            left: 10px;
+            z-index: 10;
+            background: rgba(0, 0, 0, 0.75);
+            color: #ccc;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font: 12px monospace;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="map"></div>
+    <div id="fps">-- FPS</div>
+    <div id="panel">
+        <h3>🔬 Clean App Test</h3>
+        <div id="layers"></div>
+        <hr style="border-color:#555; margin: 8px 0">
+        <div id="sources-info" style="font-size:11px; color:#888"></div>
+    </div>
+    <div id="info">Loading...</div>
+
+    <script src="./libs/maplibre-gl.js"></script>
+    <script src="https://unpkg.com/mapbox-gl-fps@1.0.1/lib/MapboxFPS.min.js"></script>
+    <script src="https://unpkg.com/maplibre-contour@0.1.0/dist/index.min.js"></script>
+    <script>
+        const DEM_URL = 'https://tiles.mapterhorn.com/{z}/{x}/{y}.webp';
+        const DEM_MAXZOOM = 17;
+        const DEM_ATTR = '<a href="https://mapterhorn.com">© Mapterhorn</a>';
+
+        // FPS counter
+        const fpsEl = document.getElementById('fps');
+        let frames = [], lt = performance.now();
+        (function fps() {
+            const n = performance.now(); frames.push(n - lt); lt = n;
+            if (frames.length > 60) frames.shift();
+            const f = Math.round(1000 / (frames.reduce((a, b) => a + b) / frames.length));
+            fpsEl.textContent = f + ' FPS';
+            fpsEl.style.color = f > 40 ? '#2ecc71' : f > 20 ? '#f1c40f' : '#e74c3c';
+            requestAnimationFrame(fps);
+        })();
+
+        // Load the SAME style as the main app
+        fetch('./osm_liberty.json', { cache: 'no-store' })
+            .then(r => r.json())
+            .then(style => {
+                style.glyphs = 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf';
+                style.sprite = 'https://maputnik.github.io/osm-liberty/sprites/osm-liberty';
+                style.projection = { type: 'mercator' };
+                style.light = { anchor: 'map', position: [1.5, 90, 80] };
+
+                const map = new maplibregl.Map({
+                    container: 'map',
+                    style: style,
+                    pixelRatio: window.devicePixelRatio,
+                    center: [7.36, 46.02],
+                    zoom: 12.7,
+                    pitch: 80,
+                    bearing: 0,
+                    hash: true,
+                    maxPitch: 85,
+                    antialias: true,           // match main app
+                    fadeDuration: 800,         // match main app
+                    maxTileCacheSize: 1000,    // match main app
+                    attributionControl: false
+                });
+
+                window.map = map;
+
+                map.addControl(new maplibregl.NavigationControl());
+                map.addControl(new MapboxFPS.FPSControl(), 'bottom-left');
+
+                map.on('load', () => {
+                    // --- DEM Sources (same as main app) ---
+                    map.addSource('terrainSource', {
+                        type: 'raster-dem', tiles: [DEM_URL],
+                        encoding: 'terrarium', tileSize: 512,
+                        maxzoom: DEM_MAXZOOM, attribution: DEM_ATTR
+                    });
+                    map.addSource('hillshadeSource', {
+                        type: 'raster-dem', tiles: [DEM_URL],
+                        encoding: 'terrarium', tileSize: 512,
+                        maxzoom: DEM_MAXZOOM, attribution: DEM_ATTR
+                    });
+
+                    // --- Terrain ---
+                    map.setTerrain({ source: 'terrainSource', exaggeration: 1 });
+
+                    // --- Contour Source ---
+                    const demSource = new mlcontour.DemSource({
+                        url: DEM_URL, encoding: 'terrarium',
+                        maxzoom: DEM_MAXZOOM, worker: true, tileSize: 512
+                    });
+                    demSource.setupMaplibre(maplibregl);
+
+                    map.addSource('contours', {
+                        type: 'vector',
+                        tiles: [demSource.contourProtocolUrl({ thresholds: { 11: [200, 1000], 12: [100, 500], 14: [50, 200] } })],
+                        maxzoom: 16
+                    });
+
+                    // --- Find top label layer for insertion ---
+                    const layers = map.getStyle().layers || [];
+                    let topLabelId = null;
+                    for (let i = layers.length - 1; i >= 0; i--) {
+                        if (layers[i].type === 'symbol') { topLabelId = layers[i].id; break; }
+                    }
+
+                    // --- Hillshade Layer ---
+                    map.addLayer({
+                        id: 'hillshade', type: 'hillshade', source: 'hillshadeSource',
+                        paint: {
+                            'hillshade-highlight-color': 'rgba(255,255,255,0.9)',
+                            'hillshade-accent-color': 'rgba(0,0,0,0.55)',
+                            'hillshade-exaggeration': 0.23,
+                            'hillshade-shadow-color': 'rgba(0,0,0,0.55)'
+                        }
+                    }, topLabelId || undefined);
+
+                    // --- Contour Lines Layer ---
+                    map.addLayer({
+                        id: 'contour-lines', type: 'line', source: 'contours', 'source-layer': 'contour',
+                        layout: { visibility: 'none' },
+                        paint: {
+                            'line-color': 'rgba(139,90,43,0.3)',
+                            'line-width': ['match', ['get', 'level'], 1, 1.2, 0.5]
+                        }
+                    }, topLabelId || undefined);
+
+                    // --- Contour Labels Layer ---
+                    map.addLayer({
+                        id: 'contour-labels', type: 'symbol', source: 'contours', 'source-layer': 'contour',
+                        layout: {
+                            visibility: 'none',
+                            'symbol-placement': 'line', 'text-size': 10,
+                            'text-field': ['concat', ['number-format', ['get', 'ele'], {}], ' m'],
+                            'text-font': ['Noto Sans Regular']
+                        },
+                        filter: ['>', 'level', 0],
+                        paint: { 'text-color': 'rgba(139,90,43,0.8)', 'text-halo-color': 'rgba(255,255,255,0.7)', 'text-halo-width': 1 }
+                    }, topLabelId || undefined);
+
+                    // Update info
+                    const s = map.getStyle();
+                    const srcCount = Object.keys(s.sources).length;
+                    const lyrCount = s.layers.length;
+                    const visible = s.layers.filter(l => !l.layout || l.layout.visibility !== 'none').length;
+                    document.getElementById('info').textContent =
+                        `Sources: ${srcCount} | Layers: ${lyrCount} | Visible: ${visible}`;
+                    document.getElementById('sources-info').textContent =
+                        'Sources: ' + Object.keys(s.sources).join(', ');
+
+                    // Build layer panel
+                    buildLayerPanel(map);
+                });
+            });
+
+        function buildLayerPanel(map) {
+            const container = document.getElementById('layers');
+            const toggleLayers = [
+                { id: 'hillshade', label: 'Hillshade', default: true },
+                { id: 'contour-lines', label: 'Contour Lines', default: false },
+                { id: 'contour-labels', label: 'Contour Labels', default: false },
+            ];
+
+            // Add terrain toggle
+            const terrainRow = document.createElement('div');
+            terrainRow.className = 'layer-row';
+            const terrainCb = document.createElement('input');
+            terrainCb.type = 'checkbox'; terrainCb.checked = true;
+            terrainCb.onchange = () => {
+                if (terrainCb.checked) {
+                    map.setTerrain({ source: 'terrainSource', exaggeration: 1 });
+                } else {
+                    map.setTerrain(null);
+                }
+            };
+            const terrainLabel = document.createElement('label');
+            terrainLabel.textContent = '3D Terrain';
+            terrainRow.append(terrainCb, terrainLabel);
+            container.appendChild(terrainRow);
+
+            // Add layer toggles
+            toggleLayers.forEach(({ id, label, default: on }) => {
+                const row = document.createElement('div');
+                row.className = 'layer-row';
+                const cb = document.createElement('input');
+                cb.type = 'checkbox'; cb.checked = on;
+                cb.onchange = () => {
+                    map.setLayoutProperty(id, 'visibility', cb.checked ? 'visible' : 'none');
+                };
+                const lbl = document.createElement('label');
+                lbl.textContent = label;
+                row.append(cb, lbl);
+                container.appendChild(row);
+            });
+
+            // Pitch slider
+            const pitchRow = document.createElement('div');
+            pitchRow.style.marginTop = '8px';
+            pitchRow.innerHTML = '<label style="font-size:11px">Pitch: <span id="pv">80</span>°</label>';
+            const pitchSlider = document.createElement('input');
+            pitchSlider.type = 'range'; pitchSlider.min = 0; pitchSlider.max = 85;
+            pitchSlider.value = 80; pitchSlider.style.width = '100%';
+            pitchSlider.oninput = () => {
+                map.setPitch(+pitchSlider.value);
+                document.getElementById('pv').textContent = pitchSlider.value;
+            };
+            pitchRow.appendChild(pitchSlider);
+            container.appendChild(pitchRow);
+        }
+    </script>
+</body>
+
+</html>

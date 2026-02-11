@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Build-Up Test — Adding Layers Incrementally</title>
+    <link href="https://unpkg.com/maplibre-gl@5.15.0/dist/maplibre-gl.css" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            font-family: -apple-system, sans-serif;
+        }
+
+        #map {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+        }
+
+        #panel {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            z-index: 10;
+            background: rgba(0, 0, 0, 0.85);
+            color: #fff;
+            padding: 12px 16px;
+            border-radius: 10px;
+            font-size: 13px;
+            max-width: 300px;
+            max-height: 85vh;
+            overflow-y: auto;
+        }
+
+        #panel h3 {
+            margin: 0 0 8px;
+            font-size: 14px;
+        }
+
+        .group-label {
+            font-size: 11px;
+            color: #999;
+            margin: 8px 0 2px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .layer-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin: 2px 0;
+        }
+
+        .layer-row label {
+            flex: 1;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        #info {
+            position: fixed;
+            bottom: 10px;
+            left: 10px;
+            z-index: 10;
+            background: rgba(0, 0, 0, 0.75);
+            color: #ccc;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font: 12px monospace;
+        }
+
+        #fps {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            z-index: 99999;
+            background: rgba(0, 0, 0, 0.85);
+            color: #2ecc71;
+            padding: 8px 14px;
+            font: bold 24px monospace;
+            border-radius: 8px;
+            pointer-events: none;
+        }
+
+        .feature-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: bold;
+            margin: 1px 2px;
+        }
+
+        .badge-on {
+            background: #27ae60;
+            color: #fff;
+        }
+
+        .badge-off {
+            background: #555;
+            color: #999;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="map"></div>
+    <div id="panel">
+        <h3>🧱 Build-Up Perf Test</h3>
+        <div id="features" style="margin-bottom: 8px;"></div>
+        <hr style="border-color:#555; margin: 4px 0">
+        <div id="layers"></div>
+        <hr style="border-color:#555; margin: 8px 0">
+        <div id="sources-info" style="font-size:11px; color:#888"></div>
+    </div>
+    <div id="info">Loading...</div>
+    <div id="fps">-- FPS</div>
+
+    <script src="./libs/maplibre-gl.js"></script>
+    <script src="https://unpkg.com/maplibre-contour@0.1.0/dist/index.min.js"></script>
+
+    <!-- Main app logic as ES module so we can import DirectionsManager -->
+    <script type="module">
+        import { DirectionsManager } from './scripts/directions/core/directions-manager.js';
+        import { OrsRouter } from './scripts/routing/openrouteservice-directions-client.js';
+
+        const DEM_URL = 'https://tiles.mapterhorn.com/{z}/{x}/{y}.webp';
+        const DEM_MAXZOOM = 17;
+        const DEM_ATTR = '<a href="https://mapterhorn.com">© Mapterhorn</a>';
+
+        function ignUrl(layer, fmt = 'image/png') {
+            const f = encodeURIComponent(fmt), l = encodeURIComponent(layer);
+            return `https://data.geopf.fr/wmts?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile&LAYER=${l}&STYLE=normal&FORMAT=${f}&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}`;
+        }
+
+        // Parse ?feat= URL param to control which features are active
+        const featParam = new URLSearchParams(window.location.search).get('feat') || '';
+        const activeFeats = new Set(featParam ? featParam.split(',') : []);
+
+        const FEAT = {
+            layers: activeFeats.has('layers') || activeFeats.has('all'),
+            routing: activeFeats.has('routing') || activeFeats.has('all'),
+            analysis: activeFeats.has('analysis') || activeFeats.has('all'),
+            shadows: activeFeats.has('shadows') || activeFeats.has('all'),
+        };
+
+        // All imagery layers from the main app
+        const LAYERS = [
+            { id: 'hillshade', group: 'Core', core: true, on: true },
+            { id: 'contour-lines', group: 'Core', core: true, on: true },
+            { id: 'contour-labels', group: 'Core', core: true, on: true },
+            {
+                id: 'strava-heatmap-all', group: 'Heatmap', label: 'Strava All',
+                tiles: 'https://atlas.hartakji.com/strava-heatmap-all/{z}/{x}/{y}', maxzoom: 15
+            },
+            {
+                id: 'strava-winter', group: 'Heatmap', label: 'Strava Winter',
+                tiles: 'https://atlas.hartakji.com/strava-winter/{z}/{x}/{y}', maxzoom: 15
+            },
+            {
+                id: 'ign-traces-hivernales', group: 'Heatmap', label: 'Traces Rando',
+                tiles: 'https://data.geopf.fr/wmts?layer=TRACES.RANDO.HIVERNALE&style=normal&tilematrixset=PM&Service=WMTS&Request=GetTile&Version=1.0.0&Format=image%2Fpng&TileMatrix={z}&TileCol={x}&TileRow={y}', maxzoom: 15
+            },
+            {
+                id: 'snow-depth', group: 'Snow', label: 'Snow Depth (Alps)',
+                tiles: 'https://p20.cosmos-project.ch/BfOlLXvmGpviW0YojaYiRqsT9NHEYdn88fpHZlr_map/gmaps/sd20alps@epsg3857/{z}/{x}/{y}.png', maxzoom: 22
+            },
+            {
+                id: 'ign-scan', group: 'IGN', label: 'IGN Scan (Topo)',
+                tiles: 'https://data.geopf.fr/private/wmts?apikey=ign_scan_ws&layer=GEOGRAPHICALGRIDSYSTEMS.MAPS&style=normal&tilematrixset=PM&Service=WMTS&Request=GetTile&Version=1.0.0&Format=image%2Fjpeg&TileMatrix={z}&TileCol={x}&TileRow={y}', maxzoom: 15
+            },
+            {
+                id: 'ign-cosia', group: 'Land Cover', label: 'IGN Kosia',
+                tiles: ignUrl('IGNF_COSIA_2021-2023'), maxzoom: 18
+            },
+            {
+                id: 'ign-forest-inventory', group: 'Land Cover', label: 'Forest Inventory',
+                tiles: ignUrl('LANDCOVER.FORESTINVENTORY.V2'), maxzoom: 18
+            },
+            {
+                id: 'ign-orthophotos', group: 'Satellite', label: 'IGN Orthophotos',
+                tiles: ignUrl('ORTHOIMAGERY.ORTHOPHOTOS.BDORTHO', 'image/jpeg'), maxzoom: 18
+            },
+            {
+                id: 's2cloudless', group: 'Satellite', label: 'EOX Satellite',
+                tiles: 'https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2020_3857/default/g/{z}/{y}/{x}.jpg', maxzoom: 18
+            },
+            {
+                id: 'ign-lidar-hd-mns-shadow', group: 'Lidar HD', label: 'MNS',
+                tiles: ignUrl('IGNF_LIDAR-HD_MNS_ELEVATION.ELEVATIONGRIDCOVERAGE.SHADOW'), maxzoom: 18
+            },
+            {
+                id: 'ign-lidar-hd-mnt-shadow', group: 'Lidar HD', label: 'MNT',
+                tiles: ignUrl('IGNF_LIDAR-HD_MNT_ELEVATION.ELEVATIONGRIDCOVERAGE.SHADOW'), maxzoom: 18
+            },
+        ];
+
+        // Show active features as badges
+        const featuresEl = document.getElementById('features');
+        Object.entries(FEAT).forEach(([key, val]) => {
+            const b = document.createElement('span');
+            b.className = `feature-badge ${val ? 'badge-on' : 'badge-off'}`;
+            b.textContent = key;
+            featuresEl.appendChild(b);
+        });
+
+        fetch('./osm_liberty.json', { cache: 'no-store' })
+            .then(r => r.json())
+            .then(style => {
+                style.glyphs = 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf';
+                style.sprite = 'https://maputnik.github.io/osm-liberty/sprites/osm-liberty';
+                style.projection = { type: 'mercator' };
+                style.light = { anchor: 'map', position: [1.5, 90, 80] };
+
+                const map = new maplibregl.Map({
+                    container: 'map',
+                    style,
+                    pixelRatio: window.devicePixelRatio,
+                    center: [7.36, 46.02],
+                    zoom: 12.7,
+                    pitch: 80,
+                    bearing: 0,
+                    hash: true,
+                    maxPitch: 85,
+                    antialias: true,
+                    fadeDuration: 800,
+                    maxTileCacheSize: 1000,
+                    attributionControl: false
+                });
+
+                window.map = map;
+                window.xploreMap = map;
+                map.addControl(new maplibregl.NavigationControl());
+
+                // --- FPS counter ---
+                const fpsEl = document.getElementById('fps');
+                let renderTimes = [], lastRender = performance.now();
+                map.on('render', () => {
+                    const now = performance.now();
+                    renderTimes.push(now - lastRender);
+                    lastRender = now;
+                    if (renderTimes.length > 60) renderTimes.shift();
+                    const avg = renderTimes.reduce((a, b) => a + b) / renderTimes.length;
+                    const fps = Math.round(1000 / avg);
+                    fpsEl.textContent = fps + ' FPS';
+                    fpsEl.style.color = fps > 40 ? '#2ecc71' : fps > 20 ? '#f1c40f' : '#e74c3c';
+                });
+
+                // Handle missing sprite images
+                map.on('styleimagemissing', (e) => {
+                    if (map.hasImage(e.id)) return;
+                    map.addImage(e.id, { width: 1, height: 1, data: new Uint8Array([0, 0, 0, 0]) });
+                });
+
+                map.on('load', () => {
+                    // --- DEM Sources ---
+                    map.addSource('terrainSource', {
+                        type: 'raster-dem', tiles: [DEM_URL],
+                        encoding: 'terrarium', tileSize: 512,
+                        maxzoom: DEM_MAXZOOM, attribution: DEM_ATTR
+                    });
+                    map.addSource('hillshadeSource', {
+                        type: 'raster-dem', tiles: [DEM_URL],
+                        encoding: 'terrarium', tileSize: 512,
+                        maxzoom: DEM_MAXZOOM, attribution: DEM_ATTR
+                    });
+                    map.setTerrain({ source: 'terrainSource', exaggeration: 1 });
+
+                    // --- Contour Source ---
+                    const demSource = new mlcontour.DemSource({
+                        url: DEM_URL, encoding: 'terrarium',
+                        maxzoom: DEM_MAXZOOM, worker: true, tileSize: 512
+                    });
+                    demSource.setupMaplibre(maplibregl);
+                    map.addSource('contours', {
+                        type: 'vector',
+                        tiles: [demSource.contourProtocolUrl({ thresholds: { 11: [200, 1000], 12: [100, 500], 14: [50, 200] } })],
+                        maxzoom: 16
+                    });
+
+                    // --- Find insertion point ---
+                    const layers = map.getStyle().layers || [];
+                    let topLabelId = null;
+                    for (let i = layers.length - 1; i >= 0; i--) {
+                        if (layers[i].type === 'symbol') { topLabelId = layers[i].id; break; }
+                    }
+                    const before = topLabelId || undefined;
+
+                    // --- Hillshade ---
+                    map.addLayer({
+                        id: 'hillshade', type: 'hillshade', source: 'hillshadeSource',
+                        paint: { 'hillshade-exaggeration': 0.23 }
+                    }, before);
+
+                    // --- Contour Lines ---
+                    map.addLayer({
+                        id: 'contour-lines', type: 'line', source: 'contours', 'source-layer': 'contour',
+                        paint: { 'line-color': 'rgba(139,90,43,0.3)', 'line-width': ['match', ['get', 'level'], 1, 1.2, 0.5] }
+                    }, before);
+                    map.addLayer({
+                        id: 'contour-labels', type: 'symbol', source: 'contours', 'source-layer': 'contour',
+                        layout: {
+                            'symbol-placement': 'line', 'text-size': 10,
+                            'text-field': ['concat', ['number-format', ['get', 'ele'], {}], ' m'],
+                            'text-font': ['Noto Sans Regular']
+                        },
+                        filter: ['>', 'level', 0],
+                        paint: { 'text-color': 'rgba(139,90,43,0.8)', 'text-halo-color': 'rgba(255,255,255,0.7)', 'text-halo-width': 1 }
+                    }, before);
+
+                    // --- FEAT: analysis — Terrain analysis layers ---
+                    if (FEAT.analysis) {
+                        console.log('[FEAT] Adding terrain analysis layers');
+                        const analysisLayers = [
+                            { id: 'normalmap', label: 'Normal Map' },
+                            { id: 'snow-native', label: 'Snow' },
+                            { id: 'aspect-native', label: 'Aspect' },
+                            { id: 'slope-native', label: 'Slope' },
+                            { id: 'avalanche-native', label: 'Avalanche' },
+                        ];
+                        analysisLayers.forEach(l => {
+                            map.addLayer({
+                                id: l.id, type: 'hillshade', source: 'hillshadeSource',
+                                layout: { visibility: 'none' },
+                                paint: { 'hillshade-exaggeration': 1.0 }
+                            }, before);
+                        });
+                        // Store for panel building
+                        window._analysisLayers = analysisLayers;
+                    }
+
+                    // --- FEAT: shadows — Shadow + detail shading layers ---
+                    if (FEAT.shadows) {
+                        console.log('[FEAT] Adding shadow layers');
+                        // Shadow needs its own DEM source with lower maxzoom
+                        map.addSource('shadowDemSource', {
+                            type: 'raster-dem', tiles: [DEM_URL],
+                            encoding: 'terrarium', tileSize: 512,
+                            maxzoom: 11, attribution: DEM_ATTR
+                        });
+                        map.addLayer({
+                            id: 'detail-native', type: 'hillshade', source: 'hillshadeSource',
+                            layout: { visibility: 'none' },
+                            paint: {
+                                'hillshade-exaggeration': 1.0,
+                                'hillshade-illumination-anchor': 'map',
+                                'hillshade-accent-color': '#00ff00'
+                            }
+                        }, before);
+                        map.addLayer({
+                            id: 'shadow-native', type: 'hillshade', source: 'shadowDemSource',
+                            layout: { visibility: 'none' },
+                            paint: {
+                                'hillshade-exaggeration': 1.0,
+                                'hillshade-illumination-anchor': 'map'
+                            }
+                        }, before);
+                        window._shadowLayers = [
+                            { id: 'detail-native', label: 'Detail Shading' },
+                            { id: 'shadow-native', label: 'Shadow' },
+                        ];
+                    }
+
+                    // --- FEAT: layers — Add all raster imagery sources (hidden by default) ---
+                    if (FEAT.layers) {
+                        console.log('[FEAT] Adding all imagery layers');
+                        LAYERS.filter(l => l.tiles).forEach(l => {
+                            map.addSource(l.id, {
+                                type: 'raster', tiles: [l.tiles], tileSize: 256,
+                                maxzoom: l.maxzoom || 18
+                            });
+                            map.addLayer({
+                                id: l.id, type: 'raster', source: l.id,
+                                layout: { visibility: 'none' },
+                                paint: { 'raster-opacity': 1 }
+                            }, before);
+                        });
+                    }
+
+                    // --- FEAT: routing — Initialize DirectionsManager ---
+                    if (FEAT.routing) {
+                        console.log('[FEAT] Initializing DirectionsManager + OrsRouter');
+                        try {
+                            const router = new OrsRouter();
+                            const dm = new DirectionsManager(map, [], { router });
+                            window.directionsManager = dm;
+                            console.log('[FEAT] DirectionsManager ready. Click map to add waypoints.');
+                        } catch (err) {
+                            console.error('[FEAT] DirectionsManager init failed:', err);
+                        }
+                    }
+
+                    // --- Update info ---
+                    updateInfo();
+                    buildPanel(map);
+                });
+            });
+
+        function updateInfo() {
+            const s = map.getStyle();
+            const srcCount = Object.keys(s.sources).length;
+            const lyrCount = s.layers.length;
+            const visible = s.layers.filter(l => !l.layout || l.layout.visibility !== 'none').length;
+            document.getElementById('info').textContent =
+                `Sources: ${srcCount} | Layers: ${lyrCount} | Visible: ${visible}`;
+        }
+
+        function buildPanel(map) {
+            const container = document.getElementById('layers');
+
+            addToggle(container, '3D Terrain', true, checked => {
+                checked ? map.setTerrain({ source: 'terrainSource', exaggeration: 1 }) : map.setTerrain(null);
+            });
+
+            if (FEAT.layers) {
+                const groups = {};
+                LAYERS.forEach(l => {
+                    const g = l.group || 'Other';
+                    if (!groups[g]) groups[g] = [];
+                    groups[g].push(l);
+                });
+
+                Object.entries(groups).forEach(([groupName, items]) => {
+                    const label = document.createElement('div');
+                    label.className = 'group-label';
+                    label.textContent = groupName;
+                    container.appendChild(label);
+
+                    items.forEach(l => {
+                        addToggle(container, l.label || l.id, l.on || false, checked => {
+                            map.setLayoutProperty(l.id, 'visibility', checked ? 'visible' : 'none');
+                            updateInfo();
+                        });
+                    });
+                });
+            }
+
+            // Terrain analysis toggles
+            if (window._analysisLayers) {
+                const label = document.createElement('div');
+                label.className = 'group-label';
+                label.textContent = 'Terrain Analysis';
+                container.appendChild(label);
+                window._analysisLayers.forEach(l => {
+                    addToggle(container, l.label, false, checked => {
+                        map.setLayoutProperty(l.id, 'visibility', checked ? 'visible' : 'none');
+                        updateInfo();
+                    });
+                });
+            }
+
+            // Shadow toggles
+            if (window._shadowLayers) {
+                const label = document.createElement('div');
+                label.className = 'group-label';
+                label.textContent = 'Shadows';
+                container.appendChild(label);
+                window._shadowLayers.forEach(l => {
+                    addToggle(container, l.label, false, checked => {
+                        map.setLayoutProperty(l.id, 'visibility', checked ? 'visible' : 'none');
+                        updateInfo();
+                    });
+                });
+            }
+
+            // Pitch slider
+            const pitchRow = document.createElement('div');
+            pitchRow.style.marginTop = '8px';
+            pitchRow.innerHTML = '<label style="font-size:11px">Pitch: <span id="pv">80</span>°</label>';
+            const slider = document.createElement('input');
+            slider.type = 'range'; slider.min = 0; slider.max = 85; slider.value = 80;
+            slider.style.width = '100%';
+            slider.oninput = () => { map.setPitch(+slider.value); document.getElementById('pv').textContent = slider.value; };
+            pitchRow.appendChild(slider);
+            container.appendChild(pitchRow);
+        }
+
+        function addToggle(container, label, defaultOn, onChange) {
+            const row = document.createElement('div');
+            row.className = 'layer-row';
+            const cb = document.createElement('input');
+            cb.type = 'checkbox'; cb.checked = defaultOn;
+            cb.onchange = () => onChange(cb.checked);
+            const lbl = document.createElement('label');
+            lbl.textContent = label;
+            row.append(cb, lbl);
+            container.appendChild(row);
+        }
+    </script>
+</body>
+
+</html>
