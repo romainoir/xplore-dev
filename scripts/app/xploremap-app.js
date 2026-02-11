@@ -1,11 +1,16 @@
 import {
+  COLOR_RELIEF_COLOR_RAMP,
+  BASE_STYLE_RELIEF_OPACITY,
   DEFAULT_3D_ORIENTATION,
+  RELIEF_OPACITY,
+  MAPLIBRE_SPRITE_URL,
   S2C_URL,
   S2_FADE_DURATION,
   S2_OPACITY,
   SKY_SETTINGS,
   TILE_FADE_DURATION,
   VIEW_MODES,
+  VERSATILES_LOCAL_JSON,
   MAPTERHORN_TILE_URL,
   MAPTERHORN_ATTRIBUTION
 } from '../config/map-config.js';
@@ -2258,7 +2263,7 @@ async function init() {
     defaultMode: VIEW_MODES.THREED,
     defaultOrientation: DEFAULT_3D_ORIENTATION,
     terrainSourceId: 'terrainSource',
-    hdSources: ['terrainSource', 'hillshadeSource', 'reliefDem']
+    hdSources: ['terrainSource', 'hillshadeSource', 'reliefDem', 'color-relief']
   });
 
 
@@ -2400,12 +2405,10 @@ async function init() {
   // === Vector Data Toggle (entire OSM Liberty layer) ===
   const vectorToggle = document.getElementById('vectorToggle');
   if (vectorToggle) {
-    // Restore persisted state
     const vectorVisible = localStorage.getItem('xplore_vector_visible') !== 'false';
     vectorToggle.checked = vectorVisible;
 
     const applyVectorVisibility = (visible) => {
-      // Hide ALL layers from vector tile sources (the full OSM Liberty stack)
       const style = map.getStyle();
       if (!style) return;
       const vectorSourceIds = new Set();
@@ -2419,7 +2422,6 @@ async function init() {
       });
     };
 
-    // Apply on first load (after style loads)
     if (!vectorVisible) {
       map.once('style.load', () => applyVectorVisibility(false));
     }
@@ -4029,6 +4031,7 @@ async function init() {
     }
 
     rmL('hillshade');
+    rmL('color-relief');
     IMAGERY_OPTIONS.forEach((option) => {
       const layerIds = [];
       if (typeof option.layerId === 'string') layerIds.push(option.layerId);
@@ -4090,11 +4093,30 @@ async function init() {
       attribution: MAPTERHORN_ATTRIBUTION
     });
 
+    map.addSource('color-relief', {
+      type: 'raster-dem',
+      tiles: [MAPTERHORN_TILE_URL],
+      encoding: 'terrarium',
+      tileSize: 512,
+      maxzoom: DEM_SOURCE_MAX_ZOOM,
+      attribution: MAPTERHORN_ATTRIBUTION
+    });
+
     map.addLayer({
       id: 'terrain',
       type: 'raster',
       source: 'terrainSource'
     });
+
+    map.addLayer({
+      id: 'color-relief',
+      type: 'color-relief',
+      source: 'color-relief',
+      paint: {
+        'color-relief-color': COLOR_RELIEF_COLOR_RAMP,
+        'color-relief-opacity': RELIEF_OPACITY
+      }
+    }, topLabelId || undefined);
 
     IMAGERY_OPTIONS.forEach((option) => {
       if (option.type === 'base-style') {
