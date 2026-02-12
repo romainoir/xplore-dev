@@ -310,7 +310,15 @@ export function createImageryManager(map, deps = {}) {
         for (let i = layers.length - 1; i >= 0; i--) {
             if (layers[i]?.type === 'symbol') { topLabelId = layers[i].id; break; }
         }
-        const orderedEntries = [];
+        // Basemap imagery IDs that should render BELOW terrain analysis
+        const basemapIds = new Set([
+            'osm-background', 'vector-fills', 'white-background',
+            'ign-scan', 'ign-cosia', 'ign-forest-inventory', 'ign-orthophotos', 'eox-s2',
+            'ign-lidar-hd-mns-shadow', 'ign-lidar-hd-mnt-shadow'
+        ]);
+
+        const basemapEntries = [];
+        const overlayEntries = [];
         imageryOrder.forEach((id) => {
             let layerSequence = [];
             if (id === 'osm-features') {
@@ -326,19 +334,32 @@ export function createImageryManager(map, deps = {}) {
                     }
                 }
             }
-            if (layerSequence.length) orderedEntries.push({ layerSequence });
+            if (layerSequence.length) {
+                if (basemapIds.has(id)) basemapEntries.push({ layerSequence });
+                else overlayEntries.push({ layerSequence });
+            }
         });
 
-        for (let i = orderedEntries.length - 1; i >= 0; i--) {
-            const seq = orderedEntries[i].layerSequence;
+        // 1. Basemap imagery (ortho, satellite, IGN scan, etc.) — lowest
+        for (let i = basemapEntries.length - 1; i >= 0; i--) {
+            const seq = basemapEntries[i].layerSequence;
             for (let j = 0; j < seq.length; j++) {
                 if (seq[j] && seq[j] !== topLabelId) map.moveLayer(seq[j], topLabelId);
             }
         }
 
+        // 2. Terrain analysis & snow layers — above basemaps
         const terrainNativeLayers = ['normalmap', 'snow-native', 'aspect-native', 'slope-native', 'avalanche-native', 'detail-native', 'shadow-native'];
         if (topLabelId) {
             terrainNativeLayers.forEach(layerId => { if (map.getLayer(layerId)) map.moveLayer(layerId, topLabelId); });
+        }
+
+        // 3. Footpath overlays (OSM features, contours, heatmaps, wikimedia) — above terrain
+        for (let i = overlayEntries.length - 1; i >= 0; i--) {
+            const seq = overlayEntries[i].layerSequence;
+            for (let j = 0; j < seq.length; j++) {
+                if (seq[j] && seq[j] !== topLabelId) map.moveLayer(seq[j], topLabelId);
+            }
         }
 
         const routeLayers = ROUTE_LAYER_ORDER_TOP_TO_BOTTOM.filter(layerId => map.getLayer(layerId));

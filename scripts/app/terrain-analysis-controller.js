@@ -26,10 +26,14 @@ export function calculateTerrainAnalysis(map, lngLat) {
     const dzdy = (zN - zS) / dy;
     const slopeRad = Math.atan(Math.sqrt(dzdx * dzdx + dzdy * dzdy));
     const slopeDeg = slopeRad * 180 / Math.PI;
+    // Negate derivatives to match shader (deriv = -deriv)
     const dx_shader = -dzdx;
     const dy_shader = -dzdy;
-    let aspectDeg = (Math.atan2(dx_shader, dy_shader) * 180 / Math.PI + 180) % 360;
+
+    // Downhill-facing compass direction (no +180 offset for tooltip display)
+    let aspectDeg = (Math.atan2(dx_shader, dy_shader) * 180 / Math.PI + 360) % 360;
     if (aspectDeg < 0) aspectDeg += 360;
+
     const aspects = ['North', 'North-East', 'East', 'South-East', 'South', 'South-West', 'West', 'North-West', 'North'];
     const aspectName = aspects[Math.round(aspectDeg / 45)];
     return { ele, slope: slopeDeg, aspect: aspectDeg, aspectName };
@@ -78,6 +82,8 @@ export function updateAnalyticalLegends(map, imageryState, updateShadowTime) {
             legend.appendChild(createAspectLegend());
         } else if (type === 'slope') {
             legend.appendChild(createSlopeLegend(map));
+        } else if (type === 'avalanche') {
+            legend.appendChild(createAvalancheLegend());
         } else if (type === 'snow') {
             legend.appendChild(createSnowLegend(map));
         } else if (type === 'snow-depth') {
@@ -176,6 +182,28 @@ function createSnowLegend(map) {
     altS.addEventListener('input', updateAlt);
     altS.addEventListener('mousedown', e => e.stopPropagation());
     altS.addEventListener('touchstart', e => e.stopPropagation());
+    return content;
+}
+
+function createAvalancheLegend() {
+    const content = document.createElement('div');
+    content.className = 'avalanche-legend-content';
+    // Colors from avalanche_hillshade in hillshade.fragment.glsl
+    // 30-35: #E2BE1B (Yellow), 35-40: #D8721B (Orange), 40-45: #E21B1B (Red), 45+: #B882AD (Purple)
+    content.innerHTML = `
+      <div class="avalanche-bar">
+        <div class="avalanche-bar__segment" style="background: #E2BE1B"></div>
+        <div class="avalanche-bar__segment" style="background: #D8721B"></div>
+        <div class="avalanche-bar__segment" style="background: #E21B1B"></div>
+        <div class="avalanche-bar__segment" style="background: #B882AD"></div>
+      </div>
+      <div class="avalanche-labels">
+        <span>30°</span>
+        <span>35°</span>
+        <span>40°</span>
+        <span>45°+</span>
+      </div>
+    `;
     return content;
 }
 
@@ -310,34 +338,76 @@ function createShadowLegend(map, updateShadowTime) {
 }
 
 /**
- * Setup terrain hover (mousemove) tooltip showing elevation, slope, aspect.
+ * Setup terrain hover (mousemove) tooltip showing context-aware info
+ * based on the active terrain analysis layer.
+ * Reverted to match the original working version from commit 20114f7.
  * @param {maplibregl.Map} map
+ * @param {Map} imageryState - imagery state map from imagery manager
  */
-export function setupTerrainHoverInfo(map) {
+export function setupTerrainHoverInfo(map, imageryState) {
     const hoverEl = document.getElementById('terrainHoverInfo');
     if (!hoverEl) return;
-    const hoverEle = hoverEl.querySelector('.terrain-hover__ele');
-    const hoverSlope = hoverEl.querySelector('.terrain-hover__slope');
-    const hoverAspect = hoverEl.querySelector('.terrain-hover__aspect');
-
-    let isVisible = false;
-    const show = (data) => {
-        if (!data) { hide(); return; }
-        if (hoverEle) hoverEle.textContent = `${Math.round(data.ele)} m`;
-        if (hoverSlope) hoverSlope.textContent = `${data.slope.toFixed(1)}°`;
-        if (hoverAspect) hoverAspect.textContent = `${data.aspectName} (${Math.round(data.aspect)}°)`;
-        if (!isVisible) { hoverEl.style.opacity = '1'; hoverEl.style.pointerEvents = 'auto'; isVisible = true; }
-    };
-    const hide = () => {
-        if (isVisible) { hoverEl.style.opacity = '0'; hoverEl.style.pointerEvents = 'none'; isVisible = false; }
-    };
 
     let throttleTimer = null;
     map.on('mousemove', (e) => {
         if (throttleTimer) return;
         throttleTimer = setTimeout(() => { throttleTimer = null; }, 60);
-        const data = calculateTerrainAnalysis(map, e.lngLat);
-        if (data) show(data); else hide();
+
+        const terrain = calculateTerrainAnalysis(map, e.lngLat);
+        if (!terrain) {
+            hoverEl.style.display = 'none';
+            return;
+        }
+
+        const activeLayer = getActiveAnalysisLayer(imageryState);
+        let content = '';
+
+        // Slope mode
+        if (activeLayer === 'slope') {
+            const min = window.slopeConfig?.min ?? 0;
+            const max = window.slopeConfig?.max ?? 90;
+            if (terrain.slope >= min && terrain.slope <= max) {
+                content += `<span style="color: #2ecc71">Slope:</span> ${terrain.slope.toFixed(1)}° `;
+            }
+        }
+
+        // Avalanche mode — no tooltip
+
+        // Aspect mode
+        if (activeLayer === 'aspect') {
+            content += `<span style="color: #3498db">Aspect:</span> ${terrain.aspectName} `;
+        }
+
+        // No analysis layer active — show full readout
+        if (!activeLayer) {
+            content += `<span style="color: #2ecc71">${Math.round(terrain.ele)} m</span> `;
+            content += `<span style="color: #e67e22">${terrain.slope.toFixed(1)}°</span> `;
+            content += `<span style="color: #3498db">${terrain.aspectName}</span>`;
+        }
+
+        if (content) {
+            hoverEl.innerHTML = content;
+            hoverEl.style.display = 'block';
+            hoverEl.style.left = `${e.originalEvent.clientX}px`;
+            hoverEl.style.top = `${e.originalEvent.clientY}px`;
+        } else {
+            hoverEl.style.display = 'none';
+        }
     });
-    map.on('mouseout', hide);
+
+    map.on('mouseout', () => {
+        hoverEl.style.display = 'none';
+    });
 }
+
+/**
+ * Determine which terrain analysis layer is currently active.
+ */
+function getActiveAnalysisLayer(imageryState) {
+    if (!imageryState) return null;
+    if (imageryState.get('avalanche')?.enabled) return 'avalanche';
+    if (imageryState.get('slope')?.enabled) return 'slope';
+    if (imageryState.get('aspect')?.enabled) return 'aspect';
+    return null;
+}
+

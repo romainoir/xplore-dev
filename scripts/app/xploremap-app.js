@@ -189,7 +189,7 @@ async function init() {
 
   map.on('load', async () => {
     // Terrain hover readout
-    setupTerrainHoverInfo(map);
+    setupTerrainHoverInfo(map, imagery.imageryState);
 
     try {
       directionsManager = new DirectionsManager(map, [
