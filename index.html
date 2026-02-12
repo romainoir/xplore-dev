@@ -64,6 +64,13 @@
 
 <body>
   <div id="map"></div>
+
+  <!-- 2D / 3D toggle — repositioned below compass by JS -->
+  <button id="toggle3D" class="btn btn--icon-only map-action-btn toggle-3d" type="button" aria-pressed="true"
+    aria-label="Switch to 2D" title="Switch to 2D">
+    <span class="toggle-3d__label">3D</span>
+    <span class="sr-only">Toggle 2D/3D view</span>
+  </button>
   <header class="app-header">
     <div class="app-header__left">
       <div class="app-header__logo">
@@ -245,14 +252,82 @@
   </div>
   </div>
 
-  <!-- Imagery toggle -->
+  <!-- Layer & Map Controls -->
   <div class="imagery-panel" id="imageryPanel">
     <div class="imagery-panel__buttons">
-      <button id="toggle3D" class="btn btn--icon-only map-action-btn toggle-3d" type="button" aria-pressed="true"
-        aria-label="Switch to 2D" title="Switch to 2D">
-        <span class="toggle-3d__label">3D</span>
-        <span class="sr-only">Toggle 2D/3D view</span>
-      </button>
+      <!-- Photos toolbox -->
+      <div class="imagery-panel__control-group">
+        <button id="photosToolboxToggle" class="btn map-action-btn photos-toolbox-toggle" type="button"
+          aria-expanded="false" aria-controls="photosToolbox" title="Photos">
+          <img src="./data/icons_Xmap/camera.png" alt="" loading="lazy" decoding="async" />
+          <span class="sr-only">Photos</span>
+        </button>
+        <div id="photosToolbox" class="photos-toolbox" aria-hidden="true">
+          <!-- Content populated by JS -->
+        </div>
+      </div>
+
+      <!-- Shadow toolbox -->
+      <div class="imagery-panel__control-group">
+        <button id="shadowToolboxToggle" class="btn map-action-btn shadow-toolbox-toggle" type="button"
+          aria-expanded="false" aria-controls="shadowToolbox" title="Shadow Analysis">
+          <img src="./data/sun.png" alt="" loading="lazy" decoding="async" />
+          <span class="sr-only">Shadow Analysis</span>
+        </button>
+        <div id="shadowToolbox" class="shadow-toolbox" aria-hidden="true">
+          <!-- Content populated by JS -->
+        </div>
+      </div>
+
+      <!-- Snow toolbox -->
+      <div class="imagery-panel__control-group">
+        <button id="snowToolboxToggle" class="btn map-action-btn snow-toolbox-toggle" type="button"
+          aria-expanded="false" aria-controls="snowToolbox" title="Snow Analysis">
+          <img src="./data/snowflake.png" alt="" loading="lazy" decoding="async" />
+          <span class="sr-only">Snow Analysis</span>
+        </button>
+        <div id="snowToolbox" class="snow-toolbox" aria-hidden="true">
+          <!-- Content populated by JS -->
+        </div>
+      </div>
+
+      <!-- Terrain toolbox -->
+      <div class="imagery-panel__control-group">
+        <button id="terrainToolboxToggle" class="btn map-action-btn terrain-toolbox-toggle" type="button"
+          aria-expanded="false" aria-controls="terrainToolbox" title="Terrain Analysis">
+          <img src="./data/terrain.png" alt="" loading="lazy" decoding="async" />
+          <span class="sr-only">Terrain Analysis</span>
+        </button>
+        <div id="terrainToolbox" class="terrain-toolbox" aria-hidden="true">
+          <!-- Content populated by JS -->
+        </div>
+      </div>
+
+      <!-- Pathway toolbox -->
+      <div class="imagery-panel__control-group">
+        <button id="pathwayToolboxToggle" class="btn map-action-btn pathway-toolbox-toggle" type="button"
+          aria-expanded="false" aria-controls="pathwayToolbox" title="Pathway Overlays">
+          <img src="./data/footsteps.png" alt="" loading="lazy" decoding="async" />
+          <span class="sr-only">Pathway Overlays</span>
+        </button>
+        <div id="pathwayToolbox" class="pathway-toolbox" aria-hidden="true">
+          <!-- Content populated by JS -->
+        </div>
+      </div>
+
+      <!-- Basemap toolbox -->
+      <div class="imagery-panel__control-group">
+        <button id="basemapToolboxToggle" class="btn map-action-btn basemap-toolbox-toggle" type="button"
+          aria-expanded="false" aria-controls="basemapToolbox" title="Basemap">
+          <img src="./data/layers.png" alt="" loading="lazy" decoding="async" />
+          <span class="sr-only">Basemap</span>
+        </button>
+        <div id="basemapToolbox" class="basemap-toolbox" aria-hidden="true">
+          <!-- Content populated by JS -->
+        </div>
+      </div>
+
+      <!-- Settings toggle + panel -->
       <button id="settingsToggle" class="btn btn--icon-only map-action-btn settings-toggle" type="button"
         aria-expanded="false" aria-controls="settingsPanel" title="Settings">
         <svg class="settings-toggle__icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
@@ -264,6 +339,7 @@
         <span class="sr-only">Settings</span>
       </button>
 
+
       <!-- Settings Panel (dropdown from cog) -->
       <div id="settingsPanel" class="settings-panel" aria-hidden="true">
         <div class="settings-panel__header">
@@ -271,7 +347,6 @@
           <button id="settingsPanelClose" class="settings-panel__close" type="button">&times;</button>
         </div>
         <div class="settings-panel__body">
-          <!-- Performance section -->
           <div class="settings-panel__section">
             <div class="settings-panel__section-title">Performance</div>
             <div class="settings-panel__row">
@@ -282,16 +357,16 @@
               <label for="fovSlider">Vertical FOV</label>
               <div class="settings-panel__slider-group">
                 <input type="range" id="fovSlider" class="settings-panel__slider" min="5" max="90" step="1"
-                  value="37" />
-                <span id="fovLabel" class="settings-panel__value">37°</span>
+                  value="45" />
+                <span id="fovLabel" class="settings-panel__value">45°</span>
               </div>
             </div>
             <div class="settings-panel__row">
               <label for="lodMaxZoomSlider">Max Zoom Levels</label>
               <div class="settings-panel__slider-group">
                 <input type="range" id="lodMaxZoomSlider" class="settings-panel__slider" min="1" max="11" step="1"
-                  value="5" />
-                <span id="lodMaxZoomLabel" class="settings-panel__value">5</span>
+                  value="4" />
+                <span id="lodMaxZoomLabel" class="settings-panel__value">4</span>
               </div>
             </div>
             <div class="settings-panel__row">
@@ -303,7 +378,6 @@
               </div>
             </div>
           </div>
-          <!-- Debug section -->
           <div class="settings-panel__section">
             <div class="settings-panel__section-title">Debug</div>
             <div class="settings-panel__row">
@@ -331,59 +405,6 @@
           </div>
         </div>
       </div>
-      <div class="imagery-panel__control-group">
-        <button id="shadowToolboxToggle" class="btn map-action-btn shadow-toolbox-toggle" type="button"
-          aria-expanded="false" aria-controls="shadowToolbox" title="Shadow Analysis">
-          <img src="./data/sun.png" alt="" loading="lazy" decoding="async" />
-          <span class="sr-only">Shadow Analysis</span>
-        </button>
-
-        <div id="shadowToolbox" class="shadow-toolbox" aria-hidden="true">
-          <!-- Content populated by JS -->
-        </div>
-      </div>
-
-      <div class="imagery-panel__control-group">
-        <button id="terrainToolboxToggle" class="btn map-action-btn terrain-toolbox-toggle" type="button"
-          aria-expanded="false" aria-controls="terrainToolbox" title="Terrain Analysis">
-          <img src="./data/terrain.png" alt="" loading="lazy" decoding="async" />
-          <span class="sr-only">Terrain Analysis</span>
-        </button>
-
-        <div id="terrainToolbox" class="terrain-toolbox" aria-hidden="true">
-          <!-- Content populated by JS -->
-        </div>
-      </div>
-
-      <div class="imagery-panel__control-group">
-        <button id="snowToolboxToggle" class="btn map-action-btn snow-toolbox-toggle" type="button"
-          aria-expanded="false" aria-controls="snowToolbox" title="Snow Analysis">
-          <img src="./data/snowflake.png" alt="" loading="lazy" decoding="async" />
-          <span class="sr-only">Snow Analysis</span>
-        </button>
-
-        <div id="snowToolbox" class="snow-toolbox" aria-hidden="true">
-          <!-- Content populated by JS -->
-        </div>
-      </div>
-
-      <button id="imageryPanelToggle" class="map-action-btn imagery-panel__toggle" type="button" aria-expanded="false"
-        aria-controls="imageryPanelDrawer" aria-haspopup="true" title="Toggle imagery layers">
-        <span class="imagery-panel__toggle-icon" aria-hidden="true">
-          <img src="./data/layers.png" alt="" loading="lazy" decoding="async" />
-        </span>
-        <span class="sr-only">Toggle imagery layers</span>
-      </button>
-    </div>
-    <div class="imagery-panel__drawer" id="imageryPanelDrawer" hidden aria-hidden="true">
-      <div
-        style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid rgba(255,255,255,0.1);">
-        <label for="vectorToggle" style="color:#ccc;font-size:12px;font-weight:500;cursor:pointer;flex:1;">Vector
-          Map</label>
-        <input type="checkbox" id="vectorToggle" checked
-          style="accent-color:#4a9eff;width:16px;height:16px;cursor:pointer;">
-      </div>
-      <div class="imagery-toggle" id="imageryToggle" role="group" aria-label="Imagery layers"></div>
     </div>
   </div>
 

@@ -39,9 +39,12 @@ export const IMAGERY_OPTIONS = Object.freeze([
     { id: 'shadow', label: 'Shadow', type: 'native-layer', layerId: 'shadow-native', previewImage: './data/icons_Xmap/shadow.png', defaultOpacity: 1.0, defaultVisible: false },
     { id: 'contours', label: 'Contours', type: 'contours', sourceId: 'contours', layerId: 'contours', linkedLayerIds: ['contour-text'], previewImage: './data/contour.png', defaultVisible: true, defaultOpacity: 1 },
     { id: 'osm-features', label: 'OSM Features', type: 'osm-overlay', previewImage: './data/OSM_vector.png', defaultOpacity: 1, defaultVisible: true },
-    { id: 'wikimedia-photos', label: 'Wikimedia Photos', type: 'wikimedia', previewImage: './data/icons_Xmap/camera.png', defaultVisible: false, defaultOpacity: 1, linkedLayerIds: ['wikimedia-photos-layer', 'wikimedia-photos-clusters', 'wikimedia-photos-cluster-count', 'wikimedia-photos-large-clusters'] },
+    { id: 'wikimedia-photos', label: 'Wikimedia Photos', type: 'wikimedia', previewImage: './data/icons_Xmap/camera.png', defaultVisible: false, defaultOpacity: 1, linkedLayerIds: ['wikimedia-photos-layer', 'wikimedia-photos-clusters', 'wikimedia-photos-cluster-count', 'wikimedia-photos-large-clusters', 'wikimedia-thumbnails-cluster', 'wikimedia-thumbnails-single'] },
     { id: 'strava-heatmap-all', label: 'Strava Heatmap (All)', sourceId: 'strava-heatmap-all', layerId: 'strava-heatmap-all', tileTemplate: 'https://atlas.hartakji.com/strava-heatmap-all/{z}/{x}/{y}', tileSize: 256, minZoom: 0, maxZoom: 15, attribution: '<a href="https://www.strava.com">© Strava</a>', defaultVisible: false, defaultOpacity: 1 },
     { id: 'strava-winter', label: 'Strava Winter', sourceId: 'strava-winter', layerId: 'strava-winter', tileTemplate: 'https://atlas.hartakji.com/strava-winter/{z}/{x}/{y}', tileSize: 256, minZoom: 0, maxZoom: 15, attribution: '<a href="https://www.strava.com">© Strava</a>', defaultVisible: false, defaultOpacity: 1 },
+    { id: 'strava-backcountry-ski', label: 'Strava Backcountry Ski', sourceId: 'strava-backcountry-ski', layerId: 'strava-backcountry-ski', tileTemplate: 'https://atlas.hartakji.com/strava-backcountry-ski/{z}/{x}/{y}', tileSize: 256, minZoom: 0, maxZoom: 15, attribution: '<a href="https://www.strava.com">© Strava</a>', defaultVisible: false, defaultOpacity: 1 },
+    { id: 'strava-cycling', label: 'Strava Cycling', sourceId: 'strava-cycling', layerId: 'strava-cycling', tileTemplate: 'https://atlas.hartakji.com/strava-cycling/{z}/{x}/{y}', tileSize: 256, minZoom: 0, maxZoom: 15, attribution: '<a href="https://www.strava.com">© Strava</a>', defaultVisible: false, defaultOpacity: 1 },
+    { id: 'strava-run', label: 'Strava Run', sourceId: 'strava-run', layerId: 'strava-run', tileTemplate: 'https://atlas.hartakji.com/strava-run/{z}/{x}/{y}', tileSize: 256, minZoom: 0, maxZoom: 15, attribution: '<a href="https://www.strava.com">© Strava</a>', defaultVisible: false, defaultOpacity: 1 },
     { id: 'ign-traces-hivernales', label: 'Traces Rando Hivernales', sourceId: 'ign-traces-hivernales', layerId: 'ign-traces-hivernales', tileTemplate: 'https://data.geopf.fr/wmts?layer=TRACES.RANDO.HIVERNALE&style=normal&tilematrixset=PM&Service=WMTS&Request=GetTile&Version=1.0.0&Format=image%2Fpng&TileMatrix={z}&TileCol={x}&TileRow={y}', tileSize: 256, minZoom: 0, maxZoom: 15, attribution: IGN_ATTRIBUTION, defaultVisible: false, defaultOpacity: 1 },
     { id: 'detail-shading', label: 'Detail Shading', type: 'native-layer', layerId: 'detail-native', previewImage: './data/icons_Xmap/normal.png', defaultOpacity: 1.0, defaultVisible: false },
     { id: 'aspect', label: 'Aspect (Orientation)', type: 'native-layer', layerId: 'aspect-native', previewImage: './data/icons_Xmap/aspect.png', defaultOpacity: 1.0, defaultVisible: false },
@@ -56,7 +59,8 @@ export const IMAGERY_OPTIONS = Object.freeze([
     { id: 'eox-s2', label: 'EOX Satellite', sourceId: 's2cloudless', layerId: 's2cloudless', tileTemplate: S2C_URL, tileSize: 256, attribution: EOX_ATTRIBUTION, defaultVisible: false, defaultOpacity: 1, paint: { 'raster-opacity': S2_OPACITY, 'raster-fade-duration': S2_FADE_DURATION } },
     { id: 'ign-lidar-hd-mns-shadow', label: 'MNS', sourceId: 'ign-lidar-hd-mns-shadow', layerId: 'ign-lidar-hd-mns-shadow', tileTemplate: createIgnTileTemplate('IGNF_LIDAR-HD_MNS_ELEVATION.ELEVATIONGRIDCOVERAGE.SHADOW', 'image/png'), tileSize: 256, attribution: IGN_ATTRIBUTION, defaultVisible: false, defaultOpacity: 1 },
     { id: 'ign-lidar-hd-mnt-shadow', label: 'MNT', sourceId: 'ign-lidar-hd-mnt-shadow', layerId: 'ign-lidar-hd-mnt-shadow', tileTemplate: createIgnTileTemplate('IGNF_LIDAR-HD_MNT_ELEVATION.ELEVATIONGRIDCOVERAGE.SHADOW', 'image/png'), tileSize: 256, attribution: IGN_ATTRIBUTION, defaultVisible: false, defaultOpacity: 1 },
-    { id: 'white-background', label: 'White Background', type: 'background', layerId: 'background', hiddenControl: true, defaultVisible: false, paint: { 'background-color': '#ffffff' } }
+    { id: 'white-background', label: 'White Background', type: 'background', layerId: 'background', hiddenControl: true, defaultVisible: false, paint: { 'background-color': '#ffffff' } },
+    { id: 'vector-fills', label: 'Vector Fills', type: 'vector-fills', hiddenControl: true, defaultVisible: true, defaultOpacity: 1 },
 ]);
 
 // ─── LAYER_GROUPS ───
@@ -64,7 +68,7 @@ export const LAYER_GROUPS = Object.freeze([
     { id: 'sun-analysis', label: 'Sun Analysis', exclusive: true, members: ['shadow'] },
     { id: 'vector', label: 'Vector', exclusive: false, members: ['contours', 'osm-features'] },
     { id: 'wikimedia-photos', label: 'Wikimedia Photos', exclusive: true, members: ['wikimedia-photos'] },
-    { id: 'heatmap', label: 'Heatmap', exclusive: true, members: ['strava-heatmap-all', 'strava-winter', 'ign-traces-hivernales'] },
+    { id: 'heatmap', label: 'Heatmap', exclusive: true, members: ['strava-heatmap-all', 'strava-winter', 'strava-backcountry-ski', 'strava-cycling', 'strava-run', 'ign-traces-hivernales'] },
     { id: 'terrain-analysis', label: 'Terrain Analysis', exclusive: true, members: ['aspect', 'slope', 'avalanche'] },
     { id: 'snow', label: 'Snow Analysis', exclusive: false, members: ['snow', 'snow-depth'] },
     { id: 'ign-scan', label: 'IGN Scan (Topo)', exclusive: true, members: ['ign-scan'] },
@@ -162,9 +166,12 @@ export function setLayerSequenceOpacity(map, layerIds, alpha) {
         const setIf = (prop, value) => {
             try { const cur = map.getPaintProperty(id, prop); if (cur !== undefined) map.setPaintProperty(id, prop, value); } catch (_) { }
         };
+        const setForce = (prop, value) => {
+            try { map.setPaintProperty(id, prop, value); } catch (_) { }
+        };
         switch (type) {
             case 'background': setIf('background-opacity', alpha); break;
-            case 'fill': setIf('fill-opacity', alpha); break;
+            case 'fill': setForce('fill-opacity', alpha); break;
             case 'line': setIf('line-opacity', alpha); break;
             case 'symbol': setIf('text-opacity', alpha); setIf('icon-opacity', alpha); break;
             case 'circle': setIf('circle-opacity', alpha); break;
@@ -209,6 +216,7 @@ export function createImageryManager(map, deps = {}) {
     const {
         baseStyleOverlayLayerIds = [],
         baseStyleUnderlayLayerIds = [],
+        baseStyleFillLayerIds = [],
         bringDebugNetworkToFront = () => { },
         updateAnalyticalLegends = () => { },
     } = deps;
@@ -216,8 +224,6 @@ export function createImageryManager(map, deps = {}) {
     // ─── State ───
     const imageryState = new Map();
     const imageryControls = new Map();
-    const groupContainers = new Map();
-    let dragSourceImageryId = null;
 
     IMAGERY_OPTIONS.forEach((option, index) => {
         const paintOpacity = option?.paint && typeof option.paint['raster-opacity'] === 'number' ? clampOpacity(option.paint['raster-opacity']) : 1;
@@ -252,11 +258,7 @@ export function createImageryManager(map, deps = {}) {
         }
     });
 
-    // ─── DOM references ───
-    const imageryPanel = document.getElementById('imageryPanel');
-    const imageryPanelToggle = document.getElementById('imageryPanelToggle');
-    const imageryPanelDrawer = document.getElementById('imageryPanelDrawer');
-    const imageryToggle = document.getElementById('imageryToggle');
+
 
     // ─── Contour layers state ───
     function applyContourLayersState(opacity, visible) {
@@ -298,19 +300,6 @@ export function createImageryManager(map, deps = {}) {
     }
 
     // ─── Core functions ───
-    function updateImageryDomOrder() {
-        if (!imageryToggle) return;
-        const appendedGroupContainers = new Set();
-        imageryOrder.forEach((id) => {
-            const control = imageryControls.get(id);
-            if (!control?.container) return;
-            if (control.isGroupMember) {
-                if (appendedGroupContainers.has(control.container)) return;
-                appendedGroupContainers.add(control.container);
-            }
-            imageryToggle.appendChild(control.container);
-        });
-    }
 
     function applyImageryLayerOrder() {
         if (!map || typeof map.moveLayer !== 'function') return;
@@ -368,72 +357,10 @@ export function createImageryManager(map, deps = {}) {
         });
     }
 
-    function moveImageryOption(sourceId, targetId, placeBeforeTarget) {
-        if (sourceId === targetId) return;
-        const getIds = (id) => {
-            const group = LAYER_GROUP_BY_MEMBER_ID.get(id);
-            if (group) return group.members.filter(m => imageryOrder.includes(m));
-            return [id];
-        };
-        const sourceIds = getIds(sourceId);
-        if (sourceIds.includes(targetId)) return;
-        const remainingOrder = imageryOrder.filter(id => !sourceIds.includes(id));
-        const targetGroup = LAYER_GROUP_BY_MEMBER_ID.get(targetId);
-        let effectiveTargetIndex = -1;
-        if (targetGroup) {
-            const groupMembers = targetGroup.members.filter(m => remainingOrder.includes(m));
-            if (groupMembers.length > 0) {
-                effectiveTargetIndex = placeBeforeTarget ? remainingOrder.indexOf(groupMembers[0]) : remainingOrder.indexOf(groupMembers[groupMembers.length - 1]);
-            }
-        } else {
-            effectiveTargetIndex = remainingOrder.indexOf(targetId);
-        }
-        if (effectiveTargetIndex === -1) return;
-        const insertionIndex = placeBeforeTarget ? effectiveTargetIndex : effectiveTargetIndex + 1;
-        remainingOrder.splice(insertionIndex, 0, ...sourceIds);
-        imageryOrder.splice(0, imageryOrder.length, ...remainingOrder);
-        updateImageryDomOrder();
-        applyImageryLayerOrder();
-    }
-
-    function moveImageryOptionToBoundary(sourceId, toStart) {
-        const index = imageryOrder.indexOf(sourceId);
-        if (index === -1) return;
-        imageryOrder.splice(index, 1);
-        if (toStart) imageryOrder.unshift(sourceId); else imageryOrder.push(sourceId);
-        updateImageryDomOrder();
-        applyImageryLayerOrder();
-    }
-
-    function resetDragIndicators() {
-        if (!imageryToggle) return;
-        imageryToggle.querySelectorAll('.imagery-option--dragging, .imagery-option--drag-over-before, .imagery-option--drag-over-after, .imagery-group--dragging, .imagery-group--drag-over-before, .imagery-group--drag-over-after').forEach(n => {
-            n.classList.remove('imagery-option--dragging', 'imagery-option--drag-over-before', 'imagery-option--drag-over-after', 'imagery-group--dragging', 'imagery-group--drag-over-before', 'imagery-group--drag-over-after');
-        });
-    }
-
     // ─── Toolbox open/close ───
     let setTerrainToolboxOpen, setSnowToolboxOpen, setShadowToolboxOpen;
 
-    function setImageryPanelOpen(isOpen) {
-        if (!imageryPanelDrawer) return;
-        const open = Boolean(isOpen);
-        if (open) {
-            if (setTerrainToolboxOpen) setTerrainToolboxOpen(false);
-            if (setSnowToolboxOpen) setSnowToolboxOpen(false);
-            if (setShadowToolboxOpen) setShadowToolboxOpen(false);
-        }
-        imageryPanelDrawer.classList.toggle('imagery-panel__drawer--open', open);
-        if (imageryPanelToggle) {
-            imageryPanelToggle.classList.toggle('active', open);
-            imageryPanelToggle.setAttribute('aria-expanded', String(open));
-        }
-        if (open) imageryPanelDrawer.removeAttribute('hidden'); else imageryPanelDrawer.setAttribute('hidden', 'true');
-        imageryPanelDrawer.setAttribute('aria-hidden', String(!open));
-    }
-
     function updateImageryControlStates() {
-        if (!imageryToggle) return;
         const activeGroupIds = new Set();
         imageryControls.forEach((control, id) => {
             const state = imageryState.get(id);
@@ -450,13 +377,7 @@ export function createImageryManager(map, deps = {}) {
             if (control.slider && state) control.slider.value = String(state.opacity);
             if (control.sliderWrapper) control.sliderWrapper.classList.toggle('active', isActive);
         });
-        groupContainers.forEach((data, groupId) => {
-            if (data.container) {
-                const isGroupActive = activeGroupIds.has(groupId);
-                data.container.classList.toggle('active', isGroupActive);
-                if (data.preview) data.preview.classList.toggle('active', isGroupActive);
-            }
-        });
+
         // Dynamic background for Analysis Toggles
         [
             { btnId: 'terrainToolboxToggle', layerIds: ['aspect', 'slope', 'avalanche'] },
@@ -483,6 +404,7 @@ export function createImageryManager(map, deps = {}) {
             const visible = Boolean(state?.enabled && opacity > 0);
             if (option.type === 'osm-overlay') { setLayerSequenceOpacity(map, baseStyleOverlayLayerIds, visible ? opacity : 0); return; }
             if (option.type === 'osm-background') { setLayerSequenceOpacity(map, baseStyleUnderlayLayerIds, visible ? opacity : 0); return; }
+            if (option.type === 'vector-fills') { setLayerSequenceOpacity(map, baseStyleFillLayerIds, visible ? opacity : 0); return; }
             if (option.type === 'contours') { applyContourLayersState(opacity, visible); return; }
             if (option.type === 'hillshade') return;
             if (option.type === 'wikimedia') { setWikimediaPhotosEnabled(visible); return; }
@@ -507,23 +429,15 @@ export function createImageryManager(map, deps = {}) {
         imageryState,
         imageryControls,
         imageryOrder,
-        groupContainers,
         SHADOW_TOOLBOX_IDS,
         TERRAIN_TOOLBOX_IDS,
         SNOW_TOOLBOX_IDS,
         applyImageryState,
         applyImageryLayerOrder,
         updateImageryControlStates,
-        updateImageryDomOrder,
-        moveImageryOption,
-        moveImageryOptionToBoundary,
-        resetDragIndicators,
-        setImageryPanelOpen,
         clampOpacity,
         createTilePreviewUrl,
         applyContourLayersState,
-        get dragSourceImageryId() { return dragSourceImageryId; },
-        set dragSourceImageryId(v) { dragSourceImageryId = v; },
         setToolboxHandlers(handlers) {
             setTerrainToolboxOpen = handlers.setTerrainToolboxOpen;
             setSnowToolboxOpen = handlers.setSnowToolboxOpen;

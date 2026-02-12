@@ -263,7 +263,10 @@ body {
 
 .terrain-toolbox,
 .snow-toolbox,
-.shadow-toolbox {
+.shadow-toolbox,
+.pathway-toolbox,
+.basemap-toolbox,
+.photos-toolbox {
   position: absolute;
   top: calc(100% + 12px);
   left: 50%;
@@ -295,18 +298,25 @@ body {
 
 .terrain-toolbox.visible,
 .snow-toolbox.visible,
-.shadow-toolbox.visible {
+.shadow-toolbox.visible,
+.pathway-toolbox.visible,
+.basemap-toolbox.visible,
+.photos-toolbox.visible {
   opacity: 1;
   visibility: visible;
   max-height: 800px;
   padding: 10px 4px;
+  overflow: visible;
   transform: translateX(-50%) scale(1) translateY(0);
 }
 
 /* Toolbox Active States - Standardized Glow */
 .terrain-toolbox-toggle.active,
 .snow-toolbox-toggle.active,
-.shadow-toolbox-toggle.active {
+.shadow-toolbox-toggle.active,
+.pathway-toolbox-toggle.active,
+.basemap-toolbox-toggle.active,
+.photos-toolbox-toggle.active {
   background: var(--glass-surface-strong) !important;
   border-color: rgba(39, 174, 96, 0.6) !important;
   box-shadow: 0 0 15px rgba(39, 174, 96, 0.35), 0 4px 15px rgba(0, 0, 0, 0.4) !important;
@@ -365,10 +375,28 @@ body {
   box-shadow: 0 0 15px rgba(52, 152, 219, 0.5), 0 4px 15px rgba(0, 0, 0, 0.4) !important;
 }
 
+.pathway-toolbox-toggle.has-active-layer {
+  border-color: #e67e22 !important;
+  box-shadow: 0 0 15px rgba(230, 126, 34, 0.5), 0 4px 15px rgba(0, 0, 0, 0.4) !important;
+}
+
+.basemap-toolbox-toggle.has-active-layer {
+  border-color: #3498db !important;
+  box-shadow: 0 0 15px rgba(52, 152, 219, 0.5), 0 4px 15px rgba(0, 0, 0, 0.4) !important;
+}
+
+.photos-toolbox-toggle.has-active-layer {
+  border-color: #9b59b6 !important;
+  box-shadow: 0 0 15px rgba(155, 89, 182, 0.5), 0 4px 15px rgba(0, 0, 0, 0.4) !important;
+}
+
 
 .terrain-toolbox .btn.terrain-toolbox__toggle,
 .snow-toolbox .btn.snow-toolbox__toggle,
-.shadow-toolbox .btn.shadow-toolbox__toggle {
+.shadow-toolbox .btn.shadow-toolbox__toggle,
+.pathway-toolbox .btn.pathway-toolbox__toggle,
+.basemap-toolbox .btn.basemap-toolbox__toggle,
+.photos-toolbox .btn.photos-toolbox__toggle {
   width: 44px !important;
   height: 44px !important;
   border-radius: 50% !important;
@@ -383,12 +411,19 @@ body {
   cursor: pointer !important;
   flex-shrink: 0 !important;
   overflow: hidden !important;
-  /* Ensure thumbnail doesn't overflow circular button */
+}
+
+/* Allow badge to overflow on heatmap button */
+.pathway-toolbox .btn.pathway-toolbox__toggle[data-pathway-id="heatmap"] {
+  overflow: visible !important;
 }
 
 .terrain-toolbox .btn.terrain-toolbox__toggle:hover,
 .snow-toolbox .btn.snow-toolbox__toggle:hover,
-.shadow-toolbox .btn.shadow-toolbox__toggle:hover {
+.shadow-toolbox .btn.shadow-toolbox__toggle:hover,
+.pathway-toolbox .btn.pathway-toolbox__toggle:hover,
+.basemap-toolbox .btn.basemap-toolbox__toggle:hover,
+.photos-toolbox .btn.photos-toolbox__toggle:hover {
   background: rgba(255, 255, 255, 0.1) !important;
   border-color: rgba(255, 255, 255, 0.3) !important;
   transform: scale(1.08) !important;
@@ -396,25 +431,212 @@ body {
 
 .terrain-toolbox .btn.terrain-toolbox__toggle.active,
 .snow-toolbox .btn.snow-toolbox__toggle.active,
-.shadow-toolbox .btn.shadow-toolbox__toggle.active {
+.shadow-toolbox .btn.shadow-toolbox__toggle.active,
+.pathway-toolbox .btn.pathway-toolbox__toggle.active,
+.basemap-toolbox .btn.basemap-toolbox__toggle.active,
+.photos-toolbox .btn.photos-toolbox__toggle.active {
   background: rgba(39, 174, 96, 0.25) !important;
   border-color: rgba(39, 174, 96, 0.6) !important;
   box-shadow: 0 0 12px rgba(39, 174, 96, 0.4) !important;
 }
 
+/* Heatmap active state: red instead of green with bloom effect */
+.pathway-toolbox .btn.pathway-toolbox__toggle[data-pathway-id="heatmap"].active {
+  background: rgba(220, 50, 30, 0.45) !important;
+  border-color: rgba(255, 100, 50, 0.8) !important;
+  box-shadow: 0 0 15px rgba(220, 50, 30, 0.7), 0 0 30px rgba(220, 50, 30, 0.3) !important;
+  animation: heatmap-pulse 2s infinite ease-in-out;
+}
+
+@keyframes heatmap-pulse {
+  0% {
+    box-shadow: 0 0 15px rgba(220, 50, 30, 0.7), 0 0 30px rgba(220, 50, 30, 0.3);
+  }
+
+  50% {
+    box-shadow: 0 0 25px rgba(255, 100, 50, 0.9), 0 0 45px rgba(220, 50, 30, 0.5);
+  }
+
+  100% {
+    box-shadow: 0 0 15px rgba(220, 50, 30, 0.7), 0 0 30px rgba(220, 50, 30, 0.3);
+  }
+}
+
 .terrain-toolbox .btn.terrain-toolbox__toggle img,
 .snow-toolbox .btn.snow-toolbox__toggle img,
-.shadow-toolbox .btn.shadow-toolbox__toggle img {
+.shadow-toolbox .btn.shadow-toolbox__toggle img,
+.pathway-toolbox .btn.pathway-toolbox__toggle img:not(.pathway-badge),
+.basemap-toolbox .btn.basemap-toolbox__toggle img,
+.photos-toolbox .btn.photos-toolbox__toggle img {
   width: 100% !important;
-  /* Fill the button for thumbnails */
   height: 100% !important;
   filter: none !important;
-  /* Show original colors for thumbnails */
   object-fit: cover !important;
   display: block !important;
 }
 
-/* Analytical Legends Refined */
+/* Icon-style pathway buttons (non-tile previews) */
+.pathway-toolbox .btn.pathway-toolbox__toggle[data-pathway-id="heatmap"] img:not(.pathway-badge) {
+  width: 28px !important;
+  height: 28px !important;
+  object-fit: contain !important;
+  filter: invert(1) drop-shadow(0 0 2px rgba(255, 255, 255, 0.5)) !important;
+}
+
+.pathway-toolbox .btn.pathway-toolbox__toggle[data-pathway-id="routes"] img:not(.pathway-badge) {
+  width: 28px !important;
+  height: 28px !important;
+  object-fit: contain !important;
+  filter: invert(1) !important;
+}
+
+.pathway-toolbox .btn.pathway-toolbox__toggle[data-pathway-id="ski-rando"] img:not(.pathway-badge) {
+  width: 28px !important;
+  height: 28px !important;
+  object-fit: contain !important;
+  filter: invert(1) !important;
+}
+
+/* Badge overlay showing active sub-category on pathway buttons */
+.pathway-badge {
+  position: absolute !important;
+  bottom: -2px !important;
+  left: -2px !important;
+  width: 14px !important;
+  height: 14px !important;
+  padding: 0 !important;
+  border: none !important;
+  border-radius: 0 !important;
+  background: none !important;
+  object-fit: contain !important;
+  filter: invert(1) !important;
+  z-index: 10 !important;
+  pointer-events: none !important;
+  box-shadow: none !important;
+}
+
+/* Option row: positioning context for fly-out sub-menus */
+.toolbox-option-row {
+  position: relative;
+  display: flex;
+  justify-content: center;
+}
+
+/* Sub-menu containers — fly out horizontally to the right */
+.basemap-sub-menu,
+.pathway-sub-menu {
+  display: none !important;
+  position: absolute;
+  right: calc(100% + 8px);
+  top: 50%;
+  transform: translateY(-50%);
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: var(--glass-surface-strong);
+  backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+  border-radius: 20px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  white-space: nowrap;
+  z-index: 110;
+}
+
+.basemap-sub-menu.visible,
+.pathway-sub-menu.visible {
+  display: flex !important;
+}
+
+/* Sub-option thumbnail buttons — matching main toolbox button style */
+.sub-thumb-btn {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--glass-surface-strong);
+  border: 1px solid var(--glass-border);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  overflow: hidden;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sub-thumb-btn img {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  display: block;
+  filter: invert(1);
+}
+
+.sub-thumb-btn span {
+  font-size: 9px;
+  font-weight: 700;
+  color: #ccc;
+  text-align: center;
+  line-height: 1;
+}
+
+.sub-thumb-btn:hover {
+  border-color: rgba(255, 255, 255, 0.4);
+  transform: scale(1.1);
+}
+
+.sub-thumb-btn.active {
+  border-color: rgba(255, 255, 255, 0.6);
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.2);
+}
+
+/* Lidar HD action icon buttons (tree / leaf) */
+.lidar-action-btn {
+  width: 32px !important;
+  height: 32px !important;
+  min-width: 32px;
+  padding: 0 !important;
+  border-radius: 50% !important;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  background: var(--glass-surface-strong);
+  border: 1px solid var(--glass-border);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.lidar-action-btn img {
+  width: 16px;
+  height: 16px;
+  filter: brightness(0) invert(1) opacity(0.85);
+  pointer-events: none;
+}
+
+.lidar-action-btn:hover {
+  border-color: rgba(255, 255, 255, 0.35);
+  transform: scale(1.08);
+}
+
+.lidar-action-btn.active {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.4);
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.1);
+}
+
+.lidar-action-btn.active img {
+  filter: brightness(0) invert(1) opacity(1);
+}
+
+.lidar-actions {
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 0;
+}
+
 .analytical-legend-container {
   display: flex;
   flex-direction: column;
@@ -4252,13 +4474,14 @@ body {
   }
 }
 
-/* Offset MapLibre controls to avoid overlap with header and imagery panel */
+/* Align MapLibre controls (geolocation, compass, 3D) parallel with imagery panel buttons */
 /* Premium Circular Map Controls - Robust Implementation */
 .maplibregl-ctrl-top-right {
-  top: clamp(140px, 18vh, 160px) !important;
+  top: 148px !important;
   right: calc(16px + env(safe-area-inset-right, 0px)) !important;
   display: flex !important;
   flex-direction: column !important;
+  align-items: flex-end !important;
   gap: 12px !important;
   pointer-events: none !important;
 }
@@ -4317,12 +4540,20 @@ body {
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
 }
 
+/* 3D button below compass */
+.maplibregl-ctrl-top-right .toggle-3d {
+  margin-top: 8px;
+}
+
 /* Standardize icons (Imagery panel) - Inverted for dark theme */
 .imagery-panel__toggle-icon img,
 .imagery-panel__buttons .toggle-3d img,
 .terrain-toolbox-toggle img,
 .snow-toolbox-toggle img,
-.shadow-toolbox-toggle img {
+.shadow-toolbox-toggle img,
+.pathway-toolbox-toggle img,
+.basemap-toolbox-toggle img,
+.photos-toolbox-toggle img {
   width: 22px !important;
   height: 22px !important;
   filter: brightness(0) invert(1) opacity(0.9) !important;

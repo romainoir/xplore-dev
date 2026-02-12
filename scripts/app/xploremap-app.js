@@ -7,7 +7,7 @@
  */
 
 // ─── Module imports ───
-import { createMap, getBaseStyleLayerBuckets } from './map-init.js';
+import { createMap, getBaseStyleLayerBuckets, parseAndCacheBaseStyleLayers } from './map-init.js';
 import { createImageryManager, IMAGERY_OPTIONS, LAYER_GROUPS, LAYER_GROUP_BY_MEMBER_ID, clampOpacity, DEM_SOURCE_MAX_ZOOM } from './imagery-manager.js';
 import { applyOverlays, applyHillshadeAppearance } from './overlay-manager.js';
 import { createRoutingOrchestrator } from './routing-orchestrator.js';
@@ -24,6 +24,7 @@ import { DirectionsManager } from '../directions/core/directions-manager.js';
 import { RouteLibraryManager } from '../storage/route-library-manager.js';
 import { RouteLibraryUI } from '../ui/route-library-ui.js';
 import { ensureGpxLayers, zoomToGeojson, parseGpxToGeoJson, geojsonToGpx } from '../gpx/gpx-io.js';
+import { initializeWikimediaPhotos } from '../map/wikimedia-photos.js';
 
 // ─── Config imports ───
 import {
@@ -71,13 +72,17 @@ async function init() {
   const shadowCtrl = createShadowController(map, { viewModeController });
 
   // ── 5. Imagery manager ──
-  const { overlay: baseStyleOverlayLayerIds, underlay: baseStyleUnderlayLayerIds } = getBaseStyleLayerBuckets();
+  const { overlay: baseStyleOverlayLayerIds, fills: baseStyleFillLayerIds, underlay: baseStyleUnderlayLayerIds } = getBaseStyleLayerBuckets();
 
   const imagery = createImageryManager(map, {
     baseStyleOverlayLayerIds,
     baseStyleUnderlayLayerIds,
+    baseStyleFillLayerIds,
     updateAnalyticalLegends: () => renderAnalyticalLegends(map, imagery.imageryState, shadowCtrl.updateShadowTime),
   });
+
+  // ── 5b. Wikimedia Photos ──
+  initializeWikimediaPhotos(map, { enabled: false });
 
   // ── 6. Routing orchestrator ──
   const routing = createRoutingOrchestrator(map);
@@ -145,7 +150,14 @@ async function init() {
     viewModeController,
   });
 
-  map.on('style.load', () => applyOverlays(map, getOverlayDeps()));
+  map.on('style.load', () => {
+    applyOverlays(map, getOverlayDeps());
+    // Re-apply contour state after overlays create the layers
+    const contState = imagery.imageryState.get('contours');
+    if (contState) {
+      imagery.applyImageryState();
+    }
+  });
   map.once('style.load', () => applyHillshadeAppearance(map));
   map.once('style.load', () => {
     if (viewModeController && typeof viewModeController.applyCurrentMode === 'function') {
@@ -427,7 +439,6 @@ async function init() {
     settingsToggle.addEventListener('click', (e) => {
       e.stopPropagation();
       const isOpen = settingsPanel.classList.contains('settings-panel--open');
-      if (!isOpen) imagery.setImageryPanelOpen(false);
       setSettingsPanelOpen(!isOpen);
     });
     if (settingsPanelClose) settingsPanelClose.addEventListener('click', () => setSettingsPanelOpen(false));
@@ -570,27 +581,54 @@ async function init() {
   // ═════════════════════════════════════════════════════════════════════
   // IMAGERY PANEL DOM RENDERING (inline per user request)
   // ═════════════════════════════════════════════════════════════════════
+  // 14. TOOLBOX-BASED LAYER PANEL
+  // ═════════════════════════════════════════════════════════════════════
 
-  const imageryPanel = document.getElementById('imageryPanel');
-  const imageryPanelToggle = document.getElementById('imageryPanelToggle');
-  const imageryPanelDrawer = document.getElementById('imageryPanelDrawer');
-  const imageryToggle = document.getElementById('imageryToggle');
+  // ── Toolbox DOM references ──
+  const toolboxes = {
+    shadow: { toggle: document.getElementById('shadowToolboxToggle'), box: document.getElementById('shadowToolbox') },
+    snow: { toggle: document.getElementById('snowToolboxToggle'), box: document.getElementById('snowToolbox') },
+    terrain: { toggle: document.getElementById('terrainToolboxToggle'), box: document.getElementById('terrainToolbox') },
+    pathway: { toggle: document.getElementById('pathwayToolboxToggle'), box: document.getElementById('pathwayToolbox') },
+    basemap: { toggle: document.getElementById('basemapToolboxToggle'), box: document.getElementById('basemapToolbox') },
+    photos: { toggle: document.getElementById('photosToolboxToggle'), box: document.getElementById('photosToolbox') },
+  };
 
-  // ── Imagery panel open/close ──
-  if (imageryPanelToggle && imageryPanelDrawer) {
-    imagery.setImageryPanelOpen(false);
-    imageryPanelToggle.addEventListener('click', () => {
-      const next = !imageryPanelDrawer.classList.contains('imagery-panel__drawer--open');
-      if (next) setSettingsPanelOpen(false);
-      imagery.setImageryPanelOpen(next);
+  // ── Generic toolbox open/close helper ──
+  const setToolboxOpen = (name, open) => {
+    const tb = toolboxes[name];
+    if (!tb?.toggle || !tb?.box) return;
+    tb.box.classList.toggle('visible', open);
+    tb.box.setAttribute('aria-hidden', String(!open));
+    tb.toggle.setAttribute('aria-expanded', String(open));
+    tb.toggle.classList.toggle('active', open);
+    // Close all OTHER toolboxes when opening one
+    if (open) {
+      Object.keys(toolboxes).forEach(k => { if (k !== name) setToolboxOpen(k, false); });
+      setSettingsPanelOpen(false);
+    }
+  };
+
+  // Wire click + outside-click for each toolbox
+  Object.entries(toolboxes).forEach(([name, tb]) => {
+    if (!tb.toggle || !tb.box) return;
+    tb.toggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      setToolboxOpen(name, !tb.box.classList.contains('visible'));
     });
     document.addEventListener('click', (e) => {
-      if (!imageryPanelDrawer.classList.contains('imagery-panel__drawer--open')) return;
-      if (!imageryPanel || imageryPanel.contains(e.target)) return;
-      imagery.setImageryPanelOpen(false);
+      if (!tb.box.classList.contains('visible')) return;
+      if (tb.toggle.contains(e.target) || tb.box.contains(e.target)) return;
+      setToolboxOpen(name, false);
     });
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') imagery.setImageryPanelOpen(false); });
-  }
+  });
+
+  // Wire toolbox handlers into imagery manager (shadow/terrain/snow still use this)
+  imagery.setToolboxHandlers({
+    setTerrainToolboxOpen: (open) => setToolboxOpen('terrain', open),
+    setSnowToolboxOpen: (open) => setToolboxOpen('snow', open),
+    setShadowToolboxOpen: (open) => setToolboxOpen('shadow', open),
+  });
 
   // ── Directions sidebar bar ──
   const directionsActionsBar = document.getElementById('directionsActionsBar');
@@ -610,381 +648,764 @@ async function init() {
     updateActionsBarVisibility();
   }
 
-  // ── Toolbox open/close logic ──
-  const terrainToolboxToggle = document.getElementById('terrainToolboxToggle');
-  const terrainToolbox = document.getElementById('terrainToolbox');
-  const snowToolboxToggle = document.getElementById('snowToolboxToggle');
-  const snowToolbox = document.getElementById('snowToolbox');
-  const shadowToolboxToggle = document.getElementById('shadowToolboxToggle');
-  const shadowToolbox = document.getElementById('shadowToolbox');
+  // ═════════════════════════════════════════════════════════════════════
+  // 14a. POPULATE EXISTING TOOLBOXES (shadow, terrain, snow)
+  // ═════════════════════════════════════════════════════════════════════
 
-  const setTerrainToolboxOpen = (open) => {
-    if (!terrainToolbox || !terrainToolboxToggle) return;
-    terrainToolbox.classList.toggle('visible', open);
-    terrainToolbox.setAttribute('aria-hidden', String(!open));
-    terrainToolboxToggle.setAttribute('aria-expanded', String(open));
-    terrainToolboxToggle.classList.toggle('active', open);
-    if (open) { setSnowToolboxOpen(false); setShadowToolboxOpen(false); }
-  };
-
-  const setSnowToolboxOpen = (open) => {
-    if (!snowToolbox || !snowToolboxToggle) return;
-    snowToolbox.classList.toggle('visible', open);
-    snowToolbox.setAttribute('aria-hidden', String(!open));
-    snowToolboxToggle.setAttribute('aria-expanded', String(open));
-    snowToolboxToggle.classList.toggle('active', open);
-    if (open) { setTerrainToolboxOpen(false); setShadowToolboxOpen(false); }
-  };
-
-  const setShadowToolboxOpen = (open) => {
-    if (!shadowToolbox || !shadowToolboxToggle) return;
-    shadowToolbox.classList.toggle('visible', open);
-    shadowToolbox.setAttribute('aria-hidden', String(!open));
-    shadowToolboxToggle.setAttribute('aria-expanded', String(open));
-    shadowToolboxToggle.classList.toggle('active', open);
-    if (open) { setTerrainToolboxOpen(false); setSnowToolboxOpen(false); }
-  };
-
-  // Wire toolbox handlers into imagery manager
-  imagery.setToolboxHandlers({ setTerrainToolboxOpen, setSnowToolboxOpen, setShadowToolboxOpen });
-
-  if (terrainToolboxToggle && terrainToolbox) {
-    terrainToolboxToggle.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const isOpen = terrainToolbox.classList.contains('visible');
-      if (!isOpen) imagery.setImageryPanelOpen(false);
-      setTerrainToolboxOpen(!isOpen);
-    });
-    document.addEventListener('click', (e) => {
-      if (!terrainToolbox.classList.contains('visible')) return;
-      if (terrainToolboxToggle.contains(e.target) || terrainToolbox.contains(e.target)) return;
-      setTerrainToolboxOpen(false);
-    });
-  }
-
-  if (snowToolboxToggle && snowToolbox) {
-    snowToolboxToggle.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const isOpen = snowToolbox.classList.contains('visible');
-      if (!isOpen) imagery.setImageryPanelOpen(false);
-      setSnowToolboxOpen(!isOpen);
-    });
-    document.addEventListener('click', (e) => {
-      if (!snowToolbox.classList.contains('visible')) return;
-      if (snowToolboxToggle.contains(e.target) || snowToolbox.contains(e.target)) return;
-      setSnowToolboxOpen(false);
-    });
-  }
-
-  if (shadowToolboxToggle && shadowToolbox) {
-    shadowToolboxToggle.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const isOpen = shadowToolbox.classList.contains('visible');
-      if (!isOpen) imagery.setImageryPanelOpen(false);
-      setShadowToolboxOpen(!isOpen);
-    });
-    document.addEventListener('click', (e) => {
-      if (!shadowToolbox.classList.contains('visible')) return;
-      if (shadowToolboxToggle.contains(e.target) || shadowToolbox.contains(e.target)) return;
-      setShadowToolboxOpen(false);
-    });
-  }
-
-  // ── Imagery panel: render controls ──
-  if (imageryToggle) {
+  {
     const { SHADOW_TOOLBOX_IDS, TERRAIN_TOOLBOX_IDS, SNOW_TOOLBOX_IDS } = imagery;
-    if (terrainToolbox) terrainToolbox.textContent = '';
-    if (snowToolbox) snowToolbox.textContent = '';
-    if (shadowToolbox) shadowToolbox.textContent = '';
+    if (toolboxes.terrain.box) toolboxes.terrain.box.textContent = '';
+    if (toolboxes.snow.box) toolboxes.snow.box.textContent = '';
+    if (toolboxes.shadow.box) toolboxes.shadow.box.textContent = '';
 
-    if (!IMAGERY_OPTIONS.length) {
-      imageryToggle.setAttribute('hidden', 'true');
-      imageryToggle.setAttribute('aria-hidden', 'true');
-      imageryPanel?.setAttribute('hidden', 'true');
-    } else {
-      imageryToggle.removeAttribute('hidden');
-      imageryToggle.setAttribute('aria-hidden', 'false');
-      imageryPanel?.removeAttribute('hidden');
+    IMAGERY_OPTIONS.forEach((option) => {
+      if (option.hiddenControl) return;
+      const isTerrainToolboxMember = TERRAIN_TOOLBOX_IDS.includes(option.id);
+      const isSnowToolboxMember = SNOW_TOOLBOX_IDS.includes(option.id);
+      const isShadowToolboxMember = SHADOW_TOOLBOX_IDS.includes(option.id);
+      if (!isTerrainToolboxMember && !isSnowToolboxMember && !isShadowToolboxMember) return;
 
-      IMAGERY_OPTIONS.forEach((option) => {
-        if (option.hiddenControl) return;
+      const group = LAYER_GROUP_BY_MEMBER_ID.get(option.id);
 
-        const isTerrainToolboxMember = TERRAIN_TOOLBOX_IDS.includes(option.id);
-        const isSnowToolboxMember = SNOW_TOOLBOX_IDS.includes(option.id);
-        const isShadowToolboxMember = SHADOW_TOOLBOX_IDS.includes(option.id);
-        const state = imagery.imageryState.get(option.id) ?? { enabled: false, opacity: 0 };
-        const group = LAYER_GROUP_BY_MEMBER_ID.get(option.id);
+      const toggleButton = document.createElement('button');
+      toggleButton.type = 'button';
+      let btnClass = 'btn terrain-toolbox__toggle';
+      if (isSnowToolboxMember) btnClass = 'btn snow-toolbox__toggle';
+      if (isShadowToolboxMember) btnClass = 'btn shadow-toolbox__toggle';
+      toggleButton.className = btnClass;
+      toggleButton.dataset.imageryId = option.id;
+      toggleButton.setAttribute('aria-pressed', 'false');
+      toggleButton.setAttribute('title', option.label);
+      toggleButton.setAttribute('aria-label', option.label);
 
-        // ── Toolbox member rendering ──
-        if (isTerrainToolboxMember || isSnowToolboxMember || isShadowToolboxMember) {
-          const toggleButton = document.createElement('button');
-          toggleButton.type = 'button';
-          let btnClass = 'btn terrain-toolbox__toggle';
-          if (isSnowToolboxMember) btnClass = 'btn snow-toolbox__toggle';
-          if (isShadowToolboxMember) btnClass = 'btn shadow-toolbox__toggle';
-          toggleButton.className = btnClass;
-          toggleButton.dataset.imageryId = option.id;
-          toggleButton.setAttribute('aria-pressed', 'false');
-          toggleButton.setAttribute('title', option.label);
-          toggleButton.setAttribute('aria-label', option.label);
+      const previewUrl = typeof option.previewImage === 'string' && option.previewImage.length
+        ? option.previewImage : imagery.createTilePreviewUrl(option.tileTemplate);
+      if (previewUrl) {
+        const img = document.createElement('img');
+        img.src = previewUrl; img.alt = ''; img.loading = 'lazy'; img.decoding = 'async'; img.draggable = false;
+        toggleButton.appendChild(img);
+      }
+      const srLabel = document.createElement('span');
+      srLabel.className = 'sr-only'; srLabel.textContent = option.label;
+      toggleButton.appendChild(srLabel);
 
-          const previewUrl = typeof option.previewImage === 'string' && option.previewImage.length
-            ? option.previewImage : imagery.createTilePreviewUrl(option.tileTemplate);
-          if (previewUrl) {
-            const img = document.createElement('img');
-            img.src = previewUrl; img.alt = ''; img.loading = 'lazy'; img.decoding = 'async'; img.draggable = false;
-            toggleButton.appendChild(img);
-          }
-          const srLabel = document.createElement('span');
-          srLabel.className = 'sr-only'; srLabel.textContent = option.label;
-          toggleButton.appendChild(srLabel);
-
-          toggleButton.addEventListener('click', () => {
-            toggleButton.blur();
-            const cur = imagery.imageryState.get(option.id);
-            if (!cur) return;
-            const active = Boolean(cur.enabled && cur.opacity > 0);
-            const nextEnabled = !active;
-            if (group?.exclusive && nextEnabled) {
-              group.members.forEach(id => { if (id !== option.id) { const s = imagery.imageryState.get(id); if (s) s.enabled = false; } });
-            }
-            cur.enabled = nextEnabled;
-            if (nextEnabled && cur.opacity <= 0) cur.opacity = typeof option.defaultOpacity === 'number' ? option.defaultOpacity : 1.0;
-            imagery.applyImageryState();
-            imagery.updateImageryControlStates();
-            imagery.applyImageryLayerOrder();
-            if (isTerrainToolboxMember) setTerrainToolboxOpen(false);
-            if (isSnowToolboxMember) setSnowToolboxOpen(false);
-            if (isShadowToolboxMember) setShadowToolboxOpen(false);
-          });
-
-          let targetToolbox = terrainToolbox;
-          if (isSnowToolboxMember) targetToolbox = snowToolbox;
-          if (isShadowToolboxMember) targetToolbox = shadowToolbox;
-          if (targetToolbox) targetToolbox.appendChild(toggleButton);
-
-          imagery.imageryControls.set(option.id, { container: toggleButton, button: toggleButton, slider: null, sliderWrapper: null, isGroupMember: false });
-          return;
+      toggleButton.addEventListener('click', () => {
+        toggleButton.blur();
+        const cur = imagery.imageryState.get(option.id);
+        if (!cur) return;
+        const active = Boolean(cur.enabled && cur.opacity > 0);
+        const nextEnabled = !active;
+        if (group?.exclusive && nextEnabled) {
+          group.members.forEach(id => { if (id !== option.id) { const s = imagery.imageryState.get(id); if (s) s.enabled = false; } });
         }
+        cur.enabled = nextEnabled;
+        if (nextEnabled && cur.opacity <= 0) cur.opacity = typeof option.defaultOpacity === 'number' ? option.defaultOpacity : 1.0;
+        imagery.applyImageryState();
+        imagery.updateImageryControlStates();
+        imagery.applyImageryLayerOrder();
+        if (isTerrainToolboxMember) setToolboxOpen('terrain', false);
+        if (isSnowToolboxMember) setToolboxOpen('snow', false);
+        if (isShadowToolboxMember) setToolboxOpen('shadow', false);
+      });
 
+      let targetToolbox = toolboxes.terrain.box;
+      if (isSnowToolboxMember) targetToolbox = toolboxes.snow.box;
+      if (isShadowToolboxMember) targetToolbox = toolboxes.shadow.box;
+      if (targetToolbox) targetToolbox.appendChild(toggleButton);
 
-        // ── Group / Non-grouped rendering ──
-        let container;
-        let isGroupMember = false;
+      imagery.imageryControls.set(option.id, { container: toggleButton, button: toggleButton, slider: null, sliderWrapper: null, isGroupMember: false });
+    });
 
-        if (group) {
-          isGroupMember = true;
-          if (!imagery.groupContainers.has(group.id)) {
-            const groupContainer = document.createElement('div');
-            groupContainer.className = 'imagery-group';
-            groupContainer.dataset.groupId = group.id;
+    imagery.updateImageryControlStates();
+  }
 
-            const row = document.createElement('div');
-            row.className = 'imagery-group__row';
-            const groupPreview = document.createElement('div');
-            groupPreview.className = 'imagery-group__preview';
-            const groupLabel = document.createElement('span');
-            groupLabel.className = 'imagery-group__label';
-            groupLabel.textContent = group.label;
-            row.appendChild(groupPreview);
-            row.appendChild(groupLabel);
-            groupContainer.appendChild(row);
+  // ═════════════════════════════════════════════════════════════════════
+  // 14b. BASEMAP TOOLBOX (exclusive selection)
+  // ═════════════════════════════════════════════════════════════════════
 
-            const isNoSliderGroup = ['terrain-analysis', 'sun-analysis', 'snow'].includes(group.id);
-            let groupSlider = null;
-            if (!isNoSliderGroup) {
-              const sliderWrapper = document.createElement('div');
-              sliderWrapper.className = 'imagery-group__opacity-wrapper';
-              groupSlider = document.createElement('input');
-              groupSlider.type = 'range'; groupSlider.min = '0'; groupSlider.max = '1'; groupSlider.step = '0.05';
-              groupSlider.className = 'imagery-group__opacity';
-              groupSlider.setAttribute('aria-label', `${group.label} opacity`);
-              const firstEnabled = group.members.find(id => imagery.imageryState.get(id)?.enabled);
-              groupSlider.value = String(firstEnabled ? imagery.imageryState.get(firstEnabled).opacity : 0.8);
-              groupSlider.addEventListener('input', () => {
-                const v = clampOpacity(Number.parseFloat(groupSlider.value));
-                group.members.forEach(mid => { const ms = imagery.imageryState.get(mid); if (ms) ms.opacity = v; });
-                imagery.applyImageryState();
-                imagery.updateImageryControlStates();
-              });
-              const stop = e => e.stopPropagation();
-              groupSlider.addEventListener('mousedown', stop);
-              groupSlider.addEventListener('touchstart', stop, { passive: true });
-              sliderWrapper.appendChild(groupSlider);
-              groupContainer.appendChild(sliderWrapper);
+  // Forward reference — assigned in pathway section so basemap can re-apply pathway state
+  let reapplyAllPathways = null;
+
+  {
+    const basemapBox = toolboxes.basemap.box;
+    const basemapToggle = toolboxes.basemap.toggle;
+
+    // Basemap definitions — order matters for display
+    // Style cache to avoid re-fetching on repeated switches
+    const styleCache = new Map();
+    const injectStyleDefaults = (style) => {
+      style.projection = { type: 'mercator' };
+      style.sky = { 'sky-color': '#bcd0e6', 'horizon-color': '#e6effa', 'sky-horizon-blend': 0.5 };
+      style.light = { 'anchor': 'map', 'position': [1.5, 90, 80] };
+      return style;
+    };
+
+    const BASEMAP_OPTIONS = [
+      {
+        id: 'vector', label: 'Vector',
+        isStyleSwap: true,
+        subOptions: [
+          { id: 'liberty', label: 'Liberty', styleUrl: 'https://tiles.openfreemap.org/styles/liberty' },
+          { id: 'terrain-stadia', label: 'Terrain', styleUrl: './terrain_vector_on_stadia.json' },
+          { id: 'liberty-local', label: 'Liberty Local', styleUrl: './osm_liberty.json' },
+        ],
+        previewImage: './data/vector-map.svg',
+      },
+      {
+        id: 'satellite', label: 'Satellite',
+        subOptions: [
+          { id: 'satellite-ign', label: 'IGN Ortho', layerId: 'ign-orthophotos' },
+          { id: 'satellite-eox', label: 'EOX S2', layerId: 'eox-s2' },
+        ],
+      },
+      {
+        id: 'lidar-hd', label: 'Lidar HD',
+        // Custom handling: tree switches MNT/MNS, leaf toggles forest overlay
+        isLidar: true,
+      },
+      {
+        id: 'ign-scan', label: 'IGN Scan',
+        layerId: 'ign-scan',
+        previewImage: null,
+      },
+    ];
+
+    // Track active basemap
+    let activeBasemapId = 'vector';
+    let activeSubOptionId = null;
+    let initialStyleLoaded = false;  // Skip setStyle on first activation
+
+    // Lidar HD specific state
+    let lidarMode = 'mnt';      // 'mnt' or 'mns'
+    let lidarForestOverlay = false;
+
+    // IDs that belong to basemap system (so we can turn them all off)
+    const ALL_BASEMAP_LAYER_IDS = [
+      'vector-fills',
+      'ign-orthophotos', 'eox-s2',
+      'ign-cosia', 'ign-lidar-hd-mnt-shadow', 'ign-lidar-hd-mns-shadow',
+      'ign-scan', 'ign-forest-inventory',
+    ];
+
+    // Activate Lidar HD layers based on current lidar state
+    const activateLidarLayers = () => {
+      // Enable COSIA base at 0.3 opacity
+      const cosiaState = imagery.imageryState.get('ign-cosia');
+      if (cosiaState) { cosiaState.enabled = true; cosiaState.opacity = 0.3; }
+      // Enable the active variant
+      const mntId = 'ign-lidar-hd-mnt-shadow';
+      const mnsId = 'ign-lidar-hd-mns-shadow';
+      const mntState = imagery.imageryState.get(mntId);
+      const mnsState = imagery.imageryState.get(mnsId);
+      if (lidarMode === 'mnt') {
+        if (mntState) { mntState.enabled = true; mntState.opacity = 1; }
+        if (mnsState) { mnsState.enabled = false; }
+      } else {
+        if (mntState) { mntState.enabled = false; }
+        if (mnsState) { mnsState.enabled = true; mnsState.opacity = 1; }
+      }
+      // Forest overlay
+      const forestState = imagery.imageryState.get('ign-forest-inventory');
+      if (forestState) {
+        forestState.enabled = lidarForestOverlay;
+        if (lidarForestOverlay) forestState.opacity = 0.6;
+      }
+    };
+
+    const deactivateAllBasemapLayers = () => {
+      ALL_BASEMAP_LAYER_IDS.forEach(id => {
+        const s = imagery.imageryState.get(id);
+        if (s) s.enabled = false;
+      });
+    };
+
+    // Hide/show hillshade + terrain background + all non-overlay vector layers
+    const TERRAIN_BG_LAYERS = ['hillshade', 'hillshade2', 'terrain-bg', 'terrain'];
+    const setVectorBaseVisible = (visible) => {
+      const vis = visible ? 'visible' : 'none';
+      // Hillshade and terrain raster
+      TERRAIN_BG_LAYERS.forEach(id => {
+        if (map.getLayer(id)) {
+          try { map.setLayoutProperty(id, 'visibility', vis); } catch (_) { }
+        }
+      });
+      // All non-overlay base style layers (fills + underlay: water, waterways, parks, etc.)
+      const { fills = [], underlay = [] } = getBaseStyleLayerBuckets();
+      [...fills, ...underlay].forEach(id => {
+        if (map.getLayer(id)) {
+          try { map.setLayoutProperty(id, 'visibility', vis); } catch (_) { }
+        }
+      });
+    };
+
+    const activateBasemap = async (basemapId, subOptionId) => {
+      deactivateAllBasemapLayers();
+      const bm = BASEMAP_OPTIONS.find(b => b.id === basemapId);
+      if (!bm) return;
+
+      // Show terrain background + vector fills only for vector basemap
+      setVectorBaseVisible(basemapId === 'vector');
+
+      if (bm.isStyleSwap && bm.subOptions) {
+        // ── Style swap (vector basemap sub-options) ──
+        const sub = subOptionId
+          ? bm.subOptions.find(s => s.id === subOptionId)
+          : bm.subOptions[0];
+        if (!subOptionId) subOptionId = sub?.id;
+
+        // Skip style swap on first load — map already has this style from createMap()
+        if (initialStyleLoaded) {
+          if (sub && sub.styleUrl) {
+            try {
+              let style = styleCache.get(sub.styleUrl);
+              if (!style) {
+                style = await fetch(sub.styleUrl, { cache: 'no-store' }).then(r => r.json());
+                styleCache.set(sub.styleUrl, style);
+              }
+              // Deep clone to avoid mutating the cache
+              const liveStyle = JSON.parse(JSON.stringify(style));
+              injectStyleDefaults(liveStyle);
+              parseAndCacheBaseStyleLayers(liveStyle);
+              // setStyle triggers style.load → applyOverlays rebuilds terrain/hillshade/contours
+              map.setStyle(liveStyle);
+              console.log(`[Basemap] Switched vector style to: ${sub.label}`);
+            } catch (err) {
+              console.error(`[Basemap] Failed to load style ${sub.styleUrl}:`, err);
             }
-
-            // Drag handlers for group
-            const firstMemberId = group.members[0];
-            groupContainer.setAttribute('draggable', 'true');
-            groupContainer.dataset.imageryId = firstMemberId;
-            groupContainer.addEventListener('dragstart', (e) => {
-              imagery.dragSourceImageryId = firstMemberId;
-              imagery.resetDragIndicators();
-              groupContainer.classList.add('imagery-group--dragging');
-              if (e?.dataTransfer) { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', firstMemberId); }
-            });
-            groupContainer.addEventListener('dragend', () => { imagery.dragSourceImageryId = null; imagery.resetDragIndicators(); groupContainer.classList.remove('imagery-group--dragging'); });
-            groupContainer.addEventListener('dragover', (e) => {
-              if (!imagery.dragSourceImageryId || group.members.includes(imagery.dragSourceImageryId)) return;
-              e.preventDefault();
-              if (e?.dataTransfer) e.dataTransfer.dropEffect = 'move';
-              const rect = groupContainer.getBoundingClientRect();
-              const before = e.clientY < rect.top + rect.height / 2;
-              groupContainer.classList.toggle('imagery-group--drag-over-before', before);
-              groupContainer.classList.toggle('imagery-group--drag-over-after', !before);
-            });
-            groupContainer.addEventListener('dragleave', () => groupContainer.classList.remove('imagery-group--drag-over-before', 'imagery-group--drag-over-after'));
-            groupContainer.addEventListener('drop', (e) => {
-              if (!imagery.dragSourceImageryId || group.members.includes(imagery.dragSourceImageryId)) return;
-              e.preventDefault();
-              const before = e.clientY < groupContainer.getBoundingClientRect().top + groupContainer.getBoundingClientRect().height / 2;
-              imagery.moveImageryOption(imagery.dragSourceImageryId, firstMemberId, before);
-              imagery.dragSourceImageryId = null;
-              imagery.resetDragIndicators();
-              groupContainer.classList.remove('imagery-group--drag-over-before', 'imagery-group--drag-over-after');
-            });
-
-            imagery.groupContainers.set(group.id, { container: groupContainer, preview: groupPreview, slider: groupSlider });
-            imageryToggle.appendChild(groupContainer);
           }
-          container = imagery.groupContainers.get(group.id).preview;
         } else {
-          container = document.createElement('div');
-          container.className = 'imagery-option';
-          container.dataset.imageryId = option.id;
-          container.setAttribute('draggable', 'true');
-          container.addEventListener('dragstart', (e) => {
-            imagery.dragSourceImageryId = option.id; imagery.resetDragIndicators();
-            container.classList.add('imagery-option--dragging');
-            if (e?.dataTransfer) { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', option.id); }
-          });
-          container.addEventListener('dragend', () => { imagery.dragSourceImageryId = null; imagery.resetDragIndicators(); });
-          container.addEventListener('dragover', (e) => {
-            if (!imagery.dragSourceImageryId || imagery.dragSourceImageryId === option.id) return;
-            e.preventDefault();
-            if (e?.dataTransfer) e.dataTransfer.dropEffect = 'move';
-            const rect = container.getBoundingClientRect();
-            const before = e.clientY < rect.top + rect.height / 2;
-            container.classList.toggle('imagery-option--drag-over-before', before);
-            container.classList.toggle('imagery-option--drag-over-after', !before);
-          });
-          container.addEventListener('dragleave', () => container.classList.remove('imagery-option--drag-over-before', 'imagery-option--drag-over-after'));
-          container.addEventListener('drop', (e) => {
-            if (!imagery.dragSourceImageryId || imagery.dragSourceImageryId === option.id) return;
-            e.preventDefault();
-            const before = e.clientY < container.getBoundingClientRect().top + container.getBoundingClientRect().height / 2;
-            imagery.moveImageryOption(imagery.dragSourceImageryId, option.id, before);
-            imagery.dragSourceImageryId = null; imagery.resetDragIndicators();
-          });
+          initialStyleLoaded = true;
         }
 
-        // ── Toggle button (same for grouped and non-grouped) ──
-        const toggleButton = document.createElement('button');
-        toggleButton.type = 'button';
-        toggleButton.className = isGroupMember ? 'imagery-group__toggle' : 'imagery-option__toggle';
-        toggleButton.dataset.imageryId = option.id;
-        toggleButton.setAttribute('aria-pressed', 'false');
-        toggleButton.setAttribute('title', option.label);
-        toggleButton.setAttribute('aria-label', option.label);
+        // Re-enable vector fills + osm features (deactivateAllBasemapLayers turned them off)
+        const fillsState = imagery.imageryState.get('vector-fills');
+        if (fillsState) { fillsState.enabled = true; fillsState.opacity = 1; }
+        const osmState = imagery.imageryState.get('osm-features');
+        if (osmState) { osmState.enabled = true; osmState.opacity = 1; }
+      } else if (bm.activate) {
+        bm.activate();
+      } else if (bm.isLidar) {
+        activateLidarLayers();
+      } else if (bm.subOptions && subOptionId) {
+        const sub = bm.subOptions.find(s => s.id === subOptionId);
+        if (sub) {
+          if (sub.layerId) {
+            const ls = imagery.imageryState.get(sub.layerId);
+            if (ls) { ls.enabled = true; ls.opacity = 1; }
+          }
+          if (sub.layers) {
+            sub.layers.forEach(l => {
+              const ls = imagery.imageryState.get(l.id);
+              if (ls) { ls.enabled = true; ls.opacity = l.opacity; }
+            });
+          }
+        }
+      } else if (bm.layerId) {
+        const ls = imagery.imageryState.get(bm.layerId);
+        if (ls) { ls.enabled = true; ls.opacity = 1; }
+      }
 
-        const previewUrl = typeof option.previewImage === 'string' && option.previewImage.length
-          ? option.previewImage : imagery.createTilePreviewUrl(option.tileTemplate);
+      activeBasemapId = basemapId;
+      activeSubOptionId = subOptionId || null;
+
+      // Contours: enabled on Vector and Lidar basemaps only
+      const showContours = (basemapId === 'vector' || basemapId === 'lidar-hd');
+      const contState = imagery.imageryState.get('contours');
+      if (contState) { contState.enabled = showContours; contState.opacity = 1; }
+
+      imagery.applyImageryState();
+      imagery.updateImageryControlStates();
+      imagery.applyImageryLayerOrder();
+      updateBasemapUI();
+
+      // Re-apply pathway state so Routes persist across non-vector basemap switches
+      // On Vector basemap, overlay is always shown (part of the full map)
+      if (basemapId !== 'vector' && typeof reapplyAllPathways === 'function') reapplyAllPathways();
+    };
+
+    const updateBasemapUI = () => {
+      if (!basemapBox) return;
+      basemapBox.querySelectorAll('.btn.basemap-toolbox__toggle').forEach(btn => {
+        const isActive = btn.dataset.basemapId === activeBasemapId;
+        btn.classList.toggle('active', isActive);
+      });
+      // Update sub-menus (satellite text sub-options + lidar icon actions)
+      basemapBox.querySelectorAll('.basemap-sub-menu').forEach(sub => {
+        sub.classList.toggle('visible', sub.dataset.parentId === activeBasemapId);
+      });
+      basemapBox.querySelectorAll('.basemap-sub-option:not(.lidar-action-btn)').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.subId === activeSubOptionId);
+      });
+      // Lidar action button states
+      basemapBox.querySelectorAll('.lidar-tree-btn').forEach(btn => {
+        btn.classList.toggle('active', lidarMode === 'mns');
+        btn.setAttribute('title', lidarMode === 'mnt' ? 'Switch to MNS (surface)' : 'Switch to MNT (terrain)');
+      });
+      basemapBox.querySelectorAll('.lidar-leaf-btn').forEach(btn => {
+        btn.classList.toggle('active', lidarForestOverlay);
+      });
+      // Update main toggle thumbnail
+      if (basemapToggle) {
+        const isNonDefault = activeBasemapId !== 'vector';
+        basemapToggle.classList.toggle('has-active-layer', isNonDefault);
+        let thumb = basemapToggle.querySelector('.map-action-btn__thumb');
+        if (!thumb) { thumb = document.createElement('div'); thumb.className = 'map-action-btn__thumb'; basemapToggle.prepend(thumb); }
+        if (isNonDefault) {
+          const bm = BASEMAP_OPTIONS.find(b => b.id === activeBasemapId);
+          let previewUrl = bm?.previewImage || null;
+          if (!previewUrl && bm?.layerId) {
+            const opt = IMAGERY_OPTIONS.find(o => o.id === bm.layerId);
+            previewUrl = opt?.previewImage || (opt?.tileTemplate ? imagery.createTilePreviewUrl(opt.tileTemplate) : null);
+          }
+          if (!previewUrl && bm?.isLidar) {
+            // Show the active lidar variant's preview
+            const lidarId = lidarMode === 'mnt' ? 'ign-lidar-hd-mnt-shadow' : 'ign-lidar-hd-mns-shadow';
+            const opt = IMAGERY_OPTIONS.find(o => o.id === lidarId);
+            previewUrl = opt?.previewImage || (opt?.tileTemplate ? imagery.createTilePreviewUrl(opt.tileTemplate) : null);
+          }
+          if (!previewUrl && bm?.subOptions) {
+            const sub = bm.subOptions.find(s => s.id === activeSubOptionId) || bm.subOptions[0];
+            const sid = sub.layerId || (sub.layers ? sub.layers[sub.layers.length - 1].id : null);
+            const opt = sid ? IMAGERY_OPTIONS.find(o => o.id === sid) : null;
+            previewUrl = opt?.previewImage || (opt?.tileTemplate ? imagery.createTilePreviewUrl(opt.tileTemplate) : null);
+          }
+          if (previewUrl) { thumb.style.backgroundImage = `url(${previewUrl})`; }
+          else { thumb.style.backgroundImage = ''; }
+        } else {
+          thumb.style.backgroundImage = '';
+        }
+      }
+    };
+
+    // Populate basemap toolbox
+    if (basemapBox) {
+      basemapBox.textContent = '';
+      BASEMAP_OPTIONS.forEach(bm => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn basemap-toolbox__toggle';
+        btn.dataset.basemapId = bm.id;
+        btn.setAttribute('title', bm.label);
+        btn.setAttribute('aria-label', bm.label);
+
+        // Try to get a preview image
+        const option = bm.layerId ? IMAGERY_OPTIONS.find(o => o.id === bm.layerId) : null;
+        const previewUrl = bm.previewImage || option?.previewImage || (option?.tileTemplate ? imagery.createTilePreviewUrl(option.tileTemplate) : null);
         if (previewUrl) {
           const img = document.createElement('img');
           img.src = previewUrl; img.alt = ''; img.loading = 'lazy'; img.decoding = 'async'; img.draggable = false;
-          img.className = isGroupMember ? 'imagery-group__thumb' : 'imagery-option__thumb';
-          toggleButton.appendChild(img);
+          btn.appendChild(img);
+        } else {
+          // For Lidar HD, try the MNT shadow layer preview
+          if (bm.isLidar) {
+            const so = IMAGERY_OPTIONS.find(o => o.id === 'ign-lidar-hd-mnt-shadow');
+            const url = so?.previewImage || (so?.tileTemplate ? imagery.createTilePreviewUrl(so.tileTemplate) : null);
+            if (url) {
+              const img = document.createElement('img');
+              img.src = url; img.alt = ''; img.loading = 'lazy'; img.decoding = 'async'; img.draggable = false;
+              btn.appendChild(img);
+            }
+          }
+          // For sub-option groups, try first sub-option's layer
+          if (bm.subOptions && !btn.querySelector('img')) {
+            const firstSub = bm.subOptions[0];
+            const sid = firstSub.layerId || (firstSub.layers ? firstSub.layers[firstSub.layers.length - 1].id : null);
+            const so = sid ? IMAGERY_OPTIONS.find(o => o.id === sid) : null;
+            const url = so?.previewImage || (so?.tileTemplate ? imagery.createTilePreviewUrl(so.tileTemplate) : null);
+            if (url) {
+              const img = document.createElement('img');
+              img.src = url; img.alt = ''; img.loading = 'lazy'; img.decoding = 'async'; img.draggable = false;
+              btn.appendChild(img);
+            }
+          }
+          // Fallback: text label
+          if (!btn.querySelector('img')) {
+            const span = document.createElement('span');
+            span.style.cssText = 'font-size:11px;font-weight:600;color:#fff;text-align:center;line-height:1.1;';
+            span.textContent = bm.label;
+            btn.appendChild(span);
+          }
+        }
+
+        btn.addEventListener('click', () => {
+          if (bm.isLidar) {
+            activateBasemap(bm.id, null);
+          } else if (bm.subOptions) {
+            // If clicking a group with sub-options, activate first sub-option by default
+            const defaultSub = bm.subOptions[0];
+            activateBasemap(bm.id, defaultSub.id);
+          } else {
+            activateBasemap(bm.id, null);
+            setToolboxOpen('basemap', false);
+          }
+        });
+
+        // Wrap button + its sub-controls in a horizontal row
+        const row = document.createElement('div');
+        row.className = 'toolbox-option-row';
+        row.appendChild(btn);
+
+        // Create Lidar HD action buttons (tree = MNT/MNS toggle, leaf = forest overlay)
+        if (bm.isLidar) {
+          const actionsRow = document.createElement('div');
+          actionsRow.className = 'basemap-sub-menu lidar-actions';
+          actionsRow.dataset.parentId = bm.id;
+
+          // Tree button — toggles MNT ↔ MNS
+          const treeBtn = document.createElement('button');
+          treeBtn.type = 'button';
+          treeBtn.className = 'basemap-sub-option lidar-action-btn lidar-tree-btn';
+          treeBtn.setAttribute('title', 'Switch MNT / MNS');
+          const treeImg = document.createElement('img');
+          treeImg.src = './data/tree.png'; treeImg.alt = 'MNT/MNS'; treeImg.draggable = false;
+          treeBtn.appendChild(treeImg);
+          treeBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            lidarMode = lidarMode === 'mnt' ? 'mns' : 'mnt';
+            activateLidarLayers();
+            imagery.applyImageryState();
+            imagery.updateImageryControlStates();
+            updateBasemapUI();
+          });
+          actionsRow.appendChild(treeBtn);
+
+          // Leaf button — toggles forest inventory overlay
+          const leafBtn = document.createElement('button');
+          leafBtn.type = 'button';
+          leafBtn.className = 'basemap-sub-option lidar-action-btn lidar-leaf-btn';
+          leafBtn.setAttribute('title', 'Toggle Forest Inventory');
+          const leafImg = document.createElement('img');
+          leafImg.src = './data/leaf.png'; leafImg.alt = 'Forest'; leafImg.draggable = false;
+          leafBtn.appendChild(leafImg);
+          leafBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            lidarForestOverlay = !lidarForestOverlay;
+            activateLidarLayers();
+            imagery.applyImageryState();
+            imagery.updateImageryControlStates();
+            updateBasemapUI();
+          });
+          actionsRow.appendChild(leafBtn);
+
+          row.appendChild(actionsRow);
+        }
+
+        // Create sub-option buttons (horizontal) for non-lidar groups
+        if (bm.subOptions) {
+          const subMenu = document.createElement('div');
+          subMenu.className = 'basemap-sub-menu';
+          subMenu.dataset.parentId = bm.id;
+
+          bm.subOptions.forEach(sub => {
+            const subBtn = document.createElement('button');
+            subBtn.type = 'button';
+            subBtn.className = 'basemap-sub-option sub-thumb-btn';
+            subBtn.dataset.subId = sub.id;
+            subBtn.setAttribute('title', sub.label);
+            // Resolve preview image from the sub-option's layer
+            const sid = sub.layerId || (sub.layers ? sub.layers[sub.layers.length - 1].id : null);
+            const subOpt = sid ? IMAGERY_OPTIONS.find(o => o.id === sid) : null;
+            const subPreview = subOpt?.previewImage || (subOpt?.tileTemplate ? imagery.createTilePreviewUrl(subOpt.tileTemplate) : null);
+            if (subPreview) {
+              const img = document.createElement('img');
+              img.src = subPreview; img.alt = sub.label; img.loading = 'lazy'; img.decoding = 'async'; img.draggable = false;
+              subBtn.appendChild(img);
+            } else {
+              const span = document.createElement('span');
+              span.textContent = sub.label;
+              subBtn.appendChild(span);
+            }
+            subBtn.addEventListener('click', (e) => {
+              e.stopPropagation();
+              activateBasemap(bm.id, sub.id);
+            });
+            subMenu.appendChild(subBtn);
+          });
+
+          row.appendChild(subMenu);
+        }
+
+        basemapBox.appendChild(row);
+      });
+
+      // Initialize: vector is default basemap (liberty sub-option)
+      activateBasemap('vector', 'liberty');
+    }
+  }
+
+  // ═════════════════════════════════════════════════════════════════════
+  // 14c. PATHWAY TOOLBOX (independent toggles)
+  // ═════════════════════════════════════════════════════════════════════
+
+  {
+    const pathwayBox = toolboxes.pathway.box;
+    const pathwayToggle = toolboxes.pathway.toggle;
+
+    const PATHWAY_OPTIONS = [
+      {
+        id: 'routes', label: 'Routes',
+        type: 'osm-overlay',
+        previewImage: './data/OSM_vector.png',
+      },
+      {
+        id: 'heatmap', label: 'Heatmap', previewImage: './data/fire.png',
+        subOptions: [
+          { id: 'strava-backcountry-ski', label: 'Backcountry Ski', layerId: 'strava-backcountry-ski', previewImage: './data/ski.png' },
+          { id: 'strava-cycling', label: 'Cycling', layerId: 'strava-cycling', previewImage: './data/bike.png' },
+          { id: 'strava-run', label: 'Run', layerId: 'strava-run', previewImage: './data/running.png' },
+        ],
+      },
+      {
+        id: 'ski-rando', label: 'Ski Rando',
+        layerId: 'ign-traces-hivernales',
+        previewImage: './data/ski.png',
+      },
+    ];
+
+    // Track pathway toggle states (routes enabled by default)
+    const pathwayState = new Map();
+    PATHWAY_OPTIONS.forEach(p => pathwayState.set(p.id, { enabled: p.id === 'routes', activeSubId: null }));
+
+    const applyPathwayOption = (optionId) => {
+      const opt = PATHWAY_OPTIONS.find(p => p.id === optionId);
+      const state = pathwayState.get(optionId);
+      if (!opt || !state) return;
+
+      if (opt.type === 'osm-overlay') {
+        // Toggle OSM overlay (routes/paths)
+        const osmState = imagery.imageryState.get('osm-features');
+        if (osmState) { osmState.enabled = state.enabled; osmState.opacity = state.enabled ? 1 : 0; }
+      } else if (opt.subOptions) {
+        // Turn off all sub-option layers first
+        opt.subOptions.forEach(sub => {
+          const ls = imagery.imageryState.get(sub.layerId);
+          if (ls) ls.enabled = false;
+        });
+        if (state.enabled && state.activeSubId) {
+          const sub = opt.subOptions.find(s => s.id === state.activeSubId);
+          if (sub) {
+            const ls = imagery.imageryState.get(sub.layerId);
+            if (ls) { ls.enabled = true; ls.opacity = 1; }
+          }
+        }
+      } else if (opt.layerId) {
+        const ls = imagery.imageryState.get(opt.layerId);
+        if (ls) { ls.enabled = state.enabled; if (state.enabled) ls.opacity = 1; }
+      }
+
+      imagery.applyImageryState();
+      imagery.updateImageryControlStates();
+      imagery.applyImageryLayerOrder();
+      updatePathwayUI();
+    };
+
+    // Allow basemap switching to re-apply pathway state (Routes persist across basemap changes)
+    reapplyAllPathways = () => {
+      for (const [id] of pathwayState) {
+        applyPathwayOption(id);
+      }
+    };
+
+    const updatePathwayUI = () => {
+      if (!pathwayBox) return;
+      pathwayBox.querySelectorAll('.btn.pathway-toolbox__toggle').forEach(btn => {
+        const state = pathwayState.get(btn.dataset.pathwayId);
+        btn.classList.toggle('active', state?.enabled ?? false);
+      });
+      // Update sub-menus visibility
+      pathwayBox.querySelectorAll('.pathway-sub-menu').forEach(sub => {
+        const state = pathwayState.get(sub.dataset.parentId);
+        sub.classList.toggle('visible', state?.enabled ?? false);
+      });
+      pathwayBox.querySelectorAll('.pathway-sub-option').forEach(btn => {
+        const parentState = pathwayState.get(btn.dataset.parentId);
+        btn.classList.toggle('active', btn.dataset.subId === parentState?.activeSubId);
+      });
+      // Main toggle thumbnail
+      const anyActive = [...pathwayState.values()].some(s => s.enabled);
+      if (pathwayToggle) {
+        pathwayToggle.classList.toggle('has-active-layer', anyActive);
+        let thumb = pathwayToggle.querySelector('.map-action-btn__thumb');
+        if (!thumb) { thumb = document.createElement('div'); thumb.className = 'map-action-btn__thumb'; pathwayToggle.prepend(thumb); }
+        if (anyActive) {
+          // Find first active pathway option's preview
+          let previewUrl = null;
+          for (const [id, st] of pathwayState.entries()) {
+            if (!st.enabled) continue;
+            const opt = PATHWAY_OPTIONS.find(p => p.id === id);
+            if (opt?.previewImage) { previewUrl = opt.previewImage; break; }
+            if (opt?.subOptions && st.activeSubId) {
+              const sub = opt.subOptions.find(s => s.id === st.activeSubId);
+              const layerOpt = sub?.layerId ? IMAGERY_OPTIONS.find(o => o.id === sub.layerId) : null;
+              previewUrl = layerOpt?.previewImage || (layerOpt?.tileTemplate ? imagery.createTilePreviewUrl(layerOpt.tileTemplate) : null);
+              if (previewUrl) break;
+            }
+            if (opt?.layerId) {
+              const layerOpt = IMAGERY_OPTIONS.find(o => o.id === opt.layerId);
+              previewUrl = layerOpt?.previewImage || (layerOpt?.tileTemplate ? imagery.createTilePreviewUrl(layerOpt.tileTemplate) : null);
+              if (previewUrl) break;
+            }
+          }
+          if (previewUrl) { thumb.style.backgroundImage = `url(${previewUrl})`; }
+          else { thumb.style.backgroundImage = ''; }
+        } else {
+          thumb.style.backgroundImage = '';
+        }
+      }
+    };
+
+    if (pathwayBox) {
+      pathwayBox.textContent = '';
+      PATHWAY_OPTIONS.forEach(opt => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn pathway-toolbox__toggle';
+        btn.dataset.pathwayId = opt.id;
+        btn.setAttribute('title', opt.label);
+        btn.setAttribute('aria-label', opt.label);
+
+        if (opt.previewImage) {
+          const img = document.createElement('img');
+          img.src = opt.previewImage; img.alt = ''; img.loading = 'lazy'; img.decoding = 'async'; img.draggable = false;
+          btn.appendChild(img);
+        } else {
+          const span = document.createElement('span');
+          span.style.cssText = 'font-size:11px;font-weight:600;color:#fff;text-align:center;line-height:1.1;';
+          span.textContent = opt.label;
+          btn.appendChild(span);
+        }
+
+        btn.addEventListener('click', () => {
+          const state = pathwayState.get(opt.id);
+          if (!state) return;
+          state.enabled = !state.enabled;
+          if (state.enabled && opt.subOptions && !state.activeSubId) {
+            state.activeSubId = opt.subOptions[0].id;
+          }
+          if (!state.enabled) {
+            state.activeSubId = null;
+            // Remove badge when disabled
+            const badge = btn.querySelector('.pathway-badge');
+            if (badge) badge.remove();
+          }
+          applyPathwayOption(opt.id);
+        });
+
+        const row = document.createElement('div');
+        row.className = 'toolbox-option-row';
+        row.appendChild(btn);
+
+        // Sub-options
+        if (opt.subOptions) {
+          const subMenu = document.createElement('div');
+          subMenu.className = 'pathway-sub-menu';
+          subMenu.dataset.parentId = opt.id;
+
+          opt.subOptions.forEach(sub => {
+            const subBtn = document.createElement('button');
+            subBtn.type = 'button';
+            subBtn.className = 'pathway-sub-option sub-thumb-btn';
+            subBtn.dataset.subId = sub.id;
+            subBtn.dataset.parentId = opt.id;
+            subBtn.setAttribute('title', sub.label);
+            // Resolve preview image: use sub-option's own previewImage first, then fall back to layer lookup
+            const subOpt = sub.layerId ? IMAGERY_OPTIONS.find(o => o.id === sub.layerId) : null;
+            const subPreview = sub.previewImage || subOpt?.previewImage || (subOpt?.tileTemplate ? imagery.createTilePreviewUrl(subOpt.tileTemplate) : null);
+            if (subPreview) {
+              const img = document.createElement('img');
+              img.src = subPreview; img.alt = sub.label; img.loading = 'lazy'; img.decoding = 'async'; img.draggable = false;
+              subBtn.appendChild(img);
+            } else {
+              const span = document.createElement('span');
+              span.textContent = sub.label;
+              subBtn.appendChild(span);
+            }
+            subBtn.addEventListener('click', (e) => {
+              e.stopPropagation();
+              const parentState = pathwayState.get(opt.id);
+              if (!parentState) return;
+              parentState.enabled = true;
+              parentState.activeSubId = sub.id;
+              applyPathwayOption(opt.id);
+              // Update badge on parent button
+              const parentBtn = pathwayBox.querySelector(`[data-pathway-id="${opt.id}"]`);
+              if (parentBtn && sub.previewImage) {
+                let badge = parentBtn.querySelector('.pathway-badge');
+                if (!badge) {
+                  badge = document.createElement('img');
+                  badge.className = 'pathway-badge';
+                  parentBtn.appendChild(badge);
+                }
+                badge.src = sub.previewImage;
+                badge.alt = sub.label;
+              }
+              // Close the sub-menu after selection
+              subMenu.classList.remove('visible');
+            });
+            subMenu.appendChild(subBtn);
+          });
+
+          row.appendChild(subMenu);
+        }
+
+        pathwayBox.appendChild(row);
+      });
+
+      updatePathwayUI();
+    }
+  }
+
+  // ═════════════════════════════════════════════════════════════════════
+  // 14d. PHOTOS TOOLBOX
+  // ═════════════════════════════════════════════════════════════════════
+
+  {
+    const photosBox = toolboxes.photos.box;
+    const photosToggle = toolboxes.photos.toggle;
+
+    if (photosBox) {
+      photosBox.textContent = '';
+      const opt = IMAGERY_OPTIONS.find(o => o.id === 'wikimedia-photos');
+      if (opt) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn photos-toolbox__toggle';
+        btn.dataset.imageryId = opt.id;
+        btn.setAttribute('title', opt.label);
+        btn.setAttribute('aria-label', opt.label);
+
+        if (opt.previewImage) {
+          const img = document.createElement('img');
+          img.src = opt.previewImage; img.alt = ''; img.loading = 'lazy'; img.decoding = 'async'; img.draggable = false;
+          btn.appendChild(img);
         }
         const srLabel = document.createElement('span');
-        srLabel.className = 'sr-only'; srLabel.textContent = option.label;
-        toggleButton.appendChild(srLabel);
+        srLabel.className = 'sr-only'; srLabel.textContent = opt.label;
+        btn.appendChild(srLabel);
 
-        toggleButton.addEventListener('click', () => {
-          toggleButton.blur();
-          const cur = imagery.imageryState.get(option.id);
-          if (!cur) return;
-          const active = Boolean(cur.enabled && cur.opacity > 0);
-          const nextEnabled = !active;
-          const clickGroup = LAYER_GROUP_BY_MEMBER_ID.get(option.id);
-          if (clickGroup?.exclusive && nextEnabled) {
-            clickGroup.members.forEach(id => { if (id !== option.id) { const s = imagery.imageryState.get(id); if (s) s.enabled = false; } });
+        let photosEnabled = false;
+
+        btn.addEventListener('click', () => {
+          photosEnabled = !photosEnabled;
+          const cur = imagery.imageryState.get(opt.id);
+          if (cur) {
+            cur.enabled = photosEnabled;
+            if (photosEnabled && cur.opacity <= 0) cur.opacity = 1;
           }
-          cur.enabled = nextEnabled;
-          if (nextEnabled) {
-            let usedGroupSlider = false;
-            if (clickGroup && imagery.groupContainers.has(clickGroup.id)) {
-              const gd = imagery.groupContainers.get(clickGroup.id);
-              if (gd?.slider) { cur.opacity = clampOpacity(Number.parseFloat(gd.slider.value)); usedGroupSlider = true; }
-            }
-            if (!usedGroupSlider && cur.opacity <= 0) {
-              const fb = typeof option.defaultOpacity === 'number' ? clampOpacity(option.defaultOpacity) : 1;
-              cur.opacity = fb > 0 ? fb : 1;
-            }
+          btn.classList.toggle('active', photosEnabled);
+          if (photosToggle) {
+            photosToggle.classList.toggle('has-active-layer', photosEnabled);
+            let thumb = photosToggle.querySelector('.map-action-btn__thumb');
+            if (!thumb) { thumb = document.createElement('div'); thumb.className = 'map-action-btn__thumb'; photosToggle.prepend(thumb); }
+            if (photosEnabled && opt.previewImage) { thumb.style.backgroundImage = `url(${opt.previewImage})`; }
+            else { thumb.style.backgroundImage = ''; }
           }
           imagery.applyImageryState();
           imagery.updateImageryControlStates();
-          imagery.applyImageryLayerOrder();
+          setToolboxOpen('photos', false);
         });
 
-        if (isGroupMember) {
-          container.appendChild(toggleButton);
-          const groupData = imagery.groupContainers.get(group.id);
-          imagery.imageryControls.set(option.id, { container: groupData.container, button: toggleButton, slider: groupData.slider, sliderWrapper: null, isGroupMember: true });
-        } else {
-          const row = document.createElement('div'); row.className = 'imagery-option__row';
-          const preview = document.createElement('div'); preview.className = 'imagery-option__preview';
-          preview.appendChild(toggleButton);
-          const label = document.createElement('span'); label.className = 'imagery-option__label'; label.textContent = option.label;
-          row.appendChild(preview); row.appendChild(label); container.appendChild(row);
-
-          const noSliderTypes = ['hillshade', 'native-layer', 'wikimedia'];
-          const hideSlider = noSliderTypes.includes(option.type);
-          let slider = null, sliderWrapper = null;
-          if (!hideSlider) {
-            sliderWrapper = document.createElement('div'); sliderWrapper.className = 'imagery-option__opacity-wrapper';
-            slider = document.createElement('input');
-            slider.type = 'range'; slider.min = '0'; slider.max = '1'; slider.step = '0.05';
-            slider.value = String(state.opacity); slider.className = 'imagery-option__opacity';
-            slider.setAttribute('aria-label', `${option.label} opacity`);
-            slider.addEventListener('input', () => {
-              const s = imagery.imageryState.get(option.id); if (!s) return;
-              const v = clampOpacity(Number.parseFloat(slider.value));
-              s.opacity = v; s.enabled = v > 0;
-              imagery.applyImageryState(); imagery.updateImageryControlStates(); imagery.applyImageryLayerOrder();
-            });
-            const stop = e => e.stopPropagation();
-            slider.addEventListener('mousedown', stop);
-            slider.addEventListener('touchstart', stop, { passive: true });
-            sliderWrapper.appendChild(slider);
-            container.appendChild(sliderWrapper);
-          }
-          imagery.imageryControls.set(option.id, { container, button: toggleButton, slider, sliderWrapper, isGroupMember: false });
-          imageryToggle.appendChild(container);
-        }
-      }); // end IMAGERY_OPTIONS.forEach
-
-      imagery.updateImageryControlStates();
-      imagery.updateImageryDomOrder();
-
-      // Container-level drag handlers (move to boundary)
-      if (!imageryToggle.dataset.dragHandlersBound) {
-        imageryToggle.addEventListener('dragover', (e) => {
-          if (!imagery.dragSourceImageryId) return;
-          if (e.target?.closest?.('.imagery-option')) return;
-          e.preventDefault();
-          if (e?.dataTransfer) e.dataTransfer.dropEffect = 'move';
-        });
-        imageryToggle.addEventListener('drop', (e) => {
-          if (!imagery.dragSourceImageryId) return;
-          if (e.target?.closest?.('.imagery-option')) return;
-          e.preventDefault();
-          const toStart = e.clientY < imageryToggle.getBoundingClientRect().top + imageryToggle.getBoundingClientRect().height / 2;
-          imagery.moveImageryOptionToBoundary(imagery.dragSourceImageryId, toStart);
-          imagery.dragSourceImageryId = null;
-          imagery.resetDragIndicators();
-        });
-        imageryToggle.dataset.dragHandlersBound = 'true';
+        photosBox.appendChild(btn);
       }
     }
   }

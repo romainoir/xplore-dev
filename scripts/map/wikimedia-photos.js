@@ -727,6 +727,7 @@ export function initializeWikimediaPhotos(mapInstance, options = {}) {
     const initialize = () => {
         addWikimediaLayers(map);
         setupWikimediaEventListeners(map);
+        map.on('moveend', onMapMoveEnd);
         if (enabled && map.getZoom() >= MIN_ZOOM_FOR_PHOTOS) refreshPhotos();
         isInitialized = true;
         setWikimediaPhotosEnabled(enabled);

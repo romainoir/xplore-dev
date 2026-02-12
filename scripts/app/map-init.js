@@ -95,10 +95,14 @@ export function updatePeakLabels(map) {
 let baseStyleContentLayerIds = [];
 const baseStyleLayerMetadata = new Map();
 let baseStyleOverlayLayerIds = [];
+let baseStyleFillLayerIds = [];
 let baseStyleUnderlayLayerIds = [];
 
+// Source-layers that should go into the fills bucket (visible only when Vector basemap is active)
+const FILL_SOURCE_LAYERS = ['park', 'landuse', 'landcover', 'water', 'aeroway'];
+
 export function rebuildBaseStyleLayerBuckets() {
-    const overlay = [], underlay = [];
+    const overlay = [], fills = [], underlay = [];
     baseStyleContentLayerIds.forEach((layerId) => {
         if (typeof layerId !== 'string') return;
         const meta = baseStyleLayerMetadata.get(layerId) || {};
@@ -110,18 +114,26 @@ export function rebuildBaseStyleLayerBuckets() {
             || sourceLayer.includes('rail') || idLower.includes('road')
             || idLower.includes('path') || idLower.includes('track') || idLower.includes('rail');
         const isBuilding = sourceLayer.includes('building') || idLower.includes('building');
-        if (type === 'symbol' || type === 'fill-extrusion' || isRoadLike || isBuilding) {
+        const isBoundary = sourceLayer.includes('boundary') || idLower.includes('boundary');
+        const isWaterway = sourceLayer.includes('waterway') || idLower.includes('river')
+            || idLower.includes('stream') || idLower.includes('canal') || idLower.includes('waterway');
+        const isFillLayer = (type === 'fill') && FILL_SOURCE_LAYERS.some(sl => sourceLayer.startsWith(sl));
+
+        if (type === 'symbol' || type === 'fill-extrusion' || isRoadLike || isBuilding || isBoundary || isWaterway) {
             overlay.push(layerId);
+        } else if (isFillLayer) {
+            fills.push(layerId);
         } else {
             underlay.push(layerId);
         }
     });
     baseStyleOverlayLayerIds = overlay;
+    baseStyleFillLayerIds = fills;
     baseStyleUnderlayLayerIds = underlay;
 }
 
 export function getBaseStyleLayerBuckets() {
-    return { overlay: baseStyleOverlayLayerIds, underlay: baseStyleUnderlayLayerIds, content: baseStyleContentLayerIds };
+    return { overlay: baseStyleOverlayLayerIds, fills: baseStyleFillLayerIds, underlay: baseStyleUnderlayLayerIds, content: baseStyleContentLayerIds };
 }
 
 // ─── Legacy service worker cleanup ───
@@ -142,6 +154,34 @@ async function unregisterLegacyServiceWorker() {
  * Create the map and attach basic controls.
  * @returns {Promise<{map: maplibregl.Map}>}
  */
+/**
+ * Parse a MapLibre style's layers and cache them into base-style layer buckets.
+ * Call this after setStyle() to rebuild fill/overlay/underlay categorisation.
+ * @param {object} style - A MapLibre style JSON object
+ */
+export function parseAndCacheBaseStyleLayers(style) {
+    if (Array.isArray(style.layers)) {
+        baseStyleLayerMetadata.clear();
+        style.layers.forEach((layer) => {
+            if (!layer || typeof layer.id !== 'string') return;
+            baseStyleLayerMetadata.set(layer.id, { type: layer.type, sourceLayer: layer['source-layer'] || '' });
+        });
+        baseStyleContentLayerIds = style.layers
+            .filter((layer) => {
+                if (!layer || typeof layer.id !== 'string') return false;
+                if (layer.type === 'background') return false;
+                return true;
+            })
+            .map(l => l.id);
+        rebuildBaseStyleLayerBuckets();
+    } else {
+        baseStyleContentLayerIds = [];
+        baseStyleLayerMetadata.clear();
+        baseStyleOverlayLayerIds = [];
+        baseStyleUnderlayLayerIds = [];
+    }
+}
+
 export async function createMap() {
     unregisterLegacyServiceWorker();
 
@@ -152,28 +192,7 @@ export async function createMap() {
     versaStyle.light = { 'anchor': 'map', 'position': [1.5, 90, 80] };
 
     // Parse base style layers
-    const landcoverSourcePrefixes = ['landcover'];
-    if (Array.isArray(versaStyle.layers)) {
-        baseStyleLayerMetadata.clear();
-        versaStyle.layers.forEach((layer) => {
-            if (!layer || typeof layer.id !== 'string') return;
-            baseStyleLayerMetadata.set(layer.id, { type: layer.type, sourceLayer: layer['source-layer'] || '' });
-        });
-        baseStyleContentLayerIds = versaStyle.layers
-            .filter((layer) => {
-                if (!layer || typeof layer.id !== 'string') return false;
-                if (layer.type === 'background') return false;
-                const sl = typeof layer['source-layer'] === 'string' ? layer['source-layer'].toLowerCase() : '';
-                return !landcoverSourcePrefixes.some(p => sl.startsWith(p));
-            })
-            .map(l => l.id);
-        rebuildBaseStyleLayerBuckets();
-    } else {
-        baseStyleContentLayerIds = [];
-        baseStyleLayerMetadata.clear();
-        baseStyleOverlayLayerIds = [];
-        baseStyleUnderlayLayerIds = [];
-    }
+    parseAndCacheBaseStyleLayers(versaStyle);
 
     const map = new maplibregl.Map({
         container: 'map',
@@ -215,6 +234,14 @@ export async function createMap() {
         showUserHeading: true
     }), 'top-right');
     map.addControl(new maplibregl.NavigationControl({ showCompass: true, showZoom: false, visualizePitch: true }), 'top-right');
+
+    // Move 3D toggle below the compass
+    const toggle3DBtn = document.getElementById('toggle3D');
+    const topRightCtrl = document.querySelector('.maplibregl-ctrl-top-right');
+    if (toggle3DBtn && topRightCtrl) {
+        topRightCtrl.appendChild(toggle3DBtn);
+    }
+
     map.addControl(new MapboxFPS.FPSControl(), 'bottom-left');
 
     // Attribution

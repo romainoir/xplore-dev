@@ -24,14 +24,14 @@ import {
     CONTOUR_TEXT_BASE_OPACITY,
 } from './imagery-manager.js';
 
-import { updatePeakLabels } from './map-init.js';
+import { updatePeakLabels, getBaseStyleLayerBuckets } from './map-init.js';
 
 // ─── Hillshade method style presets ───
 const HILLSHADE_METHOD_STYLES = Object.freeze({
     standard: Object.freeze({ highlightColor: 'rgba(255,255,255,0.85)', shadowColor: 'rgba(0,0,0,0.5)', exaggeration: 0.40 }),
     basic: Object.freeze({ highlightColor: 'rgba(255,255,255,0.8)', shadowColor: 'rgba(0,0,0,0.45)', exaggeration: 0.35 }),
     combined: Object.freeze({ highlightColor: 'rgba(255,255,255,0.98)', shadowColor: 'rgba(0,0,0,0.85)', accentColor: 'rgba(0,0,0,0.8)', exaggeration: ['interpolate', ['linear'], ['zoom'], 6, 2.0, 12, 1.4, 16, 0.8] }),
-    igor: Object.freeze({ highlightColor: 'rgba(255,255,255,0.9)', shadowColor: 'rgba(0,0,0,0.6)', exaggeration: 0.38 }),
+    igor: Object.freeze({ highlightColor: 'rgba(255,255,255,0.9)', shadowColor: 'rgba(0,0,0,0.6)', exaggeration: 0.7 }),
     multidirectional: Object.freeze({ highlightColor: 'rgba(255,255,255,0.75)', shadowColor: 'rgba(0,0,0,0.4)', exaggeration: 0.28 })
 });
 
@@ -41,11 +41,9 @@ const HILLSHADE_METHOD_STYLES = Object.freeze({
  */
 export function applyHillshadeAppearance(map) {
     if (!map.getLayer('hillshade')) return;
-    const style = HILLSHADE_METHOD_STYLES.combined;
+    const style = HILLSHADE_METHOD_STYLES.igor;
     map.setPaintProperty('hillshade', 'hillshade-illumination-anchor', 'map');
-    map.setPaintProperty('hillshade', 'hillshade-illumination-direction', [270, 315, 0, 45]);
-    map.setPaintProperty('hillshade', 'hillshade-illumination-altitude', [30, 30, 30, 30]);
-    map.setPaintProperty('hillshade', 'hillshade-method', 'combined');
+    map.setPaintProperty('hillshade', 'hillshade-method', 'igor');
     map.setPaintProperty('hillshade', 'hillshade-highlight-color', style.highlightColor);
     map.setPaintProperty('hillshade', 'hillshade-shadow-color', style.shadowColor);
     map.setPaintProperty('hillshade', 'hillshade-accent-color', style.accentColor || style.shadowColor);
@@ -158,6 +156,32 @@ export function applyOverlays(map, deps = {}) {
 
     console.log('[App] Native terrain layers added (normalmap, aspect, slope, avalanche)');
 
+    // ─── Move vector fill layers above terrain DEM but below hillshade ───
+    // Fills (parks, water, forests) sit between terrain raster and hillshade,
+    // so hillshade composites relief shading on top of the colored fills.
+    const { fills: fillLayerIds, overlay: overlayLayerIds } = getBaseStyleLayerBuckets();
+    if (Array.isArray(fillLayerIds)) {
+        const hillshadeId = map.getLayer('hillshade') ? 'hillshade' : (topLabelId || undefined);
+        fillLayerIds.forEach(id => {
+            if (map.getLayer(id)) map.moveLayer(id, hillshadeId);
+        });
+        console.log(`[App] Repositioned ${fillLayerIds.length} vector fill layers below hillshade`);
+    }
+
+    // ─── Move contour layers above hillshade ───
+    if (map.getLayer('contours')) map.moveLayer('contours');
+    if (map.getLayer('contour-text')) map.moveLayer('contour-text');
+
+    // ─── Move overlay LINE layers (roads, waterways, buildings) above contours ───
+    // These need to be above hillshade + contours so they're visible on all basemaps.
+    // Symbols will be moved to the very top separately (line below).
+    if (Array.isArray(overlayLayerIds)) {
+        overlayLayerIds.forEach(id => {
+            if (map.getLayer(id)) map.moveLayer(id);
+        });
+        console.log(`[App] Repositioned ${overlayLayerIds.length} overlay layers above contours`);
+    }
+
     // Apply states
     applyImageryState();
     updateImageryControlStates();
@@ -166,7 +190,7 @@ export function applyOverlays(map, deps = {}) {
     // GPX layers
     if (ensureGpxLayers) ensureGpxLayers(map, currentGpxData, topLabelId);
 
-    // Move symbols to top
+    // Move symbols to very top (labels, icons above everything)
     (map.getStyle().layers || []).filter(l => l.type === 'symbol').forEach(l => map.moveLayer(l.id));
 
     // Debug network
