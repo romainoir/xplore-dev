@@ -8,10 +8,9 @@
   <link rel="apple-touch-icon" href="./data/logos/Xplore.png" />
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
 
-  <!-- MapLibre GL JS - FORKED LOCAL BUILD -->
-  <!-- Original: https://unpkg.com/maplibre-gl@5.15.0/dist/maplibre-gl.js -->
-  <link href="https://unpkg.com/maplibre-gl@5.15.0/dist/maplibre-gl.css" rel="stylesheet" />
-  <script src="./libs/maplibre-gl.js?v=1737468312"></script>
+  <!-- MapLibre GL JS - Stock CDN -->
+  <link href="https://unpkg.com/maplibre-gl@latest/dist/maplibre-gl.css" rel="stylesheet" />
+  <script src="https://unpkg.com/maplibre-gl@latest/dist/maplibre-gl.js"></script>
 
   <!-- PMTiles v4 -->
   <script src="https://unpkg.com/pmtiles@4.3.0/dist/pmtiles.js"></script>
@@ -168,40 +167,6 @@
 
 
 
-  <!-- FOV & LOD Controls - for performance tuning (shown when 3D terrain is active) -->
-  <div id="fovControls" class="shadow-time-control" style="display: none;">
-    <div class="shadow-time-control__header">
-      <span class="shadow-time-control__title">⚙️ Performance</span>
-      <button id="fovControlsClose" class="shadow-time-control__close" type="button">&times;</button>
-    </div>
-    <div class="shadow-time-control__body">
-      <div class="shadow-time-control__row">
-        <label for="fovSlider">Vertical FOV (°):</label>
-        <input type="range" id="fovSlider" class="shadow-time-control__slider" min="5" max="90" step="1" value="37" />
-        <span id="fovLabel" class="shadow-time-control__label">37°</span>
-      </div>
-      <div class="shadow-time-control__row">
-        <label for="lodMaxZoomSlider">Max Zoom Levels:</label>
-        <input type="range" id="lodMaxZoomSlider" class="shadow-time-control__slider" min="1" max="11" step="1"
-          value="5" />
-        <span id="lodMaxZoomLabel" class="shadow-time-control__label">5</span>
-      </div>
-      <div class="shadow-time-control__row">
-        <label for="lodTileRatioSlider">Tile Count Ratio:</label>
-        <input type="range" id="lodTileRatioSlider" class="shadow-time-control__slider" min="1" max="10" step="0.5"
-          value="2" />
-        <span id="lodTileRatioLabel" class="shadow-time-control__label">2.0</span>
-      </div>
-      <div class="shadow-time-control__row">
-        <label for="dprToggle">Retina Resolution (HD):</label>
-        <input type="checkbox" id="dprToggle" checked style="width: 20px; height: 20px; cursor: pointer;" />
-      </div>
-      <div class="shadow-time-control__row">
-        <label for="overdrawToggle">Debug Overdraw:</label>
-        <input type="checkbox" id="overdrawToggle" style="width: 20px; height: 20px; cursor: pointer;" />
-      </div>
-    </div>
-  </div>
 
   <div id="directionsDock" class="directions-dock" aria-label="Directions Panel">
     <!-- Route Library Dock -->
@@ -288,6 +253,84 @@
         <span class="toggle-3d__label">3D</span>
         <span class="sr-only">Toggle 2D/3D view</span>
       </button>
+      <button id="settingsToggle" class="btn btn--icon-only map-action-btn settings-toggle" type="button"
+        aria-expanded="false" aria-controls="settingsPanel" title="Settings">
+        <svg class="settings-toggle__icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
+          stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3" />
+          <path
+            d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+        </svg>
+        <span class="sr-only">Settings</span>
+      </button>
+
+      <!-- Settings Panel (dropdown from cog) -->
+      <div id="settingsPanel" class="settings-panel" aria-hidden="true">
+        <div class="settings-panel__header">
+          <span class="settings-panel__title">⚙️ Settings</span>
+          <button id="settingsPanelClose" class="settings-panel__close" type="button">&times;</button>
+        </div>
+        <div class="settings-panel__body">
+          <!-- Performance section -->
+          <div class="settings-panel__section">
+            <div class="settings-panel__section-title">Performance</div>
+            <div class="settings-panel__row">
+              <label for="dprToggle">Retina Resolution (HD)</label>
+              <input type="checkbox" id="dprToggle" checked class="settings-panel__checkbox" />
+            </div>
+            <div class="settings-panel__row">
+              <label for="fovSlider">Vertical FOV</label>
+              <div class="settings-panel__slider-group">
+                <input type="range" id="fovSlider" class="settings-panel__slider" min="5" max="90" step="1"
+                  value="37" />
+                <span id="fovLabel" class="settings-panel__value">37°</span>
+              </div>
+            </div>
+            <div class="settings-panel__row">
+              <label for="lodMaxZoomSlider">Max Zoom Levels</label>
+              <div class="settings-panel__slider-group">
+                <input type="range" id="lodMaxZoomSlider" class="settings-panel__slider" min="1" max="11" step="1"
+                  value="5" />
+                <span id="lodMaxZoomLabel" class="settings-panel__value">5</span>
+              </div>
+            </div>
+            <div class="settings-panel__row">
+              <label for="lodTileRatioSlider">Tile Count Ratio</label>
+              <div class="settings-panel__slider-group">
+                <input type="range" id="lodTileRatioSlider" class="settings-panel__slider" min="1" max="10" step="0.5"
+                  value="1" />
+                <span id="lodTileRatioLabel" class="settings-panel__value">1.0</span>
+              </div>
+            </div>
+          </div>
+          <!-- Debug section -->
+          <div class="settings-panel__section">
+            <div class="settings-panel__section-title">Debug</div>
+            <div class="settings-panel__row">
+              <label for="debugModeToggle">Debug Mode</label>
+              <input type="checkbox" id="debugModeToggle" class="settings-panel__checkbox" />
+            </div>
+            <div id="debugOptions" class="settings-panel__debug-options" aria-hidden="true">
+              <div class="settings-panel__row">
+                <label for="debugLayersToggle">Debug Tiles</label>
+                <input type="checkbox" id="debugLayersToggle" class="settings-panel__checkbox" />
+              </div>
+              <div class="settings-panel__row">
+                <label for="debugNetworkToggle">Network Visualization</label>
+                <input type="checkbox" id="debugNetworkToggle" class="settings-panel__checkbox" />
+              </div>
+              <div class="settings-panel__row">
+                <label for="debugShadowTunerToggle">Shadow Tuner</label>
+                <input type="checkbox" id="debugShadowTunerToggle" class="settings-panel__checkbox" />
+              </div>
+              <div class="settings-panel__row">
+                <label for="debugTileBordersToggle">Tile Borders</label>
+                <input type="checkbox" id="debugTileBordersToggle" class="settings-panel__checkbox" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
       <div class="imagery-panel__control-group">
         <button id="shadowToolboxToggle" class="btn map-action-btn shadow-toolbox-toggle" type="button"
           aria-expanded="false" aria-controls="shadowToolbox" title="Shadow Analysis">
@@ -352,7 +395,6 @@
 
 
 
-  <script src="./scripts/debug/shadow-tuner.js"></script>
   <script type="module" src="./scripts/app/xploremap-app.js"></script>
 </body>
 

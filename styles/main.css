@@ -5722,3 +5722,262 @@ body {
     height: 60vh;
   }
 }
+
+/* =============================================================================
+   SETTINGS PANEL — Cog button + dropdown panel
+   ============================================================================= */
+
+/* Cog button icon */
+.settings-toggle__icon {
+  width: 20px;
+  height: 20px;
+  stroke: #fff;
+  transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.settings-toggle:hover .settings-toggle__icon {
+  transform: rotate(45deg);
+}
+
+.settings-toggle[aria-expanded="true"] .settings-toggle__icon {
+  transform: rotate(90deg);
+}
+
+/* Settings panel — positioned from the imagery-panel__buttons container */
+.settings-panel {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  width: 280px;
+  background: linear-gradient(160deg, rgba(12, 24, 36, 0.92), rgba(12, 24, 36, 0.96));
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45), 0 4px 12px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  z-index: 100;
+  overflow: hidden;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-8px) scale(0.97);
+  transition: opacity 0.2s ease, visibility 0.2s ease, transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  pointer-events: none;
+}
+
+.settings-panel--open {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+
+.settings-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.settings-panel__title {
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.95);
+  letter-spacing: 0.02em;
+}
+
+.settings-panel__close {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 18px;
+  line-height: 26px;
+  text-align: center;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.settings-panel__close:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+}
+
+.settings-panel__body {
+  padding: 8px 0;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.settings-panel__section {
+  padding: 4px 0;
+}
+
+.settings-panel__section+.settings-panel__section {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.settings-panel__section-title {
+  font-family: var(--font-ui);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: rgba(114, 140, 108, 0.9);
+  padding: 8px 16px 4px;
+}
+
+.settings-panel__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  gap: 12px;
+  transition: background 0.12s ease;
+}
+
+.settings-panel__row:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.settings-panel__row label {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.82);
+  white-space: nowrap;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.settings-panel__slider-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-panel__slider {
+  flex: 1;
+  appearance: none;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  outline: none;
+  cursor: pointer;
+  min-width: 60px;
+}
+
+.settings-panel__slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid rgba(114, 140, 108, 0.9);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+
+.settings-panel__slider::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+}
+
+.settings-panel__slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid rgba(114, 140, 108, 0.9);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+}
+
+.settings-panel__slider::-moz-range-track {
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.settings-panel__value {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.7);
+  min-width: 28px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+/* Checkbox — custom toggle switch */
+.settings-panel__checkbox {
+  appearance: none;
+  width: 36px;
+  height: 20px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.15);
+  position: relative;
+  cursor: pointer;
+  transition: background 0.2s ease;
+  flex-shrink: 0;
+}
+
+.settings-panel__checkbox::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.8);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), background 0.2s ease;
+}
+
+.settings-panel__checkbox:checked {
+  background: rgba(114, 140, 108, 0.8);
+}
+
+.settings-panel__checkbox:checked::before {
+  transform: translateX(16px);
+  background: #fff;
+}
+
+.settings-panel__checkbox:focus-visible {
+  outline: 2px solid rgba(114, 140, 108, 0.6);
+  outline-offset: 2px;
+}
+
+/* Debug sub-options — expandable */
+.settings-panel__debug-options {
+  max-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease, padding 0.3s ease;
+  padding: 0;
+  border-left: 2px solid rgba(114, 140, 108, 0.3);
+  margin-left: 16px;
+}
+
+.settings-panel__debug-options--open {
+  max-height: 300px;
+  opacity: 1;
+  padding: 4px 0;
+}
+
+.settings-panel__debug-options .settings-panel__row {
+  padding-left: 12px;
+  padding-right: 16px;
+}
+
+/* Position the imagery panel buttons as a relative container for the settings dropdown */
+.imagery-panel__buttons {
+  position: relative;
+}
