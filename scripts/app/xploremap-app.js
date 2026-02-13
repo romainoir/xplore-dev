@@ -1360,53 +1360,24 @@ async function init() {
   // ═════════════════════════════════════════════════════════════════════
 
   {
-    const photosBox = toolboxes.photos.box;
     const photosToggle = toolboxes.photos.toggle;
+    const opt = IMAGERY_OPTIONS.find(o => o.id === 'wikimedia-photos');
 
-    if (photosBox) {
-      photosBox.textContent = '';
-      const opt = IMAGERY_OPTIONS.find(o => o.id === 'wikimedia-photos');
-      if (opt) {
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'btn photos-toolbox__toggle';
-        btn.dataset.imageryId = opt.id;
-        btn.setAttribute('title', opt.label);
-        btn.setAttribute('aria-label', opt.label);
+    if (photosToggle && opt) {
+      let photosEnabled = false;
 
-        if (opt.previewImage) {
-          const img = document.createElement('img');
-          img.src = opt.previewImage; img.alt = ''; img.loading = 'lazy'; img.decoding = 'async'; img.draggable = false;
-          btn.appendChild(img);
+      photosToggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        photosEnabled = !photosEnabled;
+        const cur = imagery.imageryState.get(opt.id);
+        if (cur) {
+          cur.enabled = photosEnabled;
+          if (photosEnabled && cur.opacity <= 0) cur.opacity = 1;
         }
-        const srLabel = document.createElement('span');
-        srLabel.className = 'sr-only'; srLabel.textContent = opt.label;
-        btn.appendChild(srLabel);
-
-        let photosEnabled = false;
-
-        btn.addEventListener('click', () => {
-          photosEnabled = !photosEnabled;
-          const cur = imagery.imageryState.get(opt.id);
-          if (cur) {
-            cur.enabled = photosEnabled;
-            if (photosEnabled && cur.opacity <= 0) cur.opacity = 1;
-          }
-          btn.classList.toggle('active', photosEnabled);
-          if (photosToggle) {
-            photosToggle.classList.toggle('has-active-layer', photosEnabled);
-            let thumb = photosToggle.querySelector('.map-action-btn__thumb');
-            if (!thumb) { thumb = document.createElement('div'); thumb.className = 'map-action-btn__thumb'; photosToggle.prepend(thumb); }
-            if (photosEnabled && opt.previewImage) { thumb.style.backgroundImage = `url(${opt.previewImage})`; }
-            else { thumb.style.backgroundImage = ''; }
-          }
-          imagery.applyImageryState();
-          imagery.updateImageryControlStates();
-          setToolboxOpen('photos', false);
-        });
-
-        photosBox.appendChild(btn);
-      }
+        photosToggle.classList.toggle('active', photosEnabled);
+        imagery.applyImageryState();
+        imagery.updateImageryControlStates();
+      });
     }
   }
 

@@ -51,7 +51,7 @@ export const IMAGERY_OPTIONS = Object.freeze([
     { id: 'slope', label: 'Slope', type: 'native-layer', layerId: 'slope-native', previewImage: './data/icons_Xmap/slope.png', defaultOpacity: 1.0, defaultVisible: false },
     { id: 'avalanche', label: 'Avalanche Zones', type: 'native-layer', layerId: 'avalanche-native', previewImage: './data/icons_Xmap/avalanche.png', defaultOpacity: 1.0, defaultVisible: false },
     { id: 'snow', label: 'Snow', type: 'native-layer', layerId: 'snow-native', previewImage: './data/icons_Xmap/snow.png', defaultOpacity: 1.0, defaultVisible: false },
-    { id: 'snow-depth', label: 'Snow Depth (Alps)', sourceId: 'snow-depth', layerId: 'snow-depth', tileTemplate: 'https://p20.cosmos-project.ch/BfOlLXvmGpviW0YojaYiRqsT9NHEYdn88fpHZlr_map/gmaps/sd20alps@epsg3857/{z}/{x}/{y}.png', tileSize: 256, minZoom: 0, maxZoom: 22, attribution: '© Data from Exolab', defaultVisible: false, defaultOpacity: 1 },
+    { id: 'snow-depth', label: 'Snow Depth (Alps)', sourceId: 'snow-depth', layerId: 'snow-depth', tileTemplate: 'https://p20.cosmos-project.ch/BfOlLXvmGpviW0YojaYiRqsT9NHEYdn88fpHZlr_map/gmaps/sd20alps@epsg3857/{z}/{x}/{y}.png', tileSize: 256, minZoom: 0, maxZoom: 12, attribution: '© Data from Exolab', defaultVisible: false, defaultOpacity: 1 },
     { id: 'ign-scan', label: 'IGN Scan (Topo)', sourceId: 'ign-scan', layerId: 'ign-scan', tileTemplate: 'https://data.geopf.fr/private/wmts?apikey=ign_scan_ws&layer=GEOGRAPHICALGRIDSYSTEMS.MAPS&style=normal&tilematrixset=PM&Service=WMTS&Request=GetTile&Version=1.0.0&Format=image%2Fjpeg&TileMatrix={z}&TileCol={x}&TileRow={y}', tileSize: 256, minZoom: 0, maxZoom: 15, attribution: IGN_ATTRIBUTION, defaultVisible: false, defaultOpacity: 1 },
     { id: 'ign-cosia', label: 'IGN Kosia 2021-2023', sourceId: 'ign-cosia', layerId: 'ign-cosia', tileTemplate: createIgnTileTemplate('IGNF_COSIA_2021-2023', 'image/png'), tileSize: 256, attribution: IGN_ATTRIBUTION, defaultVisible: false, defaultOpacity: 1 },
     { id: 'ign-forest-inventory', label: 'IGN Forest Inventory', sourceId: 'ign-forest-inventory', layerId: 'ign-forest-inventory', tileTemplate: createIgnTileTemplate('LANDCOVER.FORESTINVENTORY.V2', 'image/png'), tileSize: 256, attribution: IGN_ATTRIBUTION, defaultVisible: false, defaultOpacity: 1 },
@@ -349,7 +349,7 @@ export function createImageryManager(map, deps = {}) {
         }
 
         // 2. Terrain analysis & snow layers — above basemaps
-        const terrainNativeLayers = ['normalmap', 'snow-native', 'aspect-native', 'slope-native', 'avalanche-native', 'detail-native', 'shadow-native'];
+        const terrainNativeLayers = ['normalmap', 'snow-native', 'snow-depth', 'aspect-native', 'slope-native', 'avalanche-native', 'detail-native', 'shadow-native'];
         if (topLabelId) {
             terrainNativeLayers.forEach(layerId => { if (map.getLayer(layerId)) map.moveLayer(layerId, topLabelId); });
         }
@@ -361,6 +361,7 @@ export function createImageryManager(map, deps = {}) {
                 if (seq[j] && seq[j] !== topLabelId) map.moveLayer(seq[j], topLabelId);
             }
         }
+
 
         const routeLayers = ROUTE_LAYER_ORDER_TOP_TO_BOTTOM.filter(layerId => map.getLayer(layerId));
         let previousTopLayerId = null;

@@ -353,13 +353,20 @@ export function setupTerrainHoverInfo(map, imageryState) {
         if (throttleTimer) return;
         throttleTimer = setTimeout(() => { throttleTimer = null; }, 60);
 
+        const activeLayer = getActiveAnalysisLayer(imageryState);
+
+        // No analysis layer active — skip terrain computation entirely
+        if (!activeLayer) {
+            hoverEl.style.display = 'none';
+            return;
+        }
+
         const terrain = calculateTerrainAnalysis(map, e.lngLat);
         if (!terrain) {
             hoverEl.style.display = 'none';
             return;
         }
 
-        const activeLayer = getActiveAnalysisLayer(imageryState);
         let content = '';
 
         // Slope mode
@@ -376,13 +383,6 @@ export function setupTerrainHoverInfo(map, imageryState) {
         // Aspect mode
         if (activeLayer === 'aspect') {
             content += `<span style="color: #3498db">Aspect:</span> ${terrain.aspectName} `;
-        }
-
-        // No analysis layer active — show full readout
-        if (!activeLayer) {
-            content += `<span style="color: #2ecc71">${Math.round(terrain.ele)} m</span> `;
-            content += `<span style="color: #e67e22">${terrain.slope.toFixed(1)}°</span> `;
-            content += `<span style="color: #3498db">${terrain.aspectName}</span>`;
         }
 
         if (content) {

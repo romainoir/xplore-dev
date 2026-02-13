@@ -245,7 +245,7 @@ export async function createMap() {
     map.addControl(new MapboxFPS.FPSControl(), 'bottom-left');
 
     // Attribution
-    map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left');
+    map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right');
 
     // Apply UI icon sources
     applyUiIconSources();
