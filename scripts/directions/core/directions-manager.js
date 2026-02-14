@@ -234,6 +234,16 @@ export class DirectionsManager {
     this.map.on('style.load', () => {
       this._routeLayersDirty = true;
       this._cachedFirstSymbolId = null;
+      // Re-create route layers if setStyle diff engine removed them
+      if (!this.map.getSource('route-line-source')) {
+        this.setupRouteLayers();
+        // Re-apply route data if a route exists
+        if (this.routeGeojson) {
+          this.updateRouteLineSource();
+          this.updateWaypoints();
+          this.updateDistanceMarkers(this.routeGeojson);
+        }
+      }
       if (typeof this.moveRouteLayersToTop === 'function') {
         this.moveRouteLayersToTop();
       }

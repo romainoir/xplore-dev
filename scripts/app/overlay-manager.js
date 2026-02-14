@@ -52,8 +52,57 @@ export function applyHillshadeAppearance(map) {
 }
 
 /**
+ * Return overlay source and layer definitions as plain JSON.
+ * Used to inject into style JSON before setStyle.
+ */
+export function getOverlayDefinitions() {
+    const demConfig = { type: 'raster-dem', tiles: [MAPTERHORN_TILE_URL], encoding: 'terrarium', tileSize: 512, attribution: MAPTERHORN_ATTRIBUTION };
+    const sources = {
+        terrainSource: { ...demConfig, maxzoom: DEM_SOURCE_MAX_ZOOM },
+        hillshadeSource: { ...demConfig, maxzoom: DEM_SOURCE_MAX_ZOOM },
+        shadowDemSource: { ...demConfig, maxzoom: SHADOW_DEM_MAX_ZOOM },
+        reliefDem: { ...demConfig, maxzoom: DEM_SOURCE_MAX_ZOOM },
+    };
+
+    const nativeConfig = { type: 'hillshade', source: 'hillshadeSource', layout: { visibility: 'none' }, paint: { 'hillshade-exaggeration': 1.0 } };
+    const layers = [
+        { id: 'terrain-bg', type: 'background', paint: { 'background-color': '#e8e8e8', 'background-opacity': 1 } },
+        { id: 'hillshade2', type: 'hillshade', source: 'reliefDem', paint: { 'hillshade-highlight-color': 'rgba(255,255,255,0.6)', 'hillshade-accent-color': 'rgba(0,0,0,0.3)', 'hillshade-exaggeration': 0.15, 'hillshade-shadow-color': 'rgba(0,0,0,0.4)' } },
+        { id: 'hillshade', type: 'hillshade', source: 'hillshadeSource', paint: { 'hillshade-highlight-color': 'rgba(255,255,255,0.9)', 'hillshade-accent-color': 'rgba(0,0,0,0.55)', 'hillshade-exaggeration': 0.23, 'hillshade-shadow-color': 'rgba(0,0,0,0.55)' } },
+        { id: 'normalmap', ...nativeConfig },
+        { id: 'snow-native', ...nativeConfig },
+        { id: 'aspect-native', ...nativeConfig },
+        { id: 'slope-native', ...nativeConfig },
+        { id: 'avalanche-native', ...nativeConfig },
+        { id: 'detail-native', type: 'hillshade', source: 'hillshadeSource', layout: { visibility: 'none' }, paint: { 'hillshade-exaggeration': 1.0, 'hillshade-illumination-anchor': 'map', 'hillshade-accent-color': '#00ff00' } },
+        { id: 'shadow-native', type: 'hillshade', source: 'shadowDemSource', layout: { visibility: 'none' }, paint: { 'hillshade-exaggeration': 1.0, 'hillshade-illumination-anchor': 'map' } },
+    ];
+
+    return { sources, layers };
+}
+
+/**
+ * Inject overlay definitions into a style JSON so MapLibre's diff engine
+ * preserves DEM tiles, hillshade, and terrain across basemap switches.
+ */
+export function injectOverlaysIntoStyle(style) {
+    const { sources, layers } = getOverlayDefinitions();
+    style.sources = style.sources || {};
+    Object.assign(style.sources, sources);
+    style.layers = style.layers || [];
+    // Strip incoming style's own background layers — our terrain-bg replaces them
+    style.layers = style.layers.filter(l => l.type !== 'background');
+    const existing = new Set(style.layers.map(l => l.id));
+    // Prepend overlays at the BOTTOM so terrain-bg/hillshade sit below vector layers
+    const toInsert = layers.filter(l => !existing.has(l.id));
+    style.layers = [...toInsert, ...style.layers];
+    style.terrain = { source: 'terrainSource', exaggeration: 1 };
+}
+
+/**
  * Apply all overlays: DEM sources, terrain layers, contours, raster imagery, native analysis layers.
- * Called on style.load.
+ * Called on style.load. Uses try/catch and ensure* helpers to handle sources/layers
+ * that may already exist from style injection.
  * @param {maplibregl.Map} map
  * @param {object} deps - shared dependencies
  */
@@ -71,8 +120,10 @@ export function applyOverlays(map, deps = {}) {
         viewModeController,
     } = deps;
 
-    const rmL = id => { if (map.getLayer(id)) map.removeLayer(id); };
-    const rmS = id => { if (map.getSource(id)) map.removeSource(id); };
+    const rmL = id => { try { if (map.getLayer(id)) map.removeLayer(id); } catch (_) { } };
+    const rmS = id => { try { if (map.getSource(id)) map.removeSource(id); } catch (_) { } };
+    const ensureS = (id, config) => { if (!map.getSource(id)) map.addSource(id, config); };
+    const ensureL = (config, before) => { if (!map.getLayer(config.id)) map.addLayer(config, before); };
 
     // Find top symbol layer for insertion
     const liveLayers = map.getStyle().layers || [];
@@ -81,8 +132,7 @@ export function applyOverlays(map, deps = {}) {
         if (liveLayers[i].type === 'symbol') { topLabelId = liveLayers[i].id; break; }
     }
 
-    // Remove existing overlay layers
-    rmL('hillshade'); rmL('hillshade2'); rmL('terrain-bg');
+    // Remove existing imagery layers (but NOT DEM/hillshade — those are preserved by style injection)
     IMAGERY_OPTIONS.forEach(option => {
         const layerIds = [];
         if (typeof option.layerId === 'string') layerIds.push(option.layerId);
@@ -90,8 +140,7 @@ export function applyOverlays(map, deps = {}) {
         layerIds.forEach(rmL);
     });
 
-    // Remove existing sources
-    rmS('contours'); rmS('hillshadeSource'); rmS('reliefDem'); rmS('terrainSource');
+    // Remove existing imagery sources (but NOT DEM sources — preserved by injection)
     IMAGERY_OPTIONS.forEach(option => {
         const sourceIds = [];
         if (typeof option.sourceId === 'string') sourceIds.push(option.sourceId);
@@ -99,17 +148,17 @@ export function applyOverlays(map, deps = {}) {
         sourceIds.forEach(rmS);
     });
 
-    // ─── Add DEM sources ───
+    // ─── Add DEM sources (skip if already present from style injection) ───
     const demConfig = { type: 'raster-dem', tiles: [MAPTERHORN_TILE_URL], encoding: 'terrarium', tileSize: 512, attribution: MAPTERHORN_ATTRIBUTION };
-    map.addSource('terrainSource', { ...demConfig, maxzoom: DEM_SOURCE_MAX_ZOOM });
-    map.addSource('hillshadeSource', { ...demConfig, maxzoom: DEM_SOURCE_MAX_ZOOM });
-    map.addSource('shadowDemSource', { ...demConfig, maxzoom: SHADOW_DEM_MAX_ZOOM, tileZoomOffset: 0 });
-    map.addSource('reliefDem', { ...demConfig, maxzoom: DEM_SOURCE_MAX_ZOOM });
+    ensureS('terrainSource', { ...demConfig, maxzoom: DEM_SOURCE_MAX_ZOOM });
+    ensureS('hillshadeSource', { ...demConfig, maxzoom: DEM_SOURCE_MAX_ZOOM });
+    ensureS('shadowDemSource', { ...demConfig, maxzoom: SHADOW_DEM_MAX_ZOOM, tileZoomOffset: 0 });
+    ensureS('reliefDem', { ...demConfig, maxzoom: DEM_SOURCE_MAX_ZOOM });
 
     // Background (covers hillshade tile gaps)
-    map.addLayer({ id: 'terrain-bg', type: 'background', paint: { 'background-color': '#e8e8e8', 'background-opacity': 1 } });
-    map.addLayer({ id: 'terrain', type: 'raster', source: 'terrainSource' });
-    map.addLayer({ id: 'hillshade2', type: 'hillshade', source: 'reliefDem', paint: { 'hillshade-highlight-color': 'rgba(255,255,255,0.6)', 'hillshade-accent-color': 'rgba(0,0,0,0.3)', 'hillshade-exaggeration': 0.15, 'hillshade-shadow-color': 'rgba(0,0,0,0.4)' } }, topLabelId || undefined);
+    ensureL({ id: 'terrain-bg', type: 'background', paint: { 'background-color': '#e8e8e8', 'background-opacity': 1 } });
+    ensureL({ id: 'terrain', type: 'raster', source: 'terrainSource' });
+    ensureL({ id: 'hillshade2', type: 'hillshade', source: 'reliefDem', paint: { 'hillshade-highlight-color': 'rgba(255,255,255,0.6)', 'hillshade-accent-color': 'rgba(0,0,0,0.3)', 'hillshade-exaggeration': 0.15, 'hillshade-shadow-color': 'rgba(0,0,0,0.4)' } }, topLabelId || undefined);
 
     // ─── Add imagery layers ───
     IMAGERY_OPTIONS.forEach(option => {
@@ -141,20 +190,20 @@ export function applyOverlays(map, deps = {}) {
 
     applyImageryLayerOrder();
 
-    // ─── Add hillshade ───
-    map.addLayer({ id: 'hillshade', type: 'hillshade', source: 'hillshadeSource', paint: { 'hillshade-highlight-color': 'rgba(255,255,255,0.9)', 'hillshade-accent-color': 'rgba(0,0,0,0.55)', 'hillshade-exaggeration': 0.23, 'hillshade-shadow-color': 'rgba(0,0,0,0.55)' } }, topLabelId || undefined);
+    // ─── Add hillshade (skip if already present from style injection) ───
+    ensureL({ id: 'hillshade', type: 'hillshade', source: 'hillshadeSource', paint: { 'hillshade-highlight-color': 'rgba(255,255,255,0.9)', 'hillshade-accent-color': 'rgba(0,0,0,0.55)', 'hillshade-exaggeration': 0.23, 'hillshade-shadow-color': 'rgba(0,0,0,0.55)' } }, topLabelId || undefined);
 
-    // ─── Add native terrain analysis layers ───
+    // ─── Add native terrain analysis layers (skip if already present) ───
     const nativeConfig = { type: 'hillshade', source: 'hillshadeSource', layout: { 'visibility': 'none' }, paint: { 'hillshade-exaggeration': 1.0 } };
-    map.addLayer({ id: 'normalmap', ...nativeConfig }, topLabelId || undefined);
-    map.addLayer({ id: 'snow-native', ...nativeConfig }, topLabelId || undefined);
-    map.addLayer({ id: 'aspect-native', ...nativeConfig }, topLabelId || undefined);
-    map.addLayer({ id: 'slope-native', ...nativeConfig }, topLabelId || undefined);
-    map.addLayer({ id: 'avalanche-native', ...nativeConfig }, topLabelId || undefined);
-    map.addLayer({ id: 'detail-native', type: 'hillshade', source: 'hillshadeSource', layout: { 'visibility': 'none' }, paint: { 'hillshade-exaggeration': 1.0, 'hillshade-illumination-anchor': 'map', 'hillshade-accent-color': '#00ff00' } }, topLabelId || undefined);
-    map.addLayer({ id: 'shadow-native', type: 'hillshade', source: 'shadowDemSource', layout: { 'visibility': 'none' }, paint: { 'hillshade-exaggeration': 1.0, 'hillshade-illumination-anchor': 'map' } }, topLabelId || undefined);
+    ensureL({ id: 'normalmap', ...nativeConfig }, topLabelId || undefined);
+    ensureL({ id: 'snow-native', ...nativeConfig }, topLabelId || undefined);
+    ensureL({ id: 'aspect-native', ...nativeConfig }, topLabelId || undefined);
+    ensureL({ id: 'slope-native', ...nativeConfig }, topLabelId || undefined);
+    ensureL({ id: 'avalanche-native', ...nativeConfig }, topLabelId || undefined);
+    ensureL({ id: 'detail-native', type: 'hillshade', source: 'hillshadeSource', layout: { 'visibility': 'none' }, paint: { 'hillshade-exaggeration': 1.0, 'hillshade-illumination-anchor': 'map', 'hillshade-accent-color': '#00ff00' } }, topLabelId || undefined);
+    ensureL({ id: 'shadow-native', type: 'hillshade', source: 'shadowDemSource', layout: { 'visibility': 'none' }, paint: { 'hillshade-exaggeration': 1.0, 'hillshade-illumination-anchor': 'map' } }, topLabelId || undefined);
 
-    console.log('[App] Native terrain layers added (normalmap, aspect, slope, avalanche)');
+    console.log('[App] Overlays applied');
 
     // ─── Move vector fill layers above terrain DEM but below hillshade ───
     // Fills (parks, water, forests) sit between terrain raster and hillshade,

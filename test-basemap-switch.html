@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>Basemap Switch Test — All Transitions</title>
+    <link href="https://unpkg.com/maplibre-gl@latest/dist/maplibre-gl.css" rel="stylesheet" />
+    <script src="./maplibre-gl-js-5.18.0/dist/maplibre-gl.js"></script>
+    <style>
+        body {
+            margin: 0;
+            font-family: system-ui;
+        }
+
+        #map {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 100%;
+        }
+
+        #controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 10;
+            background: rgba(0, 0, 0, 0.85);
+            color: white;
+            padding: 14px 18px;
+            border-radius: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            min-width: 180px;
+        }
+
+        .section-label {
+            font-size: 10px;
+            text-transform: uppercase;
+            color: #888;
+            margin-top: 6px;
+            letter-spacing: 1px;
+        }
+
+        button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            transition: 0.2s;
+        }
+
+        button.active {
+            background: #4CAF50;
+            color: white;
+        }
+
+        button:not(.active) {
+            background: #555;
+            color: #ccc;
+        }
+
+        button:hover {
+            opacity: 0.85;
+        }
+
+        #log {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            z-index: 10;
+            background: rgba(0, 0, 0, 0.85);
+            color: #0f0;
+            padding: 10px 14px;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 11px;
+            max-height: 200px;
+            overflow-y: auto;
+            min-width: 450px;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="map"></div>
+
+    <div id="controls">
+        <strong>All Basemap Transitions</strong>
+        <div class="section-label">Vector</div>
+        <button id="btnLiberty" class="active" onclick="switchBasemap('liberty')">Liberty</button>
+        <button id="btnStadia" onclick="switchBasemap('stadia')">Stadia Outdoors</button>
+        <div class="section-label">Raster</div>
+        <button id="btnOsm" onclick="switchBasemap('osm')">OSM Raster</button>
+        <button id="btnSatellite" onclick="switchBasemap('satellite')">Satellite</button>
+    </div>
+
+    <div id="log"></div>
+
+    <script>
+        // ─── Basemap definitions ───
+        // Vector basemaps: full style JSONs fetched from URL
+        const VECTOR_STYLES = {
+            liberty: 'https://tiles.openfreemap.org/styles/liberty',
+            stadia: 'https://tiles.stadiamaps.com/styles/outdoors.json',
+        };
+
+        // Raster basemaps: simple tile layers (no full style JSON)
+        const RASTER_BASEMAPS = {
+            osm: {
+                source: { type: 'raster', tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize: 256, attribution: '© OpenStreetMap' },
+                layer: { id: 'osm-tiles', type: 'raster', source: 'osm-tiles' },
+            },
+            satellite: {
+                source: { type: 'raster', tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'], tileSize: 256, attribution: '© Esri' },
+                layer: { id: 'satellite-tiles', type: 'raster', source: 'satellite-tiles' },
+            },
+        };
+
+        const DEM_URL = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png';
+        let currentBasemap = 'liberty';
+        const styleCache = new Map();
+        const ALL_BUTTONS = ['btnLiberty', 'btnStadia', 'btnOsm', 'btnSatellite'];
+
+        function log(msg) {
+            const el = document.getElementById('log');
+            const line = document.createElement('div');
+            line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            el.appendChild(line);
+            el.scrollTop = el.scrollHeight;
+        }
+
+        // ─── Overlay definitions (injected into style JSON) ───
+        const DEM_SOURCE_DEF = {
+            type: 'raster-dem',
+            tiles: [DEM_URL],
+            encoding: 'terrarium',
+            tileSize: 256,
+            maxzoom: 14,
+        };
+
+        const OVERLAY_SOURCES = {
+            dem: DEM_SOURCE_DEF,
+            hillshadeSrc: DEM_SOURCE_DEF,
+            contours: {
+                type: 'vector',
+                tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
+                maxzoom: 15,
+            },
+        };
+
+        const HILLSHADE_LAYER = {
+            id: 'hillshade',
+            type: 'hillshade',
+            source: 'hillshadeSrc',
+            paint: {
+                'hillshade-exaggeration': 0.5,
+                'hillshade-shadow-color': 'rgba(0,0,0,0.5)',
+            },
+        };
+
+        // ─── Build a minimal style for raster basemaps ───
+        function buildRasterStyle(rasterDef, sourceId) {
+            return {
+                version: 8,
+                sources: {
+                    [sourceId]: rasterDef.source,
+                    dem: DEM_SOURCE_DEF,
+                    hillshadeSrc: DEM_SOURCE_DEF,
+                },
+                layers: [
+                    { id: sourceId, type: 'raster', source: sourceId },
+                    HILLSHADE_LAYER,
+                ],
+                terrain: { source: 'dem', exaggeration: 1 },
+                sky: { 'sky-color': '#89CFF0', 'horizon-color': '#ffffff', 'fog-color': '#ffffff' },
+            };
+        }
+
+        // ─── Inject overlays into a vector style JSON ───
+        function injectOverlays(style) {
+            style.sources = style.sources || {};
+            style.sources['dem'] = DEM_SOURCE_DEF;
+            style.sources['hillshadeSrc'] = DEM_SOURCE_DEF;
+
+            style.layers = style.layers || [];
+            const ids = new Set(style.layers.map(l => l.id));
+            if (!ids.has('hillshade')) style.layers.push(HILLSHADE_LAYER);
+
+            style.terrain = { source: 'dem', exaggeration: 1 };
+            style.sky = { 'sky-color': '#89CFF0', 'horizon-color': '#ffffff', 'fog-color': '#ffffff' };
+        }
+
+        // ─── Map ───
+        const map = new maplibregl.Map({
+            container: 'map',
+            style: VECTOR_STYLES.liberty,
+            center: [6.86, 45.92],
+            zoom: 12,
+            pitch: 55,
+            bearing: -20,
+            maxPitch: 85,
+        });
+
+        map.on('load', () => {
+            log('Initial style loaded');
+
+            // Add DEM + terrain + hillshade for initial load
+            map.addSource('dem', DEM_SOURCE_DEF);
+            map.addSource('hillshadeSrc', DEM_SOURCE_DEF);
+            map.setTerrain({ source: 'dem', exaggeration: 1 });
+            map.addLayer(HILLSHADE_LAYER);
+            if (typeof map.setSky === 'function') {
+                map.setSky({ 'sky-color': '#89CFF0', 'horizon-color': '#ffffff', 'fog-color': '#ffffff' });
+            }
+
+            log(`Terrain + hillshade applied (pitch=${map.getPitch().toFixed(1)}, bearing=${map.getBearing().toFixed(1)})`);
+        });
+
+        // ─── Switch basemap ───
+        async function switchBasemap(id) {
+            if (id === currentBasemap) return;
+            const oldType = VECTOR_STYLES[currentBasemap] ? 'vector' : 'raster';
+            const newType = VECTOR_STYLES[id] ? 'vector' : 'raster';
+            currentBasemap = id;
+
+            // Update buttons
+            ALL_BUTTONS.forEach(btn => document.getElementById(btn).classList.remove('active'));
+            const btnMap = { liberty: 'btnLiberty', stadia: 'btnStadia', osm: 'btnOsm', satellite: 'btnSatellite' };
+            document.getElementById(btnMap[id]).classList.add('active');
+
+            log(`--- ${oldType}→${newType}: switching to ${id} ---`);
+            log(`  Before: pitch=${map.getPitch().toFixed(1)}, bearing=${map.getBearing().toFixed(1)}, terrain=${!!map.getTerrain()}`);
+
+            const t0 = performance.now();
+            let newStyle;
+
+            if (VECTOR_STYLES[id]) {
+                // Vector basemap — fetch style JSON
+                let cached = styleCache.get(id);
+                if (!cached) {
+                    cached = await fetch(VECTOR_STYLES[id]).then(r => r.json());
+                    styleCache.set(id, cached);
+                }
+                newStyle = JSON.parse(JSON.stringify(cached)); // deep clone
+                injectOverlays(newStyle);
+            } else {
+                // Raster basemap — build a minimal style with our overlays baked in
+                const rasterDef = RASTER_BASEMAPS[id];
+                const sourceId = rasterDef.layer.source;
+                newStyle = buildRasterStyle(rasterDef, sourceId);
+            }
+
+            map.setStyle(newStyle);
+
+            map.once('style.load', () => {
+                const dt = (performance.now() - t0).toFixed(0);
+                log(`  style.load after ${dt}ms`);
+                log(`  After: pitch=${map.getPitch().toFixed(1)}, bearing=${map.getBearing().toFixed(1)}, terrain=${!!map.getTerrain()}`);
+                log(`  ✅ Seamless — overlays preserved`);
+            });
+        }
+    </script>
+</body>
+
+</html>

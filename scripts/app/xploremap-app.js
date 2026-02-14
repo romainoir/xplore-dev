@@ -9,7 +9,7 @@
 // ─── Module imports ───
 import { createMap, getBaseStyleLayerBuckets, parseAndCacheBaseStyleLayers } from './map-init.js';
 import { createImageryManager, IMAGERY_OPTIONS, LAYER_GROUPS, LAYER_GROUP_BY_MEMBER_ID, clampOpacity, DEM_SOURCE_MAX_ZOOM } from './imagery-manager.js';
-import { applyOverlays, applyHillshadeAppearance } from './overlay-manager.js';
+import { applyOverlays, applyHillshadeAppearance, injectOverlaysIntoStyle } from './overlay-manager.js';
 import { createRoutingOrchestrator } from './routing-orchestrator.js';
 import { createShadowController } from './shadow-controller.js';
 import {
@@ -157,6 +157,11 @@ async function init() {
     if (contState) {
       imagery.applyImageryState();
     }
+    // Ensure route layers stay above imagery after overlays are rebuilt
+    if (directionsManager && typeof directionsManager.markRouteLayersDirty === 'function') {
+      directionsManager.markRouteLayersDirty();
+      directionsManager.moveRouteLayersToTop();
+    }
   });
   map.once('style.load', () => applyHillshadeAppearance(map));
   map.once('style.load', () => {
@@ -169,11 +174,11 @@ async function init() {
   const directionsToggle = document.getElementById('directionsToggle');
   const directionsDock = document.getElementById('directionsDock');
   const directionsControl = document.getElementById('directionsControl');
-  const transportModes = document.getElementById('transportModes');
-  const swapButton = document.getElementById('swapButton');
-  const undoButton = document.getElementById('undoButton');
-  const redoButton = document.getElementById('redoButton');
-  const clearButton = document.getElementById('clearButton');
+  const transportModes = document.querySelectorAll('.route-mode-btn');
+  const swapButton = document.getElementById('swapDirectionsButton');
+  const undoButton = document.getElementById('undoDirectionsButton');
+  const redoButton = document.getElementById('redoDirectionsButton');
+  const clearButton = document.getElementById('clearDirectionsButton');
   const routeStats = document.getElementById('routeStats');
   const routeTimeline = document.getElementById('routeTimeline');
   const elevationCard = document.getElementById('elevationCard');
@@ -866,7 +871,8 @@ async function init() {
               const liveStyle = JSON.parse(JSON.stringify(style));
               injectStyleDefaults(liveStyle);
               parseAndCacheBaseStyleLayers(liveStyle);
-              // setStyle triggers style.load → applyOverlays rebuilds terrain/hillshade/contours
+              // Inject overlay defs so diff engine keeps DEM/terrain/hillshade intact
+              injectOverlaysIntoStyle(liveStyle);
               map.setStyle(liveStyle);
               console.log(`[Basemap] Switched vector style to: ${sub.label}`);
             } catch (err) {
