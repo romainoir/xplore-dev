@@ -5,11 +5,11 @@ import {
     UniformMatrix4f,
     UniformColor
 } from '../uniform_binding';
-import type {Context} from '../../gl/context';
-import type {UniformValues, UniformLocations} from '../../render/uniform_binding';
-import {type Sky} from '../../style/sky';
-import {Color} from '@maplibre/maplibre-gl-style-spec';
-import {type mat4} from 'gl-matrix';
+import type { Context } from '../../gl/context';
+import type { UniformValues, UniformLocations } from '../../render/uniform_binding';
+import { type Sky } from '../../style/sky';
+import { Color } from '@maplibre/maplibre-gl-style-spec';
+import { type mat4 } from 'gl-matrix';
 
 export type TerrainPreludeUniformsType = {
     'u_depth': Uniform1i;
@@ -30,6 +30,12 @@ export type TerrainUniformsType = {
     'u_horizon_color': UniformColor;
     'u_horizon_fog_blend': Uniform1f;
     'u_is_globe_mode': Uniform1f;
+    'u_contour_enabled': Uniform1f;
+    'u_contour_interval': Uniform1f;
+    'u_contour_color': UniformColor;
+    'u_contour_multiplier': Uniform1f;
+    'u_zoom': Uniform1f;
+    'u_tile_zoom': Uniform1f;
 };
 
 export type TerrainDepthUniformsType = {
@@ -60,7 +66,13 @@ const terrainUniforms = (context: Context, locations: UniformLocations): Terrain
     'u_fog_ground_blend_opacity': new Uniform1f(context, locations.u_fog_ground_blend_opacity),
     'u_horizon_color': new UniformColor(context, locations.u_horizon_color),
     'u_horizon_fog_blend': new Uniform1f(context, locations.u_horizon_fog_blend),
-    'u_is_globe_mode': new Uniform1f(context, locations.u_is_globe_mode)
+    'u_is_globe_mode': new Uniform1f(context, locations.u_is_globe_mode),
+    'u_contour_enabled': new Uniform1f(context, locations.u_contour_enabled),
+    'u_contour_interval': new Uniform1f(context, locations.u_contour_interval),
+    'u_contour_color': new UniformColor(context, locations.u_contour_color),
+    'u_contour_multiplier': new Uniform1f(context, locations.u_contour_multiplier),
+    'u_zoom': new Uniform1f(context, locations.u_zoom),
+    'u_tile_zoom': new Uniform1f(context, locations.u_tile_zoom),
 });
 
 const terrainDepthUniforms = (context: Context, locations: UniformLocations): TerrainDepthUniformsType => ({
@@ -78,18 +90,60 @@ const terrainUniformValues = (
     fogMatrix: mat4,
     sky: Sky,
     pitch: number,
-    isGlobeMode: boolean): UniformValues<TerrainUniformsType> => ({
-    'u_texture': 0,
-    'u_ele_delta': eleDelta,
-    'u_fog_matrix': fogMatrix,
-    'u_fog_color': sky ? sky.properties.get('fog-color') : Color.white,
-    'u_fog_ground_blend': sky ? sky.properties.get('fog-ground-blend') : 1,
-    // Set opacity to 0 when in globe mode to disable fog
-    'u_fog_ground_blend_opacity': isGlobeMode ? 0 : (sky ? sky.calculateFogBlendOpacity(pitch) : 0),
-    'u_horizon_color': sky ? sky.properties.get('horizon-color') : Color.white,
-    'u_horizon_fog_blend': sky ? sky.properties.get('horizon-fog-blend') : 1,
-    'u_is_globe_mode': isGlobeMode ? 1 : 0
-});
+    isGlobeMode: boolean,
+    zoom: number): UniformValues<TerrainUniformsType> => {
+
+    // Contour defaults — always on unless explicitly disabled
+    let contourEnabled = 1.0;
+    if (typeof window !== 'undefined' && (window as any).imageryState) {
+        const cs = (window as any).imageryState.get('contours');
+        if (cs && cs.enabled === false) contourEnabled = 0.0;
+    }
+    let contourInterval = 10.0;
+    let contourMultiplier = 1.0;
+    let contourColor = Color.parse('rgba(0,0,0,0.7)');
+
+    // Read config from app-side globals
+    if (typeof window !== 'undefined' && (window as any).contourConfig) {
+        const config = (window as any).contourConfig;
+        if (config.interval !== undefined) contourInterval = config.interval;
+        if (config.color !== undefined) contourColor = Color.parse(config.color);
+        if (config.multiplier !== undefined) contourMultiplier = config.multiplier;
+    }
+
+    // Zoom-based interval selection from thresholds
+    if (typeof window !== 'undefined' && (window as any).contourThresholds) {
+        const thresholds = (window as any).contourThresholds;
+        let bestZoom = -1;
+        for (const z in thresholds) {
+            const pz = parseInt(z);
+            if (pz <= zoom && pz > bestZoom) {
+                bestZoom = pz;
+            }
+        }
+        if (bestZoom !== -1) {
+            contourInterval = thresholds[bestZoom][0];
+        }
+    }
+
+    return {
+        'u_texture': 0,
+        'u_ele_delta': eleDelta,
+        'u_fog_matrix': fogMatrix,
+        'u_fog_color': sky ? sky.properties.get('fog-color') : Color.white,
+        'u_fog_ground_blend': sky ? sky.properties.get('fog-ground-blend') : 1,
+        'u_fog_ground_blend_opacity': isGlobeMode ? 0 : (sky ? sky.calculateFogBlendOpacity(pitch) : 0),
+        'u_horizon_color': sky ? sky.properties.get('horizon-color') : Color.white,
+        'u_horizon_fog_blend': sky ? sky.properties.get('horizon-fog-blend') : 1,
+        'u_is_globe_mode': isGlobeMode ? 1 : 0,
+        'u_contour_enabled': contourEnabled,
+        'u_contour_interval': contourInterval,
+        'u_contour_multiplier': contourMultiplier,
+        'u_contour_color': contourColor,
+        'u_zoom': zoom,
+        'u_tile_zoom': 0,
+    };
+};
 
 const terrainDepthUniformValues = (
     eleDelta: number
@@ -106,4 +160,4 @@ const terrainCoordsUniformValues = (
     'u_ele_delta': eleDelta
 });
 
-export {terrainUniforms, terrainDepthUniforms, terrainCoordsUniforms, terrainPreludeUniforms, terrainUniformValues, terrainDepthUniformValues, terrainCoordsUniformValues};
+export { terrainUniforms, terrainDepthUniforms, terrainCoordsUniforms, terrainPreludeUniforms, terrainUniformValues, terrainDepthUniformValues, terrainCoordsUniformValues };

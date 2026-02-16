@@ -5,12 +5,16 @@ uniform float u_ele_delta;
 
 out vec2 v_texture_pos;
 out float v_fog_depth;
+out float v_elevation;
+out float v_dist_linear;
 
 void main() {
     float ele = get_elevation(a_pos3d.xy);
+    v_elevation = ele;
     float ele_delta = a_pos3d.z == 1.0 ? u_ele_delta : 0.0;
     v_texture_pos = a_pos3d.xy / 8192.0;
     gl_Position = projectTileFor3D(a_pos3d.xy, get_elevation(a_pos3d.xy) - ele_delta);
     vec4 pos = u_fog_matrix * vec4(a_pos3d.xy, ele, 1.0);
     v_fog_depth = pos.z / pos.w * 0.5 + 0.5;
+    v_dist_linear = pos.w;
 }

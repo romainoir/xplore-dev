@@ -42,15 +42,7 @@ async function init() {
   // ── 1. Create Map ──
   const { map } = await createMap();
 
-  // ── 2. DEM contour source ──
-  const demSource = new mlcontour.DemSource({
-    url: MAPTERHORN_TILE_URL,
-    encoding: 'terrarium',
-    maxzoom: DEM_SOURCE_MAX_ZOOM,
-    worker: true,
-    tileSize: 512,
-  });
-  demSource.setupMaplibre(maplibregl);
+  // ── 2. Contours are shader-based (terrain_program.ts reads window.imageryState) ──
 
   // ── 3. Terrain analysis defaults ──
   initTerrainAnalysisConfig();
@@ -139,7 +131,7 @@ async function init() {
   // ── 9. Overlay wiring ──
   const getOverlayDeps = () => ({
     imageryState: imagery.imageryState,
-    demSource,
+
     applyImageryState: imagery.applyImageryState,
     updateImageryControlStates: imagery.updateImageryControlStates,
     applyImageryLayerOrder: imagery.applyImageryLayerOrder,

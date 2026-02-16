@@ -20,8 +20,7 @@ import {
     SHADOW_DEM_MAX_ZOOM,
     clampOpacity,
     scaleExpression,
-    CONTOUR_LINE_BASE_OPACITY,
-    CONTOUR_TEXT_BASE_OPACITY,
+
 } from './imagery-manager.js';
 
 import { updatePeakLabels, getBaseStyleLayerBuckets } from './map-init.js';
@@ -109,7 +108,7 @@ export function injectOverlaysIntoStyle(style) {
 export function applyOverlays(map, deps = {}) {
     const {
         imageryState,
-        demSource,
+
         applyImageryState,
         updateImageryControlStates,
         applyImageryLayerOrder,
@@ -164,17 +163,8 @@ export function applyOverlays(map, deps = {}) {
     IMAGERY_OPTIONS.forEach(option => {
         if (option.type === 'base-style') return;
 
-        if (option.type === 'contours') {
-            const state = imageryState.get(option.id);
-            const opacity = clampOpacity(state?.opacity ?? option.defaultOpacity ?? 1);
-            const visible = Boolean(state?.enabled && opacity > 0);
-            if (!map.getSource('contours')) {
-                map.addSource('contours', { type: 'vector', tiles: [demSource.contourProtocolUrl({ multiplier: 1, thresholds: { 11: [60, 300], 12: [30, 150], 13: [30, 150], 14: [15, 60], 15: [6, 30] }, elevationKey: 'ele', levelKey: 'level', contourLayer: 'contours' })], maxzoom: 16 });
-                map.addLayer({ id: 'contours', type: 'line', source: 'contours', 'source-layer': 'contours', layout: { 'line-join': 'round', visibility: visible ? 'visible' : 'none' }, paint: { 'line-color': 'rgba(0,0,0,0.55)', 'line-width': ['match', ['get', 'level'], 1, 1, 0.5], 'line-opacity': scaleExpression(CONTOUR_LINE_BASE_OPACITY, opacity) } }, topLabelId || undefined);
-                map.addLayer({ id: 'contour-text', type: 'symbol', source: 'contours', 'source-layer': 'contours', filter: ['>', ['get', 'level'], 0], layout: { 'symbol-placement': 'line', 'text-anchor': 'center', 'text-size': 10, 'text-field': ['concat', ['number-format', ['get', 'ele'], { 'maximumFractionDigits': 0 }], ' m'], 'text-font': ['Noto Sans Bold'], visibility: visible ? 'visible' : 'none' }, paint: { 'text-halo-color': 'white', 'text-halo-width': 1, 'text-opacity': scaleExpression(CONTOUR_TEXT_BASE_OPACITY, opacity) } }, topLabelId || undefined);
-            }
-            return;
-        }
+        // Contours are rendered by the terrain shader (no map layers needed)
+        if (option.id === 'contours') return;
         if (option.type === 'hillshade') return;
 
         // Standard raster tile layers
@@ -217,9 +207,7 @@ export function applyOverlays(map, deps = {}) {
         console.log(`[App] Repositioned ${fillLayerIds.length} vector fill layers below hillshade`);
     }
 
-    // ─── Move contour layers above hillshade ───
-    if (map.getLayer('contours')) map.moveLayer('contours');
-    if (map.getLayer('contour-text')) map.moveLayer('contour-text');
+    // Contour layers are shader-based (no map layers to reorder)
 
     // ─── Move overlay LINE layers (roads, waterways, buildings) above contours ───
     // These need to be above hillshade + contours so they're visible on all basemaps.

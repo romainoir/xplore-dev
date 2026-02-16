@@ -37,7 +37,23 @@ function createTilePreviewUrl(template, coords = WMTS_PREVIEW_COORDS) {
 // ─── IMAGERY_OPTIONS ───
 export const IMAGERY_OPTIONS = Object.freeze([
     { id: 'shadow', label: 'Shadow', type: 'native-layer', layerId: 'shadow-native', previewImage: './data/icons_Xmap/shadow.png', defaultOpacity: 1.0, defaultVisible: false },
-    { id: 'contours', label: 'Contours', type: 'contours', sourceId: 'contours', layerId: 'contours', linkedLayerIds: ['contour-text'], previewImage: './data/contour.png', defaultVisible: true, defaultOpacity: 1 },
+    {
+        id: 'contours',
+        label: 'Contours',
+        type: 'native-layer',
+        layerId: 'contours-native',
+        previewImage: './data/contour.png',
+        defaultVisible: true,
+        defaultOpacity: 1.0,
+        multiplier: 1.0,
+        thresholds: {
+            0: [1000, 500],
+            7: [500, 100],
+            10: [200, 50],
+            12: [100, 20],
+            14: [50, 10]
+        }
+    },
     { id: 'osm-features', label: 'OSM Features', type: 'osm-overlay', previewImage: './data/OSM_vector.png', defaultOpacity: 1, defaultVisible: true },
     { id: 'wikimedia-photos', label: 'Wikimedia Photos', type: 'wikimedia', previewImage: './data/icons_Xmap/camera.png', defaultVisible: false, defaultOpacity: 1, linkedLayerIds: ['wikimedia-photos-layer', 'wikimedia-photos-clusters', 'wikimedia-photos-cluster-count', 'wikimedia-photos-large-clusters', 'wikimedia-thumbnails-cluster', 'wikimedia-thumbnails-single'] },
     { id: 'strava-heatmap-all', label: 'Strava Heatmap (All)', sourceId: 'strava-heatmap-all', layerId: 'strava-heatmap-all', tileTemplate: 'https://atlas.hartakji.com/strava-heatmap-all/{z}/{x}/{y}', tileSize: 256, minZoom: 0, maxZoom: 15, attribution: '<a href="https://www.strava.com">© Strava</a>', defaultVisible: false, defaultOpacity: 1 },
@@ -56,7 +72,8 @@ export const IMAGERY_OPTIONS = Object.freeze([
     { id: 'ign-cosia', label: 'IGN Kosia 2021-2023', sourceId: 'ign-cosia', layerId: 'ign-cosia', tileTemplate: createIgnTileTemplate('IGNF_COSIA_2021-2023', 'image/png'), tileSize: 256, attribution: IGN_ATTRIBUTION, defaultVisible: false, defaultOpacity: 1 },
     { id: 'ign-forest-inventory', label: 'IGN Forest Inventory', sourceId: 'ign-forest-inventory', layerId: 'ign-forest-inventory', tileTemplate: createIgnTileTemplate('LANDCOVER.FORESTINVENTORY.V2', 'image/png'), tileSize: 256, attribution: IGN_ATTRIBUTION, defaultVisible: false, defaultOpacity: 1 },
     { id: 'ign-orthophotos', label: 'IGN Orthophotos', sourceId: 'ign-orthophotos', layerId: 'ign-orthophotos', tileTemplate: createIgnTileTemplate('ORTHOIMAGERY.ORTHOPHOTOS.BDORTHO', 'image/jpeg'), tileSize: 256, attribution: IGN_ATTRIBUTION, defaultVisible: false, defaultOpacity: 1 },
-    { id: 'eox-s2', label: 'EOX Satellite', sourceId: 's2cloudless', layerId: 's2cloudless', tileTemplate: S2C_URL, tileSize: 256, attribution: EOX_ATTRIBUTION, defaultVisible: false, defaultOpacity: 1, paint: { 'raster-opacity': S2_OPACITY, 'raster-fade-duration': S2_FADE_DURATION } },
+    // { id: 'eox-s2', label: 'EOX Satellite', sourceId: 's2cloudless', layerId: 's2cloudless', tileTemplate: S2C_URL, tileSize: 256, attribution: EOX_ATTRIBUTION, defaultVisible: false, defaultOpacity: 1, paint: { 'raster-opacity': S2_OPACITY, 'raster-fade-duration': S2_FADE_DURATION } },
+    { id: 'eox-s2', label: 'World Imagery', sourceId: 'world-imagery', layerId: 'world-imagery', tileTemplate: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', tileSize: 256, attribution: '© Esri', defaultVisible: false, defaultOpacity: 1 },
     { id: 'ign-lidar-hd-mns-shadow', label: 'MNS', sourceId: 'ign-lidar-hd-mns-shadow', layerId: 'ign-lidar-hd-mns-shadow', tileTemplate: createIgnTileTemplate('IGNF_LIDAR-HD_MNS_ELEVATION.ELEVATIONGRIDCOVERAGE.SHADOW', 'image/png'), tileSize: 256, attribution: IGN_ATTRIBUTION, defaultVisible: false, defaultOpacity: 1 },
     { id: 'ign-lidar-hd-mnt-shadow', label: 'MNT', sourceId: 'ign-lidar-hd-mnt-shadow', layerId: 'ign-lidar-hd-mnt-shadow', tileTemplate: createIgnTileTemplate('IGNF_LIDAR-HD_MNT_ELEVATION.ELEVATIONGRIDCOVERAGE.SHADOW', 'image/png'), tileSize: 256, attribution: IGN_ATTRIBUTION, defaultVisible: false, defaultOpacity: 1 },
     { id: 'white-background', label: 'White Background', type: 'background', layerId: 'background', hiddenControl: true, defaultVisible: false, paint: { 'background-color': '#ffffff' } },
@@ -231,6 +248,11 @@ export function createImageryManager(map, deps = {}) {
         imageryState.set(option.id, { enabled: option.defaultVisible ?? index === 0, opacity: defaultOpacity });
     });
 
+    // Expose globals for the terrain shader to read contour state
+    window.imageryState = imageryState;
+    const contourOption = IMAGERY_OPTIONS.find(o => o.id === 'contours');
+    if (contourOption?.thresholds) window.contourThresholds = contourOption.thresholds;
+
     const SHADOW_TOOLBOX_IDS = ['shadow', 'detail-shading'];
     const TERRAIN_TOOLBOX_IDS = ['aspect', 'slope', 'avalanche'];
     const SNOW_TOOLBOX_IDS = ['snow', 'snow-depth'];
@@ -260,18 +282,9 @@ export function createImageryManager(map, deps = {}) {
 
 
 
-    // ─── Contour layers state ───
-    function applyContourLayersState(opacity, visible) {
-        const effectiveOpacity = visible ? opacity : 0;
-        if (map.getLayer('contours')) {
-            map.setPaintProperty('contours', 'line-opacity', scaleExpression(CONTOUR_LINE_BASE_OPACITY, effectiveOpacity));
-            map.setLayoutProperty('contours', 'visibility', visible ? 'visible' : 'none');
-        }
-        if (map.getLayer('contour-text')) {
-            map.setPaintProperty('contour-text', 'text-opacity', scaleExpression(CONTOUR_TEXT_BASE_OPACITY, effectiveOpacity));
-            map.setLayoutProperty('contour-text', 'visibility', visible ? 'visible' : 'none');
-        }
-    }
+    // ─── Contour state (shader-based, no map layers needed) ───
+    // Contours are rendered by the terrain shader. Toggle updates window.imageryState
+    // which is read by terrain_program.ts on every frame.
 
     // ─── Vector toggle ───
     const vectorToggle = document.getElementById('vectorToggle');
@@ -427,7 +440,7 @@ export function createImageryManager(map, deps = {}) {
             if (option.type === 'osm-overlay') { setLayerSequenceOpacity(map, baseStyleOverlayLayerIds, visible ? opacity : 0); return; }
             if (option.type === 'osm-background') { setLayerSequenceOpacity(map, baseStyleUnderlayLayerIds, visible ? opacity : 0); return; }
             if (option.type === 'vector-fills') { setLayerSequenceOpacity(map, baseStyleFillLayerIds, visible ? opacity : 0); return; }
-            if (option.type === 'contours') { applyContourLayersState(opacity, visible); return; }
+            // Shader-based contours: state is read directly from window.imageryState by terra_program.ts
             if (option.type === 'hillshade') return;
             if (option.type === 'wikimedia') { setWikimediaPhotosEnabled(visible); return; }
             if (option.type === 'native-layer') {
@@ -459,7 +472,7 @@ export function createImageryManager(map, deps = {}) {
         updateImageryControlStates,
         clampOpacity,
         createTilePreviewUrl,
-        applyContourLayersState,
+
         setToolboxHandlers(handlers) {
             setTerrainToolboxOpen = handlers.setTerrainToolboxOpen;
             setSnowToolboxOpen = handlers.setSnowToolboxOpen;
