@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MapLibre - V5 Cinematic Shadows (Bilinear + Penumbra)</title>
+
+    <script src="https://unpkg.com/maplibre-gl@4.x/dist/maplibre-gl.js"></script>
+    <link href="https://unpkg.com/maplibre-gl@4.x/dist/maplibre-gl.css" rel="stylesheet" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.9.0/suncalc.min.js"></script>
+
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+            background: #000;
+        }
+
+        #map {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 100%;
+        }
+
+        #panel {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 10;
+            width: 300px;
+            background: rgba(15, 17, 21, 0.85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8);
+            color: #fff;
+        }
+
+        h3 {
+            margin: 0 0 5px 0;
+            font-size: 1.2em;
+            color: #4dabf7;
+        }
+
+        .subtitle {
+            font-size: 0.75em;
+            color: #888;
+            margin-bottom: 20px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .control-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            font-size: 0.85em;
+            color: #ccc;
+            margin-bottom: 8px;
+        }
+
+        .val-display {
+            float: right;
+            color: #fff;
+            font-weight: 600;
+        }
+
+        input[type="date"] {
+            width: 100%;
+            padding: 10px;
+            border-radius: 6px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            background: rgba(0, 0, 0, 0.5);
+            color: #fff;
+            box-sizing: border-box;
+            color-scheme: dark;
+            font-family: inherit;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            cursor: pointer;
+            margin-top: 5px;
+            accent-color: #4dabf7;
+        }
+
+        #sun-info {
+            font-size: 0.85em;
+            color: #aaa;
+            background: rgba(0, 0, 0, 0.4);
+            padding: 10px;
+            border-radius: 6px;
+            text-align: center;
+            margin-top: 15px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="panel">
+        <h3>☀️ Cast Shadows HD</h3>
+        <div class="subtitle">Bilinear & Soft Penumbra (512px)</div>
+
+        <div class="control-group">
+            <label for="date-input">Date</label>
+            <input type="date" id="date-input">
+        </div>
+        <div class="control-group">
+            <label>Heure (Locale) : <span class="val-display" id="time-val">08:30</span></label>
+            <input type="range" id="time-input" min="0" max="23.9" step="0.1" value="8.5">
+        </div>
+        <div id="sun-info">Initialisation du système...</div>
+    </div>
+
+    <div id="map"></div>
+
+    <script id="worker-script" type="javascript/worker">
+    const tileCache = new Map();
+    const pendingFetches = new Map();
+    const abortFlags = new Set();
+    
+    const decodeCanvas = new OffscreenCanvas(512, 512);
+    const decodeCtx = decodeCanvas.getContext('2d', { willReadFrequently: true });
+
+    async function getDEMTile(z, x, y, exaggeration) {
+        const maxTile = (1 << z) - 1;
+        if (y < 0 || y > maxTile) return null;
+        const wX = ((x % (maxTile + 1)) + (maxTile + 1)) % (maxTile + 1); 
+        
+        const key = `${z}/${wX}/${y}`;
+        if (tileCache.has(key)) return tileCache.get(key);
+        if (pendingFetches.has(key)) return await pendingFetches.get(key); 
+        
+        const promise = (async () => {
+            try {
+                const res = await fetch(`https://tiles.mapterhorn.com/${z}/${wX}/${y}.webp`);
+                if (!res.ok) return null;
+                const blob = await res.blob();
+                const bitmap = await createImageBitmap(blob);
+                
+                decodeCtx.drawImage(bitmap, 0, 0);
+                const data = decodeCtx.getImageData(0, 0, 512, 512).data;
+                
+                const elev = new Float32Array(262144);
+                let maxElev = -32768;
+                for (let i = 0; i < 262144; i++) {
+                    const h = ((data[i*4]*256 + data[i*4+1] + data[i*4+2]/256) - 32768) * exaggeration;
+                    elev[i] = h;
+                    if (h > maxElev) maxElev = h;
+                }
+                return { elev, maxElev };
+            } catch (e) { return null; }
+        })();
+        
+        pendingFetches.set(key, promise);
+        const result = await promise;
+        pendingFetches.delete(key);
+        if (result) {
+            tileCache.set(key, result);
+            if (tileCache.size > 200) tileCache.delete(tileCache.keys().next().value); 
+        }
+        return result;
+    }
+
+    async function loadGrid3x3(z, x, y, dx_ray, dy_ray, exaggeration) {
+        // ASYMÉTRIE : On décale la grille de 3x3 tuiles dans la direction exacte du soleil !
+        // Cela permet de voir 2 tuiles (1024 pixels) plus loin sans charger plus de mémoire.
+        const startX = dx_ray > 0.3 ? x : (dx_ray < -0.3 ? x - 2 : x - 1);
+        const startY = dy_ray > 0.3 ? y : (dy_ray < -0.3 ? y - 2 : y - 1);
+        
+        const grid = new Float32Array(1536 * 1536).fill(-32768);
+        let maxElev = -32768;
+        const promises = [];
+        
+        for (let dy = 0; dy < 3; dy++) {
+            for (let dx = 0; dx < 3; dx++) {
+                promises.push(getDEMTile(z, startX + dx, startY + dy, exaggeration).then(t => {
+                    if (!t) return;
+                    if (t.maxElev > maxElev) maxElev = t.maxElev;
+                    for (let r = 0; r < 512; r++) {
+                        grid.set(t.elev.subarray(r * 512, r * 512 + 512), (dy * 512 + r) * 1536 + (dx * 512));
+                    }
+                }));
+            }
+        }
+        await Promise.all(promises);
+        return { grid, maxElev, gX_min: startX / Math.pow(2, z), gY_min: startY / Math.pow(2, z), px_per_g: Math.pow(2, z) * 512 };
+    }
+
+    // LE SECRET DES OMBRES PARFAITES : L'Interpolation Bilinéaire
+    function sampleBilinear(grid, gX, gY, gX_min, gY_min, px_per_g) {
+        const x = (gX - gX_min) * px_per_g;
+        const y = (gY - gY_min) * px_per_g;
+        
+        if (x < 0 || y < 0) return -32768;
+        
+        const ix0 = Math.floor(x);
+        const iy0 = Math.floor(y);
+        
+        if (ix0 >= 1535 || iy0 >= 1535) return -32768;
+        
+        const fx = x - ix0;
+        const fy = y - iy0;
+        const idx = iy0 * 1536 + ix0;
+        
+        const e00 = grid[idx];
+        if (e00 === -32768) return -32768;
+
+        const e10 = grid[idx + 1];
+        const e01 = grid[idx + 1536];
+        const e11 = grid[idx + 1537];
+        
+        if (e10 === -32768 || e01 === -32768 || e11 === -32768) return e00; 
+        
+        // Calcule la pente géométrique douce entre les pixels
+        return e00 + fx * (e10 - e00) + fy * (e01 + fx * (e11 - e01) - (e00 + fx * (e10 - e00)));
+    }
+
+    self.onmessage = async (e) => {
+        if (e.data.cmd === 'abort') { abortFlags.add(e.data.id); return; }
+
+        const { id, z, x, y, az, alt, exaggeration } = e.data;
+
+        try {
+            if (alt <= 0 || z < 8) { 
+                const canvas = new OffscreenCanvas(512, 512);
+                if (alt <= 0) { canvas.getContext('2d').fillStyle = 'rgba(10, 14, 25, 0.85)'; canvas.getContext('2d').fillRect(0, 0, 512, 512); }
+                const blob = await canvas.convertToBlob({ type: 'image/png' });
+                const buffer = await blob.arrayBuffer();
+                return self.postMessage({ id, buffer }, [buffer]);
+            }
+
+            // Vecteur directionnel Web Mercator vers le soleil
+            const dx_ray = -Math.sin(az);
+            const dy_ray = Math.cos(az);
+            
+            // ARCHITECTURE LOD (Locale HD et Lointaine Z-3)
+            const local = await loadGrid3x3(z, x, y, dx_ray, dy_ray, exaggeration);
+            if (abortFlags.has(id)) { abortFlags.delete(id); return; }
+
+            let coarse = null;
+            if (z >= 11) {
+                const z_coarse = z - 3;
+                const scale = 1 << 3;
+                coarse = await loadGrid3x3(z_coarse, Math.floor(x / scale), Math.floor(y / scale), dx_ray, dy_ray, exaggeration);
+            }
+            if (abortFlags.has(id)) { abortFlags.delete(id); return; }
+
+            const globalMaxElev = Math.max(local.maxElev, coarse ? coarse.maxElev : -32768);
+
+            const n = Math.PI - 2.0 * Math.PI * (y + 0.5) / Math.pow(2, z);
+            const lat = Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
+            const M_PER_GLOBAL_UNIT = 2 * Math.PI * 6378137 * Math.cos(lat); 
+            const local_res = M_PER_GLOBAL_UNIT / (512 * Math.pow(2, z)); 
+            
+            const tanAlt = Math.max(0.001, Math.tan(alt));
+            const MAX_DIST = 60000; 
+            
+            // Paramètre pour la netteté de l'ombre (Définit la taille virtuelle du soleil dans le ciel)
+            const SHARPNESS = 80.0;
+            
+            const STEP_NEAR = Math.max(local_res * 1.5, 6.0);  
+            const STEP_MED  = Math.max(local_res * 6.0, 30.0); 
+            const STEP_FAR  = Math.max(local_res * 20.0, 120.0);
+
+            const outData = new Uint8ClampedArray(512 * 512 * 4);
+            const dx_g = dx_ray / M_PER_GLOBAL_UNIT;
+            const dy_g = dy_ray / M_PER_GLOBAL_UNIT;
+
+            for (let py = 0; py < 512; py++) {
+                if (py % 64 === 0 && abortFlags.has(id)) { abortFlags.delete(id); return; }
+
+                for (let px = 0; px < 512; px++) {
+                    const gX0 = (x + (px + 0.5) / 512) / Math.pow(2, z);
+                    const gY0 = (y + (py + 0.5) / 512) / Math.pow(2, z);
+                    
+                    const baseElev = sampleBilinear(local.grid, gX0, gY0, local.gX_min, local.gY_min, local.px_per_g);
+                    if (baseElev === -32768) continue;
+                    
+                    const max_search_dist = Math.min(MAX_DIST, (globalMaxElev - baseElev) / tanAlt);
+                    if (max_search_dist <= 0) continue; 
+                    
+                    let min_penumbra = 1.0;
+                    let shadowDist = 0;
+                    let d_m = local_res * 2.0; 
+                    
+                    while (d_m < max_search_dist) {
+                        let step_m = STEP_NEAR;
+                        if (d_m > 4000) step_m = STEP_FAR;
+                        else if (d_m > 1000) step_m = STEP_MED;
+
+                        d_m += step_m;
+                        const drop = (d_m * d_m) / 14860000;
+                        const cz = baseElev + 2 + d_m * tanAlt + drop;
+
+                        if (cz > globalMaxElev) break; 
+
+                        const gX = gX0 + dx_g * d_m;
+                        const gY = gY0 + dy_g * d_m;
+
+                        let elev = sampleBilinear(local.grid, gX, gY, local.gX_min, local.gY_min, local.px_per_g);
+                        if (elev === -32768 && coarse) elev = sampleBilinear(coarse.grid, gX, gY, coarse.gX_min, coarse.gY_min, coarse.px_per_g);
+                        
+                        if (elev !== -32768) {
+                            const diff = cz - elev;
+                            if (diff < 0) {
+                                // Le rayon percute franchement la montagne : C'est le centre de l'ombre
+                                min_penumbra = 0.0;
+                                shadowDist = d_m;
+                                break;
+                            }
+                            // Formule IQ Soft Shadows : Calcule à quelle distance le rayon a frôlé la crête
+                            if (d_m > local_res * 5.0) {
+                                const penumbra = SHARPNESS * diff / d_m;
+                                if (penumbra < min_penumbra) {
+                                    min_penumbra = penumbra;
+                                    shadowDist = d_m;
+                                }
+                            }
+                        } else break; 
+                    }
+                    
+                    if (min_penumbra < 1.0) {
+                        // L'ombre est plus douce et s'estompe quand la montagne qui la projette est lointaine
+                        const fade = Math.max(0.0, 1.0 - (shadowDist / MAX_DIST));
+                        const intensity = 1.0 - min_penumbra;
+                        const alpha = Math.floor(215 * fade * intensity);
+                        
+                        const idx = (py * 512 + px) * 4;
+                        outData[idx] = 10; outData[idx+1] = 12; outData[idx+2] = 20; outData[idx+3] = alpha; 
+                    }
+                }
+            }
+
+            // Anti-Aliasing final (Gaussian blur très léger) pour fondre les derniers micro-crénelages d'écran
+            const blurData = new Uint8ClampedArray(512 * 512 * 4);
+            for (let py = 0; py < 512; py++) {
+                for (let px = 0; px < 512; px++) {
+                    let a = 0, count = 0;
+                    for (let ky = -1; ky <= 1; ky++) {
+                        const ny = py + ky;
+                        if (ny < 0 || ny > 511) continue;
+                        for (let kx = -1; kx <= 1; kx++) {
+                            const nx = px + kx;
+                            if (nx >= 0 && nx <= 511) {
+                                a += outData[(ny * 512 + nx) * 4 + 3]; count++;
+                            }
+                        }
+                    }
+                    const idx = (py * 512 + px) * 4;
+                    blurData[idx] = 10; blurData[idx+1] = 12; blurData[idx+2] = 20; blurData[idx+3] = Math.floor(a / count);
+                }
+            }
+
+            const canvas = new OffscreenCanvas(512, 512);
+            canvas.getContext('2d').putImageData(new ImageData(blurData, 512, 512), 0, 0);
+
+            const blob = await canvas.convertToBlob({ type: 'image/png' });
+            const buffer = await blob.arrayBuffer();
+            if (!abortFlags.has(id)) self.postMessage({ id, buffer }, [buffer]);
+
+        } catch (err) {
+            const canvas = new OffscreenCanvas(512, 512);
+            const blob = await canvas.convertToBlob({ type: 'image/png' });
+            const buffer = await blob.arrayBuffer();
+            if (!abortFlags.has(id)) self.postMessage({ id, buffer }, [buffer]);
+        }
+        
+        abortFlags.delete(id);
+    };
+</script>
+
+    <script>
+        const EXAGGERATION = 1.3;
+
+        const workerBlob = new Blob([document.getElementById('worker-script').textContent], { type: 'application/javascript' });
+        const workerUrl = URL.createObjectURL(workerBlob);
+        const worker = new Worker(workerUrl);
+
+        const pendingRequests = new Map();
+        let msgId = 0;
+
+        worker.onmessage = (e) => {
+            if (pendingRequests.has(e.data.id)) {
+                pendingRequests.get(e.data.id)(e.data.buffer);
+                pendingRequests.delete(e.data.id);
+            }
+        };
+
+        maplibregl.addProtocol('shadow', (params, abortController) => {
+            const id = msgId++;
+
+            return new Promise((resolve) => {
+                const url = new URL(params.url.replace('shadow://', 'http://mock/'));
+                const parts = url.pathname.split('/').filter(Boolean);
+                if (parts.length < 3) return resolve({ data: null });
+
+                pendingRequests.set(id, (buffer) => { resolve({ data: buffer }); });
+
+                worker.postMessage({
+                    id, z: parseInt(parts[0]), x: parseInt(parts[1]), y: parseInt(parts[2]),
+                    az: parseFloat(url.searchParams.get('az')), alt: parseFloat(url.searchParams.get('alt')), exaggeration: parseFloat(url.searchParams.get('ex'))
+                });
+
+                if (abortController) {
+                    abortController.signal.addEventListener('abort', () => {
+                        pendingRequests.delete(id);
+                        worker.postMessage({ cmd: 'abort', id });
+                        resolve({ data: null });
+                    });
+                }
+            });
+        });
+
+        const map = new maplibregl.Map({
+            container: 'map',
+            center: [6.18, 45.85],
+            zoom: 13, pitch: 70, bearing: 140, antialias: true,
+            style: {
+                version: 8,
+                sources: {
+                    'satellite': { type: 'raster', tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'], tileSize: 256, maxzoom: 19 },
+                    'terrain-source': { type: 'raster-dem', tiles: ['https://tiles.mapterhorn.com/{z}/{x}/{y}.webp'], encoding: 'terrarium', tileSize: 512, maxzoom: 15 }
+                },
+                layers: [{ id: 'satellite-layer', type: 'raster', source: 'satellite' }]
+            }
+        });
+
+        map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }));
+
+        map.on('load', () => {
+            map.setTerrain({ source: 'terrain-source', exaggeration: EXAGGERATION });
+
+            map.addLayer({
+                id: 'hillshade-layer', type: 'hillshade', source: 'terrain-source',
+                paint: {
+                    'hillshade-shadow-color': 'rgba(20, 20, 30, 0.25)',
+                    'hillshade-highlight-color': 'rgba(255, 255, 255, 0.4)',
+                    'hillshade-exaggeration': Math.min(1, EXAGGERATION)
+                }
+            });
+
+            map.addSource('cast-shadows-source', {
+                type: 'raster',
+                tiles: [`shadow://{z}/{x}/{y}?az=0&alt=1&ex=${EXAGGERATION}&ts=0`],
+                tileSize: 512, maxzoom: 15
+            });
+
+            map.addLayer({
+                id: 'cast-shadows-layer', type: 'raster', source: 'cast-shadows-source',
+                paint: { 'raster-opacity': 0.85, 'raster-fade-duration': 0, 'raster-resampling': 'linear' }
+            });
+
+            updateShadows();
+        });
+
+        const dateInput = document.getElementById('date-input');
+        const timeInput = document.getElementById('time-input');
+
+        const now = new Date();
+        dateInput.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+        let debounceTimer;
+
+        function getSunPosUI() {
+            const dateStr = dateInput.value;
+            const timeVal = parseFloat(timeInput.value);
+            if (!dateStr) return null;
+
+            const h = Math.floor(timeVal);
+            const m = Math.floor((timeVal - h) * 60);
+            document.getElementById('time-val').innerText = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+
+            const parts = dateStr.split('-');
+            const dateObj = new Date(parts[0], parts[1] - 1, parts[2], h, m, 0);
+
+            const center = map.getCenter();
+            const sunPos = SunCalc.getPosition(dateObj, center.lat, center.lng);
+
+            document.getElementById('sun-info').innerHTML = `Altitude du Soleil : <strong>${(sunPos.altitude * 180 / Math.PI).toFixed(1)}°</strong>`;
+            return sunPos;
+        }
+
+        getSunPosUI();
+
+        function updateShadows() {
+            const source = map.getSource('cast-shadows-source');
+            if (!source) return;
+
+            const sunPos = getSunPosUI();
+            if (!sunPos) return;
+
+            const maplibreAzimuth = (sunPos.azimuth * 180 / Math.PI + 180) % 360;
+            if (map.getLayer('hillshade-layer')) {
+                map.setPaintProperty('hillshade-layer', 'hillshade-illumination-direction', maplibreAzimuth);
+                // La "Golden Hour" teinte doucement l'éclairage de la montagne en orange
+                if (sunPos.altitude * 180 / Math.PI < 15) {
+                    map.setPaintProperty('hillshade-layer', 'hillshade-highlight-color', '#ffcca3');
+                    map.setPaintProperty('hillshade-layer', 'hillshade-shadow-color', 'rgba(30, 20, 40, 0.3)');
+                } else {
+                    map.setPaintProperty('hillshade-layer', 'hillshade-highlight-color', '#ffffff');
+                    map.setPaintProperty('hillshade-layer', 'hillshade-shadow-color', 'rgba(20, 20, 30, 0.25)');
+                }
+            }
+
+            source.setTiles([`shadow://{z}/{x}/{y}?az=${sunPos.azimuth.toFixed(4)}&alt=${sunPos.altitude.toFixed(4)}&ex=${EXAGGERATION}&ts=${Date.now()}`]);
+        }
+
+        timeInput.addEventListener('input', () => {
+            getSunPosUI();
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(updateShadows, 80);
+        });
+        dateInput.addEventListener('input', updateShadows);
+    </script>
+</body>
+
+</html>

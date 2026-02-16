@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>WMS raw elevation Float32 as Maplibre raster-dem</title>
+    <meta charset='utf-8'>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel='stylesheet' href='https://unpkg.com/maplibre-gl@5.18.0/dist/maplibre-gl.css' />
+    <script src='https://unpkg.com/maplibre-gl@5.18.0/dist/maplibre-gl.js'></script>
+    <script src='https://cdn.jsdelivr.net/npm/geotiff@2.0.7/dist-browser/geotiff.js'></script>
+    <style>
+        body { margin: 0; padding: 0; }
+        html, body, #map { height: 100%; }
+        #controls {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            font-family: Arial, sans-serif;
+            font-size: 13px;
+            z-index: 1000;
+            min-width: 220px;
+        }
+        #controls h3 {
+            margin: 0 0 5px 0;
+            font-size: 16px;
+        }
+        #controls h4 {
+            margin: 0 0 15px 0;
+            font-size: 12px;
+            font-weight: normal;
+            color: #666;
+        }
+        #controls label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+        }
+        #controls input[type="range"] {
+            width: 100%;
+            margin-bottom: 15px;
+        }
+        #controls input[type="checkbox"],
+        #controls input[type="radio"] {
+            margin-right: 8px;
+        }
+        #controls .value {
+            float: right;
+            color: #666;
+        }
+        #controls .checkbox-row,
+        #controls .radio-group {
+            margin-bottom: 15px;
+        }
+        #controls .radio-group label {
+            font-weight: normal;
+            margin-bottom: 8px;
+        }
+    </style>
+</head>
+<body>
+<div id="controls">
+    <h3>IGN France - LidarHD MNT</h3>
+    <h4>WMS raw elevation Float32 as Maplibre raster-dem</h4>
+    
+    <div class="radio-group">
+        <label style="font-weight: 600; margin-bottom: 8px;">Elevation Source:</label>
+        <label>
+            <input type="radio" name="source" value="dsm" checked>
+            DSM (Digital Surface Model)
+        </label>
+        <label>
+            <input type="radio" name="source" value="dtm">
+            DTM (Digital Terrain Model)
+        </label>
+    </div>
+    
+    <div class="checkbox-row">
+        <label>
+            <input type="checkbox" id="terrain-toggle">
+            Enable 3D Terrain
+        </label>
+    </div>
+    
+    <div>
+        <label>Illumination Direction <span class="value" id="direction-val">315°</span></label>
+        <input type="range" id="direction" min="0" max="360" step="15" value="315">
+    </div>
+</div>
+<div id="map"></div>
+<script>
+    const SOURCES = {
+        dsm: 'float32dem://data.geopf.fr/wms-r?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=IGNF_LIDAR-HD_MNS_ELEVATION.ELEVATIONGRIDCOVERAGE.LAMB93&STYLES=&FORMAT=image%2Fgeotiff&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=514&HEIGHT=514',
+        dtm: 'float32dem://data.geopf.fr/wms-r?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=IGNF_LIDAR-HD_MNT_ELEVATION.ELEVATIONGRIDCOVERAGE.LAMB93&STYLES=&FORMAT=image%2Fgeotiff&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=514&HEIGHT=514'
+    };
+
+    /**
+     * Generic Float32 DEM protocol handler
+     * URL format: float32dem://EPSG:NNNN/actual-wms-url
+     * or: float32dem://actual-wms-url (defaults to EPSG:3857)
+     */
+    maplibregl.addProtocol('float32dem', async (params, abortController) => {
+        let url = params.url.replace('float32dem://', '');
+        const finalUrl = 'https://' + url; 
+        
+        const response = await fetch(finalUrl, { signal: abortController.signal });
+        const arrayBuffer = await response.arrayBuffer();
+        
+        const tiff = await GeoTIFF.fromArrayBuffer(arrayBuffer);
+        const image = await tiff.getImage();
+        const rasters = await image.readRasters();
+        const width = image.getWidth();
+        const height = image.getHeight();
+        
+        const elevationData = rasters[0];
+        
+        // Encode to Mapbox Terrain RGB
+        const rgbaData = new Uint8ClampedArray(width * height * 4);
+        
+        for (let i = 0; i < elevationData.length; i++) {
+            let elevation = elevationData[i];
+            if (!isFinite(elevation)) elevation = 0;
+            
+            const encodedValue = Math.round((elevation + 10000) / 0.1);
+            
+            rgbaData[i * 4 + 0] = Math.floor(encodedValue / 65536) & 0xFF;
+            rgbaData[i * 4 + 1] = Math.floor(encodedValue / 256) & 0xFF;
+            rgbaData[i * 4 + 2] = encodedValue & 0xFF;
+            rgbaData[i * 4 + 3] = 255;
+        }
+        
+        const canvas = new OffscreenCanvas(width, height);
+        const ctx = canvas.getContext('2d');
+        const imageData = new ImageData(rgbaData, width, height);
+        ctx.putImageData(imageData, 0, 0);
+        
+        const blob = await canvas.convertToBlob({ type: 'image/png' });
+        return { data: new Uint8Array(await blob.arrayBuffer()) };
+    });
+    
+    const map = new maplibregl.Map({
+        container: 'map',
+        style: {
+            version: 8,
+            sources: {
+                'lidar-hd-dem-dsm': {
+                    type: 'raster-dem',
+                    encoding: 'mapbox',
+                    tiles: [SOURCES.dsm],
+                    tileSize: 512
+                },
+                'lidar-hd-dem-dtm': {
+                    type: 'raster-dem',
+                    encoding: 'mapbox',
+                    tiles: [SOURCES.dtm],
+                    tileSize: 512
+                },
+                sat: {
+                    type: 'raster',
+                    tiles: ['https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}'],
+                    tileSize: 256
+                }
+            },
+            layers: [
+                {
+                    id: 'background',
+                    type: 'background',
+                    paint: { 'background-color': '#ffffff' },
+                },
+                {
+                    id: 'hillshade',
+                    type: 'hillshade',
+                    source: 'lidar-hd-dem-dsm', // Start with DSM
+                    paint: {
+                        'hillshade-exaggeration': 0.5,
+                        'hillshade-illumination-direction': 315,
+                        'hillshade-shadow-color': '#000000'
+                    },
+                }, 
+            ]
+        },
+        center: [2.3522, 48.8566],
+        zoom: 16,
+        pitch: 0,
+        bearing: 0
+    });
+
+    let currentSource = 'dsm';
+    
+    // Source toggle (DSM/DTM)
+    document.querySelectorAll('input[name="source"]').forEach(radio => {
+        radio.addEventListener('change', (e) => {
+            const newSource = e.target.value;
+            currentSource = newSource;
+            
+            // Update hillshade layer source
+            const hillshadeLayer = map.getLayer('hillshade');
+            if (hillshadeLayer) {
+                const paint = {
+                    'hillshade-exaggeration': map.getPaintProperty('hillshade', 'hillshade-exaggeration'),
+                    'hillshade-illumination-direction': map.getPaintProperty('hillshade', 'hillshade-illumination-direction'),
+                    'hillshade-shadow-color': map.getPaintProperty('hillshade', 'hillshade-shadow-color')
+                };
+                
+                map.removeLayer('hillshade');
+                map.addLayer({
+                    id: 'hillshade',
+                    type: 'hillshade',
+                    source: `lidar-hd-dem-${newSource}`,
+                    paint: paint
+                });
+            }
+            
+            // Update terrain if enabled
+            const terrainEnabled = document.getElementById('terrain-toggle').checked;
+            if (terrainEnabled) {
+                map.setTerrain({ source: `lidar-hd-dem-${newSource}`, exaggeration: 1.0 });
+            }
+            
+            console.log(`Switched to ${newSource.toUpperCase()}`);
+        });
+    });
+    
+    // Terrain toggle
+    document.getElementById('terrain-toggle').addEventListener('change', (e) => {
+        if (e.target.checked) {
+            map.setTerrain({ source: `lidar-hd-dem-${currentSource}`, exaggeration: 1.0 });
+        } else {
+            map.setTerrain(null);
+        }
+    });
+    
+    // Illumination direction control
+    document.getElementById('direction').addEventListener('input', (e) => {
+        const value = parseInt(e.target.value);
+        map.setPaintProperty('hillshade', 'hillshade-illumination-direction', value);
+        document.getElementById('direction-val').textContent = value + '°';
+    });
+    
+    console.log('Protocol registered: float32dem://url');
+</script>
+</body>
+</html>
