@@ -47,11 +47,11 @@ export const IMAGERY_OPTIONS = Object.freeze([
         defaultOpacity: 1.0,
         multiplier: 1.0,
         thresholds: {
-            0: [1000, 500],
-            7: [500, 100],
-            10: [200, 50],
-            12: [100, 20],
-            14: [50, 10]
+            0: [10, 10],
+            7: [10, 10],
+            10: [10, 10],
+            12: [10, 10],
+            14: [10, 10]
         }
     },
     { id: 'osm-features', label: 'OSM Features', type: 'osm-overlay', previewImage: './data/OSM_vector.png', defaultOpacity: 1, defaultVisible: true },
@@ -252,6 +252,9 @@ export function createImageryManager(map, deps = {}) {
     window.imageryState = imageryState;
     const contourOption = IMAGERY_OPTIONS.find(o => o.id === 'contours');
     if (contourOption?.thresholds) window.contourThresholds = contourOption.thresholds;
+    window.contourConfig = {
+        color: 'rgba(139, 90, 43, 0.2)',   // brown, 20% opacity
+    };
 
     const SHADOW_TOOLBOX_IDS = ['shadow', 'detail-shading'];
     const TERRAIN_TOOLBOX_IDS = ['aspect', 'slope', 'avalanche'];

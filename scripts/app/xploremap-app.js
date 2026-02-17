@@ -25,7 +25,7 @@ import { RouteLibraryManager } from '../storage/route-library-manager.js';
 import { RouteLibraryUI } from '../ui/route-library-ui.js';
 import { ensureGpxLayers, zoomToGeojson, parseGpxToGeoJson, geojsonToGpx } from '../gpx/gpx-io.js';
 import { initializeWikimediaPhotos } from '../map/wikimedia-photos.js';
-import { initContourLabels } from '../map/contour-labels.js';
+import { initContours } from '../map/contour-2d.js';
 
 // ─── Config imports ───
 import {
@@ -157,7 +157,9 @@ async function init() {
     }
   });
   map.once('style.load', () => applyHillshadeAppearance(map));
-  map.once('style.load', () => initContourLabels(map));
+  map.once('style.load', () => {
+    initContours(map);
+  });
   map.once('style.load', () => {
     if (viewModeController && typeof viewModeController.applyCurrentMode === 'function') {
       viewModeController.applyCurrentMode({ animate: false });

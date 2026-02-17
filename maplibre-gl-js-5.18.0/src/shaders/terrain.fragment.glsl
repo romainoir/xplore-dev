@@ -71,10 +71,12 @@ void main() {
 
             // 1px wide lines with antialiasing
             float alpha_minor = (1.0 - smoothstep(0.0, 1.0, pixel_dist_minor)) * density_fade;
-            float alpha_major = 1.0 - smoothstep(0.5, 1.5, pixel_dist_major);
+            float alpha_major = 1.0 - smoothstep(0.0, 1.0, pixel_dist_major);
 
-            float final_alpha = max(alpha_minor * 0.6, alpha_major) * global_fade;
-            vec3 color = mix(u_contour_color.rgb, vec3(0.0), alpha_major * 0.3);
+            float final_alpha = max(alpha_minor * 0.6, alpha_major * 0.85) * global_fade;
+            // Un-premultiply alpha (MapLibre Color class premultiplies)
+            vec3 base_color = u_contour_color.a > 0.001 ? u_contour_color.rgb / u_contour_color.a : u_contour_color.rgb;
+            vec3 color = mix(base_color, vec3(0.0), alpha_major * 0.15);
 
             fragColor = mix(fragColor, vec4(color, 1.0), final_alpha * u_contour_color.a);
         }

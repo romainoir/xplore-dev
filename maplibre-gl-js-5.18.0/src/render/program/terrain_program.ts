@@ -101,7 +101,7 @@ const terrainUniformValues = (
     }
     let contourInterval = 10.0;
     let contourMultiplier = 1.0;
-    let contourColor = Color.parse('rgba(0,0,0,0.7)');
+    let contourColor = Color.parse('rgba(139,90,43,0.2)');
 
     // Read config from app-side globals
     if (typeof window !== 'undefined' && (window as any).contourConfig) {
