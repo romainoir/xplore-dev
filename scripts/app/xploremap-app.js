@@ -24,8 +24,10 @@ import { DirectionsManager } from '../directions/core/directions-manager.js';
 import { RouteLibraryManager } from '../storage/route-library-manager.js';
 import { RouteLibraryUI } from '../ui/route-library-ui.js';
 import { ensureGpxLayers, zoomToGeojson, parseGpxToGeoJson, geojsonToGpx } from '../gpx/gpx-io.js';
-import { initializeWikimediaPhotos } from '../map/wikimedia-photos.js';
+import { initializeWikimediaPhotos, restoreWikimediaLayers } from '../map/wikimedia-photos.js';
 import { initContours } from '../map/contour-2d.js';
+import { Modal } from '../ui/modal.js';
+import { Toast } from '../ui/toast.js';
 
 // ─── Config imports ───
 import {
@@ -150,6 +152,9 @@ async function init() {
     if (contState) {
       imagery.applyImageryState();
     }
+    // Restore layers destroyed by setStyle
+    restoreWikimediaLayers();
+    initContours(map);
     // Ensure route layers stay above imagery after overlays are rebuilt
     if (directionsManager && typeof directionsManager.markRouteLayersDirty === 'function') {
       directionsManager.markRouteLayersDirty();
@@ -347,7 +352,7 @@ async function init() {
         if (target) {
           let applied = await routing.applyDebugNetworkLayer();
           if (!applied) { await routing.refreshOfflineNetwork(); applied = await routing.applyDebugNetworkLayer(); }
-          if (!applied) window.alert('Unable to display routing network.');
+          if (!applied) Toast.error('Unable to display routing network.');
           routing.debugNetworkVisible = applied;
         } else {
           routing.hideDebugNetworkLayer();
@@ -367,7 +372,9 @@ async function init() {
   const gpxExportButton = document.getElementById('gpxExportButton');
 
   if (gpxImportButton && gpxFileInput) {
-    gpxImportButton.addEventListener('click', () => gpxFileInput.click());
+    gpxImportButton.addEventListener('click', () => {
+      gpxFileInput.click();
+    });
     gpxFileInput.addEventListener('change', async () => {
       const file = gpxFileInput.files?.[0];
       if (!file) return;
@@ -375,7 +382,7 @@ async function init() {
         const text = await file.text();
         const geojson = parseGpxToGeoJson(text);
         if (!geojson?.features?.length) {
-          window.alert('No GPX features found.');
+          Toast.info('No GPX features found.');
         } else {
           applyGpxData(geojson, { fitBounds: true });
           if (directionsManager?.importRouteFromGeojson) {
@@ -386,7 +393,7 @@ async function init() {
         }
       } catch (e) {
         console.error('Failed to import GPX', e);
-        window.alert('Unable to load GPX file.');
+        Toast.error('Unable to load GPX file.');
       } finally { gpxFileInput.value = ''; }
     });
   }
@@ -394,7 +401,7 @@ async function init() {
   if (gpxExportButton) {
     gpxExportButton.addEventListener('click', () => {
       const dataset = buildCombinedExportData();
-      if (!dataset.features?.length) { window.alert('No GPX data to export.'); return; }
+      if (!dataset.features?.length) { Toast.info('No GPX data to export.'); return; }
       try {
         const downloadGpx = (content, filename) => {
           const blob = new Blob([content], { type: 'application/gpx+xml' });
@@ -420,7 +427,7 @@ async function init() {
           return;
         }
         downloadGpx(geojsonToGpx(dataset), `${base}.gpx`);
-      } catch (e) { console.error('GPX export failed', e); window.alert('Unable to export GPX data.'); }
+      } catch (e) { console.error('GPX export failed', e); Toast.error('Unable to export GPX data.'); }
     });
   }
 
@@ -462,9 +469,15 @@ async function init() {
 
   if (dprToggle) {
     dprToggle.checked = localStorage.getItem('xplore_dpr_enabled') !== 'false';
-    dprToggle.addEventListener('change', () => {
+    dprToggle.addEventListener('change', async () => {
       localStorage.setItem('xplore_dpr_enabled', dprToggle.checked);
-      if (confirm('Changing resolution requires reload. Reload now?')) window.location.reload();
+      const confirmed = await Modal.confirm({
+        title: 'Reload Required',
+        message: 'Changing resolution requires a reload. Reload now?',
+        confirmText: 'Reload',
+        confirmClass: 'modal-btn--primary'
+      });
+      if (confirmed) window.location.reload();
     });
   }
 
@@ -635,9 +648,12 @@ async function init() {
   const directionsActionsBar = document.getElementById('directionsActionsBar');
   const updateActionsBarVisibility = () => {
     if (!directionsActionsBar || !directionsControl) return;
-    const isOpen = directionsControl.classList.contains('visible');
-    directionsActionsBar.classList.toggle('visible', isOpen);
-    directionsActionsBar.setAttribute('aria-hidden', String(!isOpen));
+    const isControlVisible = directionsControl.classList.contains('visible');
+    const isSilent = directionsManager?.isSilentMode;
+    const shouldShowBar = isControlVisible && !isSilent;
+
+    directionsActionsBar.classList.toggle('visible', shouldShowBar);
+    directionsActionsBar.setAttribute('aria-hidden', String(!shouldShowBar));
   };
   if (directionsDock && directionsActionsBar) {
     if (directionsControl) {
@@ -754,9 +770,10 @@ async function init() {
       },
       {
         id: 'satellite', label: 'Satellite',
+        previewImage: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/10/364/526',
         subOptions: [
-          { id: 'satellite-ign', label: 'IGN Ortho', layerId: 'ign-orthophotos' },
-          { id: 'satellite-eox', label: 'EOX S2', layerId: 'eox-s2' },
+          { id: 'satellite-ign', label: 'IGN Ortho', layerId: 'ign-orthophotos', previewImage: './data/france.png' },
+          { id: 'satellite-eox', label: 'EOX S2', layerId: 'eox-s2', previewImage: './data/worldwide.png' },
         ],
       },
       {
@@ -1120,6 +1137,20 @@ async function init() {
             subBtn.addEventListener('click', (e) => {
               e.stopPropagation();
               activateBasemap(bm.id, sub.id);
+              // Update badge on parent button showing active sub-option
+              const parentBtn = basemapBox.querySelector(`[data-basemap-id="${bm.id}"]`);
+              const badgeUrl = sub.previewImage || subOpt?.previewImage || null;
+              if (parentBtn && badgeUrl) {
+                let badge = parentBtn.querySelector('.basemap-badge');
+                if (!badge) {
+                  badge = document.createElement('img');
+                  badge.className = 'basemap-badge';
+                  parentBtn.appendChild(badge);
+                }
+                badge.src = badgeUrl;
+                badge.alt = sub.label;
+              }
+              subMenu.classList.remove('visible');
             });
             subMenu.appendChild(subBtn);
           });

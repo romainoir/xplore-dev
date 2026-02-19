@@ -622,7 +622,7 @@ export class DirectionsManagerPoiMixin {
             lat,
             distanceKm: nearest.properties.location,
             distanceToRouteKm: distKm,
-            thumbnailUrl: getPhotoThumbnailUrl(feature.properties.fileName, 200)
+            thumbnailUrl: getPhotoThumbnailUrl(feature.properties.fileName, 400)
           });
         }
       }

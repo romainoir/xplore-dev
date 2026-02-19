@@ -545,6 +545,14 @@ export class DirectionsManagerInitMixin {
 
   setupUIHandlers() {
     this.directionsToggle?.addEventListener('click', () => {
+      // If a route is loaded in silent/view-only mode, transition to edit mode
+      if (this.isSilentMode && this.isPanelVisible()) {
+        console.log('[DirectionsManager] Toggle clicked in silent mode — transitioning to edit mode');
+        this.isSilentMode = false;
+        this.setPanelVisible(true); // Re-set to update toggle highlight + show toolbox
+        this.prepareNetwork({ reason: 'silent-to-edit' }).catch(() => { });
+        return;
+      }
       console.log('[DirectionsManager] Toggle Button Clicked. Setting visible:', !this.isPanelVisible());
       this.setPanelVisible(!this.isPanelVisible());
     });

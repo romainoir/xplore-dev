@@ -7,6 +7,8 @@
  * @param {maplibregl.Map} map
  * @param {object} deps
  */
+import { Toast } from '../ui/toast.js';
+
 export function setupGpxControls(map, deps = {}) {
     const { directionsManagerGetter } = deps;
 
@@ -28,7 +30,7 @@ export function setupGpxControls(map, deps = {}) {
                 }
             } catch (error) {
                 console.error('Failed to import GPX file', error);
-                window.alert('Unable to import GPX file.');
+                Toast.error('Unable to import GPX file.');
             }
             gpxFileInput.value = '';
         });
@@ -44,7 +46,7 @@ export function setupGpxControls(map, deps = {}) {
                 }
             } catch (error) {
                 console.error('Failed to export GPX data', error);
-                window.alert('Unable to export GPX data.');
+                Toast.error('Unable to export GPX data.');
             }
         });
     }

@@ -219,16 +219,13 @@ void slope_hillshade(vec2 deriv)
             break;
         }
     }
-    
-    // Alpha mask: fade out slopes outside [u_slope_min, u_slope_max] range
-    float alpha = 0.7;
-    if (u_slope_min > 0.0 || u_slope_max < 90.0) {
-        float fadeIn = smoothstep(u_slope_min - 2.0, u_slope_min + 2.0, slope);
-        float fadeOut = 1.0 - smoothstep(u_slope_max - 2.0, u_slope_max + 2.0, slope);
-        alpha *= fadeIn * fadeOut;
+    // Range Filter: Hide pixels outside the selected range
+    float finalAlpha = 0.7;
+    if (slope < u_slope_min || slope > u_slope_max) {
+        finalAlpha = 0.0;
     }
     
-    fragColor = vec4(color, alpha);
+    fragColor = vec4(color * finalAlpha, finalAlpha);
 }
 
 // Avalanche zones

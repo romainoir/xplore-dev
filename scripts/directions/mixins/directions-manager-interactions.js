@@ -36,7 +36,9 @@ export class DirectionsManagerInteractionsMixin {
       this.directionsControl.classList.toggle('visible', visible);
     }
     if (this.directionsToggle) {
-      this.directionsToggle.classList.toggle('active', visible);
+      // In silent mode (view-only), don't highlight the draw button
+      const shouldHighlight = visible && !this.isSilentMode;
+      this.directionsToggle.classList.toggle('active', shouldHighlight);
     }
 
     // Mutual exclusivity: if directions panel is opening, close the library
@@ -59,6 +61,11 @@ export class DirectionsManagerInteractionsMixin {
 
     // Show/hide routing start tooltip based on visibility and waypoints
     this.updateRoutingStartTooltip();
+
+    // If manual closing, reset silent mode for next time
+    if (!visible) {
+      this.isSilentMode = false;
+    }
   }
 
   updateRoutingStartTooltip() {
@@ -154,7 +161,7 @@ export class DirectionsManagerInteractionsMixin {
   }
 
   onWaypointMouseDown(event) {
-    if (!this.isPanelVisible()) return;
+    if (!this.isPanelVisible() || this.isSilentMode) return;
     const feature = event.features?.[0];
     if (!feature) return;
     this.isDragging = true;
@@ -263,7 +270,7 @@ export class DirectionsManagerInteractionsMixin {
   }
 
   onSegmentMarkerMouseDown(event) {
-    if (!this.isPanelVisible()) return;
+    if (!this.isPanelVisible() || this.isSilentMode) return;
     const feature = event.features?.[0];
     const type = feature?.properties?.type;
 
@@ -346,7 +353,7 @@ export class DirectionsManagerInteractionsMixin {
    * Right-click is handled by contextmenu for bivouac creation.
    */
   onMapMouseDown(event) {
-    if (!this.isPanelVisible() || this.isDragging) return;
+    if (!this.isPanelVisible() || this.isDragging || this.isSilentMode) return;
 
     // Only handle left mouse button (button === 0)
     // Right-click (button === 2) should still create bivouacs via contextmenu
@@ -821,7 +828,7 @@ export class DirectionsManagerInteractionsMixin {
   }
 
   async onMapClick(event) {
-    if (!this.isPanelVisible() || this.isDragging) return;
+    if (!this.isPanelVisible() || this.isDragging || this.isSilentMode) return;
 
     // Skip if via waypoint was already inserted by drag
     if (this._viaInsertedByDrag) {
@@ -878,7 +885,7 @@ export class DirectionsManagerInteractionsMixin {
   }
 
   onWaypointDoubleClick(event) {
-    if (!this.isPanelVisible()) return;
+    if (!this.isPanelVisible() || this.isSilentMode) return;
     const index = Number(event.features?.[0]?.properties.index);
     if (!Number.isFinite(index) || index <= 0 || index >= this.waypoints.length - 1) return;
     this.recordWaypointState();
@@ -902,7 +909,7 @@ export class DirectionsManagerInteractionsMixin {
    * Handle right-click on a via waypoint to show context menu with remove option
    */
   onWaypointContextMenu(event) {
-    if (!this.isPanelVisible()) return;
+    if (!this.isPanelVisible() || this.isSilentMode) return;
 
     event.preventDefault();
 

@@ -447,6 +447,10 @@ export class DirectionsManagerImportMixin {
 
     this.currentRouteId = options.id || null;
 
+    if (!options.silent) {
+      this.ensurePanelVisible();
+    }
+
     let waypoints = [];
     const explicitWaypoints = (candidate.points || [])
       .filter(p => p.properties?.source === 'waypoint')
@@ -463,7 +467,7 @@ export class DirectionsManagerImportMixin {
     }
 
     this.clearDirections();
-    this.ensurePanelVisible();
+    // this.ensurePanelVisible();  // Removed and moved up with conditional
     this.waypoints = waypoints.map((coord) => coord.slice());
 
     // 1. Prepare Bivouacs/Cuts BEFORE applying the route
@@ -523,7 +527,15 @@ export class DirectionsManagerImportMixin {
     this.updateWaypoints();
     this.updateModeAvailability();
 
-    this.prepareNetwork({ reason: 'imported-route' }).catch(() => { });
+    // Flag whether this is a silent import (view-only)
+    this.isSilentMode = !!options.silent;
+
+    // Ensure the directions panel is visible so stats can be seen
+    this.setPanelVisible(true);
+
+    if (!options.silent) {
+      this.prepareNetwork({ reason: 'imported-route' }).catch(() => { });
+    }
     return true;
   }
 

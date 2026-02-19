@@ -10,7 +10,7 @@
 
   <!-- MapLibre GL JS - Local fork (terrain analysis support) -->
   <link href="https://unpkg.com/maplibre-gl@latest/dist/maplibre-gl.css" rel="stylesheet" />
-  <script src="./maplibre-gl-js-5.18.0/dist/maplibre-gl.js"></script>
+  <script src="./maplibre-gl-js-5.18.0/dist/maplibre-gl-dev.js"></script>
 
   <!-- PMTiles v4 -->
   <script src="https://unpkg.com/pmtiles@4.3.0/dist/pmtiles.js"></script>
@@ -176,14 +176,14 @@
     <div id="routeLibraryDock" class="route-library-dock" aria-label="Route Library Panel" aria-hidden="true">
       <div class="library-header">
         <h2 class="library-title">Saved Routes</h2>
+        <div class="search-container">
+          <input type="text" id="librarySearchInput" placeholder="Search routes..." aria-label="Search routes">
+        </div>
         <div class="library-actions">
-          <div class="search-container">
-            <input type="text" id="librarySearchInput" placeholder="Search routes..." aria-label="Search routes">
-          </div>
           <button id="libraryImportBtn" class="btn btn--sm" title="Import GPX">
             <img src="./data/upload.png" alt="Import" width="16" height="16">
           </button>
-          <input type="file" id="libraryGpxInput" accept=".gpx,application/gpx+xml" multiple style="display: none;"
+          <input type="file" id="libraryGpxInput" accept=".gpx,application/gpx+xml" multiple class="hidden-file-input"
             aria-hidden="true">
         </div>
       </div>

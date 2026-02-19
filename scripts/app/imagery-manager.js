@@ -71,9 +71,9 @@ export const IMAGERY_OPTIONS = Object.freeze([
     { id: 'ign-scan', label: 'IGN Scan (Topo)', sourceId: 'ign-scan', layerId: 'ign-scan', tileTemplate: 'https://data.geopf.fr/private/wmts?apikey=ign_scan_ws&layer=GEOGRAPHICALGRIDSYSTEMS.MAPS&style=normal&tilematrixset=PM&Service=WMTS&Request=GetTile&Version=1.0.0&Format=image%2Fjpeg&TileMatrix={z}&TileCol={x}&TileRow={y}', tileSize: 256, minZoom: 0, maxZoom: 15, attribution: IGN_ATTRIBUTION, defaultVisible: false, defaultOpacity: 1 },
     { id: 'ign-cosia', label: 'IGN Kosia 2021-2023', sourceId: 'ign-cosia', layerId: 'ign-cosia', tileTemplate: createIgnTileTemplate('IGNF_COSIA_2021-2023', 'image/png'), tileSize: 256, attribution: IGN_ATTRIBUTION, defaultVisible: false, defaultOpacity: 1 },
     { id: 'ign-forest-inventory', label: 'IGN Forest Inventory', sourceId: 'ign-forest-inventory', layerId: 'ign-forest-inventory', tileTemplate: createIgnTileTemplate('LANDCOVER.FORESTINVENTORY.V2', 'image/png'), tileSize: 256, attribution: IGN_ATTRIBUTION, defaultVisible: false, defaultOpacity: 1 },
-    { id: 'ign-orthophotos', label: 'IGN Orthophotos', sourceId: 'ign-orthophotos', layerId: 'ign-orthophotos', tileTemplate: createIgnTileTemplate('ORTHOIMAGERY.ORTHOPHOTOS.BDORTHO', 'image/jpeg'), tileSize: 256, attribution: IGN_ATTRIBUTION, defaultVisible: false, defaultOpacity: 1 },
+    { id: 'ign-orthophotos', label: 'IGN Orthophotos', sourceId: 'ign-orthophotos', layerId: 'ign-orthophotos', tileTemplate: createIgnTileTemplate('ORTHOIMAGERY.ORTHOPHOTOS.BDORTHO', 'image/jpeg'), tileSize: 256, attribution: IGN_ATTRIBUTION, defaultVisible: false, defaultOpacity: 1, previewImage: './data/france.png' },
     // { id: 'eox-s2', label: 'EOX Satellite', sourceId: 's2cloudless', layerId: 's2cloudless', tileTemplate: S2C_URL, tileSize: 256, attribution: EOX_ATTRIBUTION, defaultVisible: false, defaultOpacity: 1, paint: { 'raster-opacity': S2_OPACITY, 'raster-fade-duration': S2_FADE_DURATION } },
-    { id: 'eox-s2', label: 'World Imagery', sourceId: 'world-imagery', layerId: 'world-imagery', tileTemplate: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', tileSize: 256, attribution: '© Esri', defaultVisible: false, defaultOpacity: 1 },
+    { id: 'eox-s2', label: 'World Imagery', sourceId: 'world-imagery', layerId: 'world-imagery', tileTemplate: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', tileSize: 256, attribution: '© Esri', defaultVisible: false, defaultOpacity: 1, previewImage: './data/worldwide.png' },
     { id: 'ign-lidar-hd-mns-shadow', label: 'MNS', sourceId: 'ign-lidar-hd-mns-shadow', layerId: 'ign-lidar-hd-mns-shadow', tileTemplate: createIgnTileTemplate('IGNF_LIDAR-HD_MNS_ELEVATION.ELEVATIONGRIDCOVERAGE.SHADOW', 'image/png'), tileSize: 256, attribution: IGN_ATTRIBUTION, defaultVisible: false, defaultOpacity: 1 },
     { id: 'ign-lidar-hd-mnt-shadow', label: 'MNT', sourceId: 'ign-lidar-hd-mnt-shadow', layerId: 'ign-lidar-hd-mnt-shadow', tileTemplate: createIgnTileTemplate('IGNF_LIDAR-HD_MNT_ELEVATION.ELEVATIONGRIDCOVERAGE.SHADOW', 'image/png'), tileSize: 256, attribution: IGN_ATTRIBUTION, defaultVisible: false, defaultOpacity: 1 },
     { id: 'white-background', label: 'White Background', type: 'background', layerId: 'background', hiddenControl: true, defaultVisible: false, paint: { 'background-color': '#ffffff' } },
@@ -90,7 +90,7 @@ export const LAYER_GROUPS = Object.freeze([
     { id: 'snow', label: 'Snow Analysis', exclusive: false, members: ['snow', 'snow-depth'] },
     { id: 'ign-scan', label: 'IGN Scan (Topo)', exclusive: true, members: ['ign-scan'] },
     { id: 'land-cover', label: 'Land Cover', exclusive: true, members: ['ign-cosia', 'ign-forest-inventory'] },
-    { id: 'satellite', label: 'Satellite', exclusive: true, members: ['ign-orthophotos', 'eox-s2'] },
+    { id: 'satellite', label: 'Satellite', exclusive: true, members: ['ign-orthophotos', 'eox-s2'], previewImage: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/10/364/526' },
     { id: 'lidar-hd', label: 'Lidar HD', exclusive: true, members: ['ign-lidar-hd-mns-shadow', 'ign-lidar-hd-mnt-shadow'] },
 ]);
 
@@ -390,9 +390,26 @@ export function createImageryManager(map, deps = {}) {
 
         bringDebugNetworkToFront();
 
-        (map.getStyle().layers || []).filter(l => l.type === 'symbol').forEach(l => {
+        // Move base map symbol layers (OSM labels etc.) to top — but NOT contour or wikimedia layers
+        const contourAndPhotoLayers = new Set([
+            'contour-line-minor', 'contour-line-major', 'contour-label',
+            'wikimedia-photos-cluster', 'wikimedia-photos', 'wikimedia-cluster-count',
+            'wikimedia-thumbnails-cluster', 'wikimedia-thumbnails-single'
+        ]);
+        (map.getStyle().layers || []).filter(l => l.type === 'symbol' && !contourAndPhotoLayers.has(l.id)).forEach(l => {
             if (map.getLayer(l.id)) map.moveLayer(l.id);
         });
+
+        // Contour labels: move right after contour lines so they stay together
+        ['contour-line-minor', 'contour-line-major', 'contour-label'].forEach(id => {
+            if (map.getLayer(id)) map.moveLayer(id);
+        });
+
+        // Wikimedia photos: always on top of everything
+        ['wikimedia-photos-cluster', 'wikimedia-photos', 'wikimedia-cluster-count',
+            'wikimedia-thumbnails-cluster', 'wikimedia-thumbnails-single'].forEach(id => {
+                if (map.getLayer(id)) map.moveLayer(id);
+            });
     }
 
     // ─── Toolbox open/close ───

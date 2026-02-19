@@ -9,7 +9,7 @@ import { extractOverpassNetwork } from '../routing/overpass-network-fetcher.js';
 import { extractOpenFreeMapNetwork } from '../routing/openfreemap-network-builder.js';
 import { OrsRouter } from '../routing/openrouteservice-directions-client.js';
 import { MaplibreDirectionsRouter } from '../routing/maplibre-directions-client.js';
-import { setNetworkPoiCoordinates } from '../map/wikimedia-photos.js';
+import { Toast } from '../ui/toast.js';
 
 function ensureFeatureCollection(maybeFc) {
     if (maybeFc && Array.isArray(maybeFc.features)) return maybeFc;
@@ -135,7 +135,7 @@ export function createRoutingOrchestrator(map, deps = {}) {
 
     const routers = { offline: offlineRouter, ...(onlineRouter ? { online: onlineRouter } : {}) };
     const hasOnlineRouter = Boolean(onlineRouter);
-    let activeRouterKey = hasOnlineRouter ? 'online' : 'offline';
+    let activeRouterKey = 'offline'; // Default to offline as per user request
     let offlineNetworkCoverage = null;
     let offlineNetworkRefreshPromise = null;
     let offlineNetworkLoadingCount = 0;
@@ -150,6 +150,16 @@ export function createRoutingOrchestrator(map, deps = {}) {
         const offlineActive = activeRouterKey === 'offline';
         const isLoadingOffline = offlineNetworkLoadingCount > 0;
         const onlineAvailable = Boolean(routers.online);
+
+        // Update persistent loading toast
+        if (isLoadingOffline && offlineActive) {
+            Toast.show('Loading offline routing data...', 'info', 'ℹ', { persistent: true });
+        } else if (offlineNetworkLoadingCount === 0) {
+            // Only hide if we were the one showing it (implicit check via loading state)
+            // If another toast was shown manually, it might be overwritten, but that's okay for now
+            Toast.hide();
+        }
+
         routingModeToggle.classList.toggle('active', offlineActive);
         routingModeToggle.classList.toggle('is-offline', offlineActive);
         routingModeToggle.classList.toggle('is-online', !offlineActive);
@@ -366,7 +376,6 @@ export function createRoutingOrchestrator(map, deps = {}) {
                     offlineNetworkPois = ensureFeatureCollection(networkResult.pois);
                     if (directionsManager?.setOfflinePointsOfInterest) directionsManager.setOfflinePointsOfInterest(offlineNetworkPois);
                     const poiCoords = (offlineNetworkPois.features || []).map(f => f?.geometry?.coordinates).filter(c => Array.isArray(c) && c.length >= 2);
-                    setNetworkPoiCoordinates(poiCoords);
                     if (debugNetworkVisible) await applyDebugNetworkLayer();
                 } else {
                     console.warn(`${preferOpenFreeMapNetwork ? 'OpenFreeMap' : 'Overpass'} network extraction returned no features`);

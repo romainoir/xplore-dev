@@ -1491,12 +1491,12 @@ export class DirectionsManagerElevationMixin {
                   const zIndex = 10 - (idx + 1);
 
                   if (stackItem.data && stackItem.data.thumbnailUrl) {
-                    stackMarkup += `<div class="elevation-marker__icon elevation-marker__icon--photo-stack" aria-hidden="true" style="position: absolute; top: 0; left: 0; width: 100%; height: 35px; border-radius: 6px; border: 2px solid white; z-index: ${zIndex}; transform: translate(${offsetX}px, ${offsetY}px) rotate(${rotation}deg); box-shadow: 0 2px 4px rgba(0,0,0,0.25); background-image: url('${stackItem.data.thumbnailUrl}'); background-size: cover; background-position: center;"></div>`;
+                    stackMarkup += `<div class="elevation-marker__icon elevation-marker__icon--photo-stack" aria-hidden="true" style="position: absolute; top: 0; left: 0; z-index: ${zIndex}; transform: translate(${offsetX}px, ${offsetY}px) rotate(${rotation}deg); background-image: url('${stackItem.data.thumbnailUrl}');"></div>`;
                   }
                 });
               }
 
-              const mainImg = `<div class="elevation-marker__icon elevation-marker__icon--photo" style="position: relative; width: 100%; height: 35px; border-radius: 6px; border: 2px solid white; display: block; z-index: 20; box-shadow: 0 2px 6px rgba(0,0,0,0.3); background-image: url('${poi.thumbnailUrl}'); background-size: cover; background-position: center;"></div>`;
+              const mainImg = `<div class="elevation-marker__icon elevation-marker__icon--photo" style="position: relative; z-index: 20; background-image: url('${poi.thumbnailUrl}');"></div>`;
 
               // Count badge for clusters
               const countBadge = clusterCount > 1

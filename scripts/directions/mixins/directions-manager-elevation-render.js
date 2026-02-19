@@ -489,29 +489,11 @@ export class DirectionsManagerElevationRenderMixin {
       `;
     });
 
-    // Add Photo Markers to Sparkline
-    let photoMarkersContent = '';
-    if (this.showElevationPhotos && Array.isArray(this.routePhotos)) {
-      this.routePhotos.forEach(photo => {
-        const dist = Number(photo.distanceKm);
-        if (Number.isFinite(dist) && dist >= distMin && dist <= distMax) {
-          const elev = this.getElevationAtDistance(dist) ?? min;
-          const x = ((dist - distMin) / distRange) * 100;
-          const y = (100 - PADDING_Y) - ((elev - min) / range) * SCALE_Y;
-
-          photoMarkersContent += `
-            <circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3" fill="#ffffff" stroke="#1a73e8" stroke-width="1.5" style="filter: drop-shadow(0 1px 2px rgba(0,0,0,0.3))" />
-          `;
-        }
-      });
-    }
-
     // Create a highly visible, coarse SVG preview
     target.innerHTML = `
       <svg class="elevation-sparkline" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" style="width:100%; height:100%; display:block; pointer-events:none; overflow:visible;">
         <defs>${defsContent}</defs>
         ${pathsContent}
-        ${photoMarkersContent}
       </svg>
       <span class="sr-only">Profil d'élévation</span>
     `;

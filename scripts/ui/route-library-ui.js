@@ -3,6 +3,8 @@ import { RouteLibraryManager } from '../storage/route-library-manager.js';
 import { geojsonToGpx, parseGpxToGeoJson, zoomToGeojson } from '../gpx/gpx-io.js';
 import { haversineDistanceMeters } from '../directions/utils/directions-utils.js';
 import { fetchWikimediaPhotosInBounds, getPhotoThumbnailUrl } from '../map/wikimedia-photos.js';
+import { Modal } from './modal.js';
+import { Toast } from './toast.js';
 
 export class RouteLibraryUI {
     constructor(manager, directionsManager) {
@@ -291,18 +293,23 @@ export class RouteLibraryUI {
             ${difficultyHtml}
 
             ${sparklineHtml}
-
-            <div class="route-actions" style="margin-top: 8px; display: flex; justify-content: flex-end; gap: 8px;">
-                <button class="btn btn--outline btn--sm action-load" data-id="${route.id}" title="Load" style="flex: 1; color: white; border-color: rgba(255,255,255,0.4); background: rgba(0,0,0,0.2); display: flex; align-items: center; justify-content: center;">
-                    <img src="./data/edit.png" width="16" height="16" alt="Load" style="opacity: 0.9; filter: brightness(0) invert(1);">
+        </div>
+        <div class="route-actions" style="position: relative; z-index: 1;">
+                <button class="btn btn--icon-only btn--sm action-show" data-id="${route.id}" title="Display on Map">
+                    <img src="./data/eye.png" width="20" height="20" alt="Show">
                 </button>
-                <button class="btn btn--text btn--sm action-export" data-id="${route.id}" title="Export GPX" style="color: white;">
-                    <img src="./data/downloads.png" width="16" height="16" alt="Export" style="opacity: 0.9; filter: brightness(0) invert(1);">
+                <button class="btn btn--icon-only btn--sm action-play" data-id="${route.id}" title="Play Route">
+                    <img src="./data/play-button.png" width="20" height="20" alt="Play">
                 </button>
-                <button class="btn btn--text btn--sm action-delete" data-id="${route.id}" title="Delete" style="color: white;">
-                        <img src="./data/clear.png" width="16" height="16" alt="Delete" style="opacity: 0.9; filter: brightness(0) invert(1);">
+                <button class="btn btn--icon-only btn--sm action-load" data-id="${route.id}" title="Edit Route">
+                    <img src="./data/edit.png" width="16" height="16" alt="Edit">
                 </button>
-            </div>
+                <button class="btn btn--icon-only btn--sm action-export" data-id="${route.id}" title="Export GPX">
+                    <img src="./data/downloads.png" width="16" height="16" alt="Export">
+                </button>
+                <button class="btn btn--icon-only btn--sm action-delete" data-id="${route.id}" title="Delete">
+                    <img src="./data/clear.png" width="14" height="14" alt="Delete">
+                </button>
         </div>
       </div>
     `;
@@ -318,9 +325,18 @@ export class RouteLibraryUI {
 
         if (btn.classList.contains('action-load')) {
             this.manager.getRoute(id).then(route => this.loadRouteToMap(route));
+        } else if (btn.classList.contains('action-show')) {
+            this.manager.getRoute(id).then(route => this.loadRouteToMap(route, { silent: true }));
+        } else if (btn.classList.contains('action-play')) {
+            Toast.show('Player feature coming soon!', 'info', '🎮');
         } else if (btn.classList.contains('action-delete')) {
-            this.manager.getRoute(id).then(route => {
-                if (confirm(`Delete route "${route.name}"?`)) {
+            this.manager.getRoute(id).then(async route => {
+                if (!route) return;
+                const confirmed = await Modal.confirm({
+                    title: 'Delete Route',
+                    message: `Are you sure you want to delete "${route.name}"?`
+                });
+                if (confirmed) {
                     this.deleteRoute(id);
                 }
             });
@@ -329,25 +345,27 @@ export class RouteLibraryUI {
         }
     }
 
-    async loadRouteToMap(route) {
+    async loadRouteToMap(route, options = {}) {
         if (this.directionsManager) {
             const geojson = route.geojson;
             if (geojson) {
                 // Use the robust import method from DirectionsManager
                 if (typeof this.directionsManager.importRouteFromGeojson === 'function') {
-                    const success = this.directionsManager.importRouteFromGeojson(geojson, { name: route.name, id: route.id });
+                    const success = this.directionsManager.importRouteFromGeojson(geojson, {
+                        name: route.name,
+                        id: route.id,
+                        ...options
+                    });
                     if (success) {
                         // Zoom to the loaded route
                         if (this.directionsManager.map) {
                             zoomToGeojson(this.directionsManager.map, geojson);
                         }
                     } else {
-                        console.warn("importRouteFromGeojson returned false");
-                        alert("Could not load route geometry.");
+                        Toast.error("Could not load route geometry.");
                     }
                 } else {
-                    console.warn('DirectionsManager.importRouteFromGeojson not available.');
-                    alert("Loading routes is not supported in this version.");
+                    Toast.info("Loading routes is not supported in this version.");
                 }
 
                 // Close the library as we are now switching to the directions panel (handled by importRouteFromGeojson -> ensurePanelVisible)
@@ -370,15 +388,22 @@ export class RouteLibraryUI {
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
+            Toast.success("Export successful!");
         } catch (e) {
             console.error("Export failed", e);
-            alert("Failed to export GPX");
+            Toast.error("Failed to export GPX");
         }
     }
 
     async deleteRoute(id) {
-        await this.manager.deleteRoute(id);
-        await this.loadRoutes(); // Refresh
+        try {
+            await this.manager.deleteRoute(id);
+            await this.loadRoutes(); // Refresh
+            Toast.success("Route deleted.");
+        } catch (err) {
+            console.error('[RouteLibraryUI] deleteRoute failed in manager:', err);
+            Toast.error('Failed to delete route.');
+        }
     }
 
     filterRoutes(query) {
@@ -481,7 +506,7 @@ export class RouteLibraryUI {
 
         } catch (e) {
             console.error("Import failed", e);
-            alert(`Failed to import GPX: ${file.name}`);
+            Toast.error(`Failed to import GPX: ${file.name}`);
         }
     }
 
@@ -634,16 +659,20 @@ export class RouteLibraryUI {
     async promptSave() {
         if (!this.directionsManager) return;
 
-        // Simple prompt for V1
-        const name = window.prompt("Enter a name for this route:", "New Route");
+        const name = await Modal.prompt({
+            title: 'Save Route',
+            message: 'Enter a name for this route:',
+            defaultValue: 'New Route'
+        });
+
         if (name) {
             try {
                 await this.directionsManager.saveCurrentRoute(name);
-                alert("Route saved successfully!");
+                Toast.success("Route saved successfully!");
                 this.loadRoutes(); // Refresh list
             } catch (e) {
-                console.error("Save failed", e);
-                alert("Failed to save route. See console for details.");
+                console.error("[RouteLibraryUI] Save failed", e);
+                Toast.error("Failed to save route.");
             }
         }
     }

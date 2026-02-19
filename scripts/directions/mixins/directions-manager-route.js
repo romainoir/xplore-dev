@@ -492,12 +492,13 @@ export class DirectionsManagerRouteMixin {
 
   async saveCurrentRoute(name) {
     if (!this.routeLibraryManager) {
-      console.warn("RouteLibraryManager not initialized.");
+      console.warn("[DirectionsManager] RouteLibraryManager not initialized.");
       throw new Error("Library not available");
     }
 
     const geojson = this.buildExportFeatureCollection();
     if (!geojson || !geojson.features || geojson.features.length === 0) {
+      console.warn("[DirectionsManager] No route to save (export collection empty)");
       throw new Error("No route to save");
     }
 
@@ -556,34 +557,60 @@ export class DirectionsManagerRouteMixin {
       segments // Save segments for coloring
     };
 
-    // Find highest point and fetch a Wikimedia Photo for the background
+
+    // Find the highest POI first (as requested: "take a photo that is closer to the highest POIs")
+    let targetPoint = null;
     try {
-      let maxEle = -Infinity;
-      let highestPoint = null;
+      let maxPoiEle = -Infinity;
+      let highestPoi = null;
+      const pois = Array.isArray(this.routePointsOfInterest) ? this.routePointsOfInterest : [];
 
-      // Use the geojson features we already built to find the highest point
-      geojson.features.forEach(f => {
-        const processCoords = (coords) => {
-          for (const c of coords) {
-            if (Array.isArray(c) && c.length > 2 && c[2] > maxEle) {
-              maxEle = c[2];
-              highestPoint = c;
-            }
+      pois.forEach(poi => {
+        const coords = poi.coordinates;
+        if (Array.isArray(coords) && coords.length >= 2) {
+          // Use explicitly stored elevation property
+          const ele = typeof poi.elevation === 'number' ? poi.elevation : -Infinity;
+          if (ele > maxPoiEle) {
+            maxPoiEle = ele;
+            highestPoi = coords;
           }
-        };
-
-        if (f.geometry.type === 'LineString') {
-          processCoords(f.geometry.coordinates);
-        } else if (f.geometry.type === 'MultiLineString') {
-          f.geometry.coordinates.forEach(processCoords);
         }
       });
 
-      if (highestPoint) {
-        // Fetch photos around highest point (bbox ~5km for better chance of finding one)
-        const lat = highestPoint[1];
-        const lon = highestPoint[0];
-        const delta = 0.05; // approx 5km radius
+      if (highestPoi) {
+        targetPoint = highestPoi;
+      } else if (pois.length > 0) {
+        // If POIs are blind to elevation, use the first one as preferred backdrop location
+        targetPoint = pois[0].coordinates;
+      } else {
+        // Fallback to highest elevation point on the route if no POIs
+        let maxRouteEle = -Infinity;
+        let highestRoutePoint = null;
+
+        geojson.features.forEach(f => {
+          const processCoords = (coords) => {
+            for (const c of coords) {
+              if (Array.isArray(c) && c.length > 2 && c[2] > maxRouteEle) {
+                maxRouteEle = c[2];
+                highestRoutePoint = c;
+              }
+            }
+          };
+
+          if (f.geometry.type === 'LineString') {
+            processCoords(f.geometry.coordinates);
+          } else if (f.geometry.type === 'MultiLineString') {
+            f.geometry.coordinates.forEach(processCoords);
+          }
+        });
+        targetPoint = highestRoutePoint;
+      }
+
+      if (targetPoint) {
+        // Fetch photos around target point (bbox ~5km)
+        const lat = targetPoint[1];
+        const lon = targetPoint[0];
+        const delta = 0.05;
         const bounds = {
           getNorth: () => lat + delta,
           getSouth: () => lat - delta,
@@ -593,21 +620,20 @@ export class DirectionsManagerRouteMixin {
 
         const photoCollection = await fetchWikimediaPhotosInBounds(bounds);
         if (photoCollection?.features?.length > 0) {
-          // Sort by distance to highest point to get the closest one
           const photos = photoCollection.features
-            .map(f => {
-              const d = haversineDistanceMeters([lon, lat], f.geometry.coordinates);
-              return { ...f, distance: d };
-            })
+            .map(f => ({ ...f, distance: haversineDistanceMeters([lon, lat], f.geometry.coordinates) }))
             .sort((a, b) => a.distance - b.distance);
 
           const photo = photos[0];
           stats.imageUrl = getPhotoThumbnailUrl(photo.properties.fileName, 600);
-          console.log(`Found background photo for route near highest point: ${photo.properties.title}`);
+        } else {
+          stats.imageUrl = null;
         }
+      } else {
+        stats.imageUrl = null;
       }
     } catch (photoErr) {
-      console.warn("Failed to fetch route background photo", photoErr);
+      console.warn("[DirectionsManager] Failed to fetch route background photo", photoErr);
     }
 
     // Generate high-fidelity simplified profile for library sparkline (sample by distance)
@@ -644,7 +670,16 @@ export class DirectionsManagerRouteMixin {
       tags: ['saved']
     };
 
-    return this.routeLibraryManager.saveRoute(routeData);
+    try {
+      const savedId = await this.routeLibraryManager.saveRoute(routeData);
+      if (savedId) {
+        this.currentRouteId = savedId;
+      }
+      return savedId;
+    } catch (err) {
+      console.error('[DirectionsManager] Failed to save route via manager:', err);
+      throw err;
+    }
   }
 
   buildSegmentExportCollections() {
@@ -1230,12 +1265,6 @@ export class DirectionsManagerRouteMixin {
 
     // Log if setData is slow (> 5ms)
     if (setDataTime > 5) {
-      console.log('%c[MapLibre setData]', 'color: #FF5722; font-weight: bold', {
-        'source': 'route-line-source',
-        'time': `${setDataTime.toFixed(1)}ms`,
-        'features': targetData?.features?.length || 0,
-        'coords': gradientCoordinates?.length || 0
-      });
     }
 
     if (this.routeLineGradientSupported) {
