@@ -252,20 +252,20 @@ const NATURE_SUBCLASSES = new Set([
 
 const loadedImages = new Set();
 
+/** Persistent set of thumbnail IDs from the last update — provides hysteresis */
+let lastSelectedIds = new Set();
+let thumbnailGeneration = 0;
+
 /**
  * Scans the map for photos near POIs that need thumbnails, fetches them, and adds to sprite.
- * Selection logic:
- *   1. Query all visible map symbol layers (labels) to get POI screen positions
- *   2. For each photo, compute distance to nearest POI — reject if > 150px
- *   3. Sort by POI distance (closest first)
- *   4. Apply 80px spacing to prevent overlaps
+ * Uses hysteresis: previously shown thumbnails stay visible while on-screen.
  */
 async function updateThumbnailImages(mapInstance) {
+    const gen = ++thumbnailGeneration;
     try {
         const zoom = mapInstance.getZoom();
         if (zoom < MIN_ZOOM_FOR_THUMBNAILS || !isWikimediaPhotosVisible()) return;
 
-        // Query the base layers to find photo positions
         const layersToQuery = [WIKIMEDIA_CLUSTER_LAYER_ID, WIKIMEDIA_LAYER_ID].filter(id => {
             const l = mapInstance.getLayer(id);
             return l && mapInstance.getLayoutProperty(id, 'visibility') !== 'none';
@@ -278,7 +278,7 @@ async function updateThumbnailImages(mapInstance) {
         const margin = 100;
         const bbox = [[-margin, -margin], [width + margin, height + margin]];
 
-        // ── Step 1: Gather nature POI screen positions from map labels ──
+        // ── Step 1: Gather nature POI screen positions ──
         const allLayers = (mapInstance.getStyle()?.layers || []);
         const symbolLayerIds = allLayers
             .filter(l => l.type === 'symbol'
@@ -296,89 +296,99 @@ async function updateThumbnailImages(mapInstance) {
             const poiFeatures = mapInstance.queryRenderedFeatures(bbox, { layers: symbolLayerIds });
             for (const pf of poiFeatures) {
                 try {
-                    const coords = pf.geometry?.type === 'Point'
-                        ? pf.geometry.coordinates
-                        : null;
+                    const coords = pf.geometry?.type === 'Point' ? pf.geometry.coordinates : null;
                     if (!coords) continue;
-
-                    // Filter: accept if layer ID matches nature patterns,
-                    // OR if class/subclass is nature-related
                     const layerId = pf.layer?.id || '';
                     const props = pf.properties || {};
                     const cls = (props.class || '').toLowerCase();
                     const sub = (props.subclass || '').toLowerCase();
-
-                    const isNatureLayer = NATURE_LAYER_PATTERNS.some(p => layerId.includes(p));
-                    const isNatureClass = NATURE_CLASSES.has(cls);
-                    const isNatureSubclass = NATURE_SUBCLASSES.has(sub);
-
-                    if (isNatureLayer || isNatureClass || isNatureSubclass) {
+                    if (NATURE_LAYER_PATTERNS.some(p => layerId.includes(p))
+                        || NATURE_CLASSES.has(cls)
+                        || NATURE_SUBCLASSES.has(sub)) {
                         poiScreenPoints.push(mapInstance.project(coords));
                     }
                 } catch (e) { }
             }
         }
 
-        if (poiScreenPoints.length === 0) {
-            console.log('[WikimediaPhotos] No POIs found on screen — skipping thumbnails');
-            // Clear thumbnails filter
-            if (mapInstance.getLayer('wikimedia-thumbnails')) {
-                mapInstance.setFilter('wikimedia-thumbnails', ['==', ['get', 'pageId'], '__none__']);
-            }
-            return;
-        }
-
-        // ── Step 2: Query photo features (center area only) ──
-        const inset = Math.min(width, height) * 0.2; // 20% inset from each edge
+        // ── Step 2: Query photo features (center area) ──
+        const inset = Math.min(width, height) * 0.2;
         const centerBbox = [[inset, inset], [width - inset, height - inset]];
         const features = mapInstance.queryRenderedFeatures(centerBbox, { layers: layersToQuery });
-        if (features.length === 0) return;
 
-        // ── Step 3: Score each photo by distance to nearest POI ──
-        const scored = [];
+        // Build a map of pid → screenPt for all visible features
+        const featureMap = new Map(); // pid → { screenPt, isCluster }
         for (const f of features) {
             try {
                 const props = f.properties || {};
                 const isCluster = props.point_count !== undefined;
                 const pid = String(isCluster ? props.coverId : props.pageId);
                 if (!pid || pid === 'undefined') continue;
-
-                const screenPt = mapInstance.project(f.geometry.coordinates);
-
-                // Find minimum distance to any POI
-                let minDistSq = Infinity;
-                for (const poi of poiScreenPoints) {
-                    const dx = poi.x - screenPt.x;
-                    const dy = poi.y - screenPt.y;
-                    const dSq = dx * dx + dy * dy;
-                    if (dSq < minDistSq) minDistSq = dSq;
-                }
-
-                if (minDistSq <= POI_PROXIMITY_SQ) {
-                    scored.push({ pid, screenPt, distSq: minDistSq, isCluster });
+                if (!featureMap.has(pid)) {
+                    featureMap.set(pid, { screenPt: mapInstance.project(f.geometry.coordinates), isCluster });
                 }
             } catch (e) { }
         }
 
-        // Sort: clusters first, then by proximity to POI (closest first)
-        scored.sort((a, b) => {
-            if (a.isCluster && !b.isCluster) return -1;
-            if (!a.isCluster && b.isCluster) return 1;
-            return a.distSq - b.distSq;
-        });
+        // ── Step 3: Hysteresis — keep previously selected IDs that are still on-screen ──
+        const keptIds = new Set();
+        const placedPoints = [];
+        const spacing = 80;
+        const spacingSq = spacing * spacing;
 
-        // ── Step 4: Apply 80px spacing (TEMPORARILY DISABLED for debugging) ──
-        const selectedIds = new Set();
-        // const placedPoints = [];
-        // const spacing = 80;
-        // const spacingSq = spacing * spacing;
-
-        for (const item of scored) {
-            // Spacing disabled — accept all near-POI photos
-            selectedIds.add(item.pid);
+        for (const pid of lastSelectedIds) {
+            const entry = featureMap.get(pid);
+            if (entry) {
+                keptIds.add(pid);
+                placedPoints.push(entry.screenPt);
+            }
         }
 
-        console.log(`[WikimediaPhotos] ${features.length} photos, ${poiScreenPoints.length} POIs, ${scored.length} near POI, ${selectedIds.size} selected after spacing`);
+        // ── Step 4: Score NEW candidates by POI distance ──
+        if (poiScreenPoints.length > 0) {
+            const scored = [];
+            for (const [pid, entry] of featureMap) {
+                if (keptIds.has(pid)) continue; // Already kept via hysteresis
+                let minDistSq = Infinity;
+                for (const poi of poiScreenPoints) {
+                    const dx = poi.x - entry.screenPt.x;
+                    const dy = poi.y - entry.screenPt.y;
+                    const dSq = dx * dx + dy * dy;
+                    if (dSq < minDistSq) minDistSq = dSq;
+                }
+                if (minDistSq <= POI_PROXIMITY_SQ) {
+                    scored.push({ pid, screenPt: entry.screenPt, distSq: minDistSq, isCluster: entry.isCluster });
+                }
+            }
+
+            // Sort: clusters first, then closest to POI
+            scored.sort((a, b) => {
+                if (a.isCluster && !b.isCluster) return -1;
+                if (!a.isCluster && b.isCluster) return 1;
+                return a.distSq - b.distSq;
+            });
+
+            // Apply spacing against already-placed points
+            for (const item of scored) {
+                const tooClose = placedPoints.some(p => {
+                    const dx = p.x - item.screenPt.x;
+                    const dy = p.y - item.screenPt.y;
+                    return (dx * dx + dy * dy) < spacingSq;
+                });
+                if (!tooClose) {
+                    keptIds.add(item.pid);
+                    placedPoints.push(item.screenPt);
+                }
+            }
+        }
+
+        // Abort if a newer update started while we were computing
+        if (gen !== thumbnailGeneration) return;
+
+        const selectedIds = keptIds;
+        lastSelectedIds = new Set(selectedIds);
+
+        console.log(`[WikimediaPhotos] ${featureMap.size} visible, ${poiScreenPoints.length} POIs, ${selectedIds.size} thumbnails`);
         // 2. Load & Sprite Management
         const queue = [];
         for (const pid of selectedIds) {
@@ -442,6 +452,7 @@ async function updateThumbnailImages(mapInstance) {
 
 function clearThumbnailImages() {
     loadedImages.clear();
+    lastSelectedIds.clear();
 }
 // ─────────────────────────────────────────────────────────────────────────────
 // Wikimedia API
@@ -563,11 +574,21 @@ async function fetchPhotoMetadata(title) {
 export function getPhotoThumbnailUrl(fileName, width = 400) {
     if (!fileName) return '';
     const nameStr = String(fileName);
-    const cleanName = (nameStr.includes(':') ? nameStr.split(':').slice(1).join(':') : nameStr).replace(/ /g, '_');
-    // Use Wikimedia thumbnail API (Special:FilePath) — this is the reliable way
-    // Note: This URL does a 302 redirect. When used in <img> tags (popups, previews)
-    // this works fine. For canvas-based thumbnail generation we use resolveThumbUrls() instead.
-    return `https://commons.wikimedia.org/w/index.php?title=Special:FilePath&file=${encodeURIComponent(cleanName)}&width=${width}`;
+    // Strip "File:" prefix, replace spaces with underscores
+    let cleanName = (nameStr.includes(':') ? nameStr.split(':').slice(1).join(':') : nameStr)
+        .trim()
+        .replace(/ /g, '_');
+    // Capitalize first letter (Wikimedia convention)
+    if (cleanName.length > 0) {
+        cleanName = cleanName.charAt(0).toUpperCase() + cleanName.slice(1);
+    }
+    // Use Special:FilePath with double-encoded filename for robust handling
+    // of special characters (apostrophes, accents, spaces, etc.)
+    const encoded = encodeURIComponent(cleanName)
+        .replace(/'/g, '%27')
+        .replace(/\(/g, '%28')
+        .replace(/\)/g, '%29');
+    return `https://commons.wikimedia.org/w/index.php?title=Special:FilePath&file=${encoded}&width=${width}`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -899,12 +920,13 @@ export function restoreWikimediaLayers() {
 /**
  * Compute a LngLatBounds centered on the map center with a zoom-dependent radius.
  * This avoids fetching huge areas in 3D tilted view where getBounds() extends to the horizon.
+ * Radius is capped at 0.15° to stay within Wikimedia API limits.
  */
 function getCenterBounds(mapInstance) {
     const center = mapInstance.getCenter();
     const zoom = mapInstance.getZoom();
-    // Radius in degrees: ~0.15° at zoom 12, halving per zoom level
-    const radius = 0.15 * Math.pow(2, 12 - zoom);
+    // Radius in degrees: ~0.15° at zoom 12, halving per zoom level, capped at 0.15°
+    const radius = Math.min(0.15, 0.15 * Math.pow(2, 12 - zoom));
     return new maplibregl.LngLatBounds(
         [center.lng - radius, center.lat - radius],
         [center.lng + radius, center.lat + radius]

@@ -571,7 +571,9 @@ export class DirectionsManagerPoiMixin {
       getNorth: () => maxLat + padding,
       getSouth: () => minLat - padding,
       getEast: () => maxLng + padding,
-      getWest: () => minLng - padding
+      getWest: () => minLng - padding,
+      getSouthWest: () => ({ lng: minLng - padding, lat: minLat - padding }),
+      getNorthEast: () => ({ lng: maxLng + padding, lat: maxLat + padding })
     };
 
     try {
@@ -617,12 +619,12 @@ export class DirectionsManagerPoiMixin {
           photos.push({
             id: feature.properties.pageId,
             title: feature.properties.title,
-            fileName: feature.properties.fileName,
+            fileName: feature.properties.title,
             lng,
             lat,
             distanceKm: nearest.properties.location,
             distanceToRouteKm: distKm,
-            thumbnailUrl: getPhotoThumbnailUrl(feature.properties.fileName, 400)
+            thumbnailUrl: getPhotoThumbnailUrl(feature.properties.title, 400)
           });
         }
       }

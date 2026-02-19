@@ -1491,12 +1491,14 @@ export class DirectionsManagerElevationMixin {
                   const zIndex = 10 - (idx + 1);
 
                   if (stackItem.data && stackItem.data.thumbnailUrl) {
-                    stackMarkup += `<div class="elevation-marker__icon elevation-marker__icon--photo-stack" aria-hidden="true" style="position: absolute; top: 0; left: 0; z-index: ${zIndex}; transform: translate(${offsetX}px, ${offsetY}px) rotate(${rotation}deg); background-image: url('${stackItem.data.thumbnailUrl}');"></div>`;
+                    const safeUrl = stackItem.data.thumbnailUrl.replace(/'/g, '%27');
+                    stackMarkup += `<div class="elevation-marker__icon elevation-marker__icon--photo-stack" aria-hidden="true" style="position: absolute; top: 0; left: 0; z-index: ${zIndex}; transform: translate(${offsetX}px, ${offsetY}px) rotate(${rotation}deg); background-image: url('${safeUrl}');"></div>`;
                   }
                 });
               }
 
-              const mainImg = `<div class="elevation-marker__icon elevation-marker__icon--photo" style="position: relative; z-index: 20; background-image: url('${poi.thumbnailUrl}');"></div>`;
+              const safeMainUrl = poi.thumbnailUrl.replace(/'/g, '%27');
+              const mainImg = `<div class="elevation-marker__icon elevation-marker__icon--photo" style="position: relative; z-index: 20; background-image: url('${safeMainUrl}');"></div>`;
 
               // Count badge for clusters
               const countBadge = clusterCount > 1
