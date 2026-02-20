@@ -357,9 +357,10 @@ const photoMetadataCache = new Map();
 
 /**
  * Fetch geotagged photos from Wikimedia Commons within bounds.
- * Uses a single list=geosearch API call — thumbnail URLs are derived
- * from the title via getPhotoThumbnailUrl(), eliminating the need
- * for expensive secondary imageinfo batch requests.
+ * Uses list=geosearch for coordinates, then imageinfo batches for
+ * CORS-compatible CDN thumbnail URLs (upload.wikimedia.org).
+ * The Special:FilePath redirect does NOT support CORS, so we must
+ * use imageinfo to get direct CDN URLs for canvas sprite generation.
  */
 export async function fetchWikimediaPhotosInBounds(bounds, signal) {
     const sw = bounds.getSouthWest();
@@ -376,7 +377,7 @@ export async function fetchWikimediaPhotosInBounds(bounds, signal) {
         try {
             searchData = JSON.parse(text);
         } catch (err) {
-            console.error('[WikimediaPhotos] JSON Parse error. Raw response:', text.substring(0, 500));
+            console.error('[WikimediaPhotos] JSON Parse error.');
             return { type: 'FeatureCollection', features: [] };
         }
 
@@ -386,21 +387,43 @@ export async function fetchWikimediaPhotosInBounds(bounds, signal) {
         }
 
         if (!searchData.query || !searchData.query.geosearch) {
-            console.warn('[WikimediaPhotos] No geosearch results.');
             return { type: 'FeatureCollection', features: [] };
         }
 
         const photos = searchData.query.geosearch;
-        console.log(`[WikimediaPhotos] Found ${photos.length} photos`);
+        console.log(`[WikimediaPhotos] Found ${photos.length} photos, fetching CDN URLs...`);
 
-        // Build features directly — thumbnail URLs are derived from titles
+        // Batch imageinfo calls to get CORS-safe CDN thumbnail URLs (max 50 per call)
+        const batchSize = 50;
+        const thumbnailData = new Map();
+
+        const fetchBatch = async (batch) => {
+            const titles = batch.map(p => p.title).join('|');
+            const infoUrl = `${baseUrl}&prop=imageinfo&iiprop=url&iiurlwidth=200&titles=${encodeURIComponent(titles)}`;
+            const infoRes = await fetch(infoUrl, { signal });
+            const infoData = await infoRes.json();
+            if (infoData.query && infoData.query.pages) {
+                Object.values(infoData.query.pages).forEach(page => {
+                    if (page.imageinfo && page.imageinfo[0]) {
+                        thumbnailData.set(page.title, page.imageinfo[0].thumburl);
+                    }
+                });
+            }
+        };
+
+        const batches = [];
+        for (let i = 0; i < photos.length; i += batchSize) {
+            batches.push(fetchBatch(photos.slice(i, i + batchSize)));
+        }
+        await Promise.all(batches);
+
         const features = photos.map(p => ({
             type: 'Feature',
             geometry: { type: 'Point', coordinates: [p.lon, p.lat] },
             properties: {
                 pageId: p.pageid,
                 title: p.title,
-                thumbnailUrl: getPhotoThumbnailUrl(p.title, 200)
+                thumbnailUrl: thumbnailData.get(p.title) || ''
             }
         }));
 
