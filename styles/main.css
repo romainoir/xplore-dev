@@ -6590,3 +6590,84 @@ input[type="file"].hidden-file-input {
 .toast--info .toast-icon {
   background: #3498db;
 }
+
+/* Wikimedia Photo Hover Morph Bubble */
+.wikimedia-photo-hover-popup {
+  z-index: 99999;
+}
+
+.wikimedia-photo-hover-popup .maplibregl-popup-content {
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
+  border: none;
+}
+
+.wikimedia-photo-hover-popup .maplibregl-popup-tip {
+  display: none;
+}
+
+.photo-hover-bubble {
+  position: relative;
+  width: var(--initial-width, 56px);
+  height: var(--initial-height, 56px);
+  border-radius: var(--initial-radius, 28px);
+  overflow: hidden;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+  border: 3px solid rgba(255, 255, 255, 0.95);
+  background: #2a2a2a;
+  transition: all 0.35s cubic-bezier(0.25, 1, 0.5, 1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform-origin: center center;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.photo-hover-bubble.expanded {
+  width: var(--expanded-width, 240px);
+  height: var(--expanded-height, 180px);
+  border-radius: 12px;
+  border-width: 2px;
+}
+
+.photo-hover-bubble__image {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.photo-hover-bubble__loader {
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: wikimedia-spin 1s linear infinite;
+}
+
+.photo-hover-bubble__count-badge {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  font-size: 11px;
+  font-weight: bold;
+  padding: 2px 6px;
+  border-radius: 10px;
+  backdrop-filter: blur(4px);
+  pointer-events: none;
+}
+
+@keyframes wikimedia-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

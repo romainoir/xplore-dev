@@ -20,7 +20,8 @@ const MIN_ZOOM_FOR_THUMBNAILS = 12;
 const WIKIMEDIA_LAYERS = [
     'wikimedia-photos-base',
     WIKIMEDIA_CLUSTER_COUNT_LAYER_ID,
-    'wikimedia-thumbnails'
+    'wikimedia-thumbnails-small',
+    'wikimedia-thumbnails-large'
 ];
 
 
@@ -206,6 +207,39 @@ function createCircularThumbnailImage(url) {
         img.src = url;
     });
 }
+/** Max screen distance (px) from a POI for a photo to earn a thumbnail */
+const POI_PROXIMITY_PX = 150;
+const POI_PROXIMITY_SQ = POI_PROXIMITY_PX * POI_PROXIMITY_PX;
+
+/** Landscape-photography POI filter (OpenMapTiles schema) */
+const NATURE_LAYER_PATTERNS = ['mountain_peak', 'water_name', 'waterway'];
+const NATURE_CLASSES = new Set([
+    // Scenic viewpoints & orientation
+    'viewpoint',
+    // Mountain shelters (often at scenic locations)
+    'alpine_hut', 'wilderness_hut', 'shelter',
+    // Water features
+    'lake', 'glacier', 'spring', 'waterfall',
+    // Scenic landmarks
+    'castle', 'ruins', 'lighthouse', 'dam', 'bridge',
+    'monastery', 'place_of_worship',
+]);
+const NATURE_SUBCLASSES = new Set([
+    // Peaks & ridgelines
+    'peak', 'volcano', 'saddle', 'ridge',
+    // Viewpoints & trail orientation
+    'viewpoint', 'guidepost',
+    // Mountain shelters
+    'alpine_hut', 'wilderness_hut', 'shelter', 'bivouac',
+    // Water features
+    'waterfall', 'spring', 'hot_spring', 'glacier', 'lake',
+    // Gorges & natural formations
+    'gorge', 'cave_entrance', 'cliff', 'arch',
+    // Scenic landmarks
+    'castle', 'ruins', 'lighthouse', 'dam', 'bridge',
+    'monastery', 'chapel',
+]);
+
 /**
  * Scans the map for photos that need thumbnails, fetches them, and adds to sprite.
  * Uses hysteresis: previously shown thumbnails stay visible while on-screen.
@@ -216,7 +250,7 @@ async function updateThumbnailImages(mapInstance) {
         const zoom = mapInstance.getZoom();
         if (zoom < MIN_ZOOM_FOR_THUMBNAILS || !isWikimediaPhotosVisible()) return;
 
-        const layersToQuery = ['wikimedia-photos-base', 'wikimedia-thumbnails'].filter(id => {
+        const layersToQuery = ['wikimedia-photos-base', 'wikimedia-thumbnails-small', 'wikimedia-thumbnails-large'].filter(id => {
             const l = mapInstance.getLayer(id);
             return l && mapInstance.getLayoutProperty(id, 'visibility') !== 'none';
         });
@@ -228,7 +262,40 @@ async function updateThumbnailImages(mapInstance) {
         const margin = 100;
         const bbox = [[-margin, -margin], [width + margin, height + margin]];
 
-        // ── Step 1 & 2: Query photo features (center area) ──
+        // ── Step 1: Gather nature POI screen positions from map labels ──
+        const allLayers = (mapInstance.getStyle()?.layers || []);
+        const symbolLayerIds = allLayers
+            .filter(l => l.type === 'symbol'
+                && !l.id.startsWith('wikimedia')
+                && !l.id.startsWith('contour')
+                && !l.id.startsWith('route')
+                && !l.id.startsWith('distance')
+                && !l.id.startsWith('waypoint')
+                && !l.id.startsWith('segment'))
+            .map(l => l.id)
+            .filter(id => mapInstance.getLayer(id));
+
+        const poiScreenPoints = [];
+        if (symbolLayerIds.length > 0) {
+            const poiFeatures = mapInstance.queryRenderedFeatures(bbox, { layers: symbolLayerIds });
+            for (const pf of poiFeatures) {
+                try {
+                    const coords = pf.geometry?.type === 'Point' ? pf.geometry.coordinates : null;
+                    if (!coords) continue;
+
+                    const layerId = pf.layer?.id || '';
+                    const props = pf.properties || {};
+                    const cls = (props.class || '').toLowerCase();
+                    const sub = (props.subclass || '').toLowerCase();
+
+                    if (NATURE_LAYER_PATTERNS.some(p => layerId.includes(p)) || NATURE_CLASSES.has(cls) || NATURE_SUBCLASSES.has(sub)) {
+                        poiScreenPoints.push(mapInstance.project(coords));
+                    }
+                } catch (e) { }
+            }
+        }
+
+        // ── Step 2: Query photo features (center area) ──
         const inset = Math.min(width, height) * 0.15;
         const centerBbox = [[inset, inset], [width - inset, height - inset]];
         const features = mapInstance.queryRenderedFeatures(centerBbox, { layers: layersToQuery });
@@ -250,24 +317,29 @@ async function updateThumbnailImages(mapInstance) {
             } catch (e) { }
         }
 
-        // ── Step 3: Hysteresis — keep previously selected IDs that are still on-screen ──
+        // ── Step 3: Check POI distances and size properties ──
+        const targetLarge = new Set();
+        const targetSmall = new Set();
         const keptIds = new Set();
-        const placedPoints = [];
 
         for (const pid of lastSelectedIds) {
-            const entry = featureMap.get(pid);
-            if (entry) {
-                keptIds.add(pid);
-                placedPoints.push(entry.screenPt);
-            }
+            keptIds.add(pid);
         }
 
-        // ── Step 4: Include ALL visible features (no POI check) ──
         for (const [pid, entry] of featureMap) {
-            if (!keptIds.has(pid)) {
-                keptIds.add(pid);
-                placedPoints.push(entry.screenPt);
+            keptIds.add(pid);
+            let isLarge = false;
+            // Find minimum distance to any POI
+            for (const poi of poiScreenPoints) {
+                const dx = poi.x - entry.screenPt.x;
+                const dy = poi.y - entry.screenPt.y;
+                if ((dx * dx + dy * dy) <= POI_PROXIMITY_SQ) {
+                    isLarge = true;
+                    break;
+                }
             }
+            if (isLarge) targetLarge.add(pid);
+            else targetSmall.add(pid);
         }
 
         if (gen !== thumbnailGeneration) return;
@@ -277,16 +349,16 @@ async function updateThumbnailImages(mapInstance) {
 
         // 2. Load & Sprite Management
         const queue = [];
-        const newlyReadyIds = [];
-        const stillActiveFilters = new Set();
+        const stillActiveLarge = new Set();
+        const stillActiveSmall = new Set();
 
         for (const pid of selectedIds) {
             const imageId = 'thumb-' + pid;
             const hasInMap = mapInstance.hasImage(imageId);
 
             if (hasInMap) {
-                newlyReadyIds.push(pid);
-                stillActiveFilters.add(pid);
+                if (targetLarge.has(pid)) stillActiveLarge.add(pid);
+                else stillActiveSmall.add(pid);
             } else {
                 const hasInQueue = loadedImages.has(imageId);
                 if (!hasInQueue) {
@@ -303,18 +375,20 @@ async function updateThumbnailImages(mapInstance) {
             }
         }
 
-        // 3. Update Thumbnail Layer Filter
-        if (mapInstance.getLayer('wikimedia-thumbnails')) {
-            const currentFilterArray = Array.from(stillActiveFilters);
-            const filter = ['in',
+        // 3. Update Thumbnail Layer Filters
+        if (mapInstance.getLayer('wikimedia-thumbnails-large')) {
+            mapInstance.setFilter('wikimedia-thumbnails-large', ['in',
                 ['to-string', ['case', ['has', 'point_count'], ['get', 'coverId'], ['get', 'pageId']]],
-                ['literal', currentFilterArray]
-            ];
-            mapInstance.setFilter('wikimedia-thumbnails', filter);
-            try {
-                mapInstance.moveLayer('wikimedia-thumbnails');
-            } catch (e) { }
-            activeFilterIds = stillActiveFilters;
+                ['literal', Array.from(stillActiveLarge)]
+            ]);
+            try { mapInstance.moveLayer('wikimedia-thumbnails-large'); } catch (e) { }
+        }
+        if (mapInstance.getLayer('wikimedia-thumbnails-small')) {
+            mapInstance.setFilter('wikimedia-thumbnails-small', ['in',
+                ['to-string', ['case', ['has', 'point_count'], ['get', 'coverId'], ['get', 'pageId']]],
+                ['literal', Array.from(stillActiveSmall)]
+            ]);
+            try { mapInstance.moveLayer('wikimedia-thumbnails-small'); } catch (e) { }
         }
 
         // 4. Load new images in PARALLEL
@@ -535,10 +609,10 @@ function addWikimediaLayers(mapInstance) {
         });
     }
 
-    // 4. Unified GL Thumbnails
-    if (!mapInstance.getLayer('wikimedia-thumbnails')) {
+    // 3. Unified GL Thumbnails
+    if (!mapInstance.getLayer('wikimedia-thumbnails-small')) {
         mapInstance.addLayer({
-            id: 'wikimedia-thumbnails',
+            id: 'wikimedia-thumbnails-small',
             type: 'symbol',
             source: WIKIMEDIA_SOURCE_ID,
             minzoom: MIN_ZOOM_FOR_PHOTOS,
@@ -549,20 +623,41 @@ function addWikimediaLayers(mapInstance) {
                 ],
                 'icon-allow-overlap': true,
                 'icon-ignore-placement': true,
-                'icon-size': 1.12
+                'icon-size': 0.65 // ~36px
+            },
+            paint: { 'icon-opacity': 1 }
+        });
+    }
+
+    if (!mapInstance.getLayer('wikimedia-thumbnails-large')) {
+        mapInstance.addLayer({
+            id: 'wikimedia-thumbnails-large',
+            type: 'symbol',
+            source: WIKIMEDIA_SOURCE_ID,
+            minzoom: MIN_ZOOM_FOR_PHOTOS,
+            layout: {
+                'icon-image': [
+                    'concat', 'thumb-',
+                    ['to-string', ['case', ['has', 'point_count'], ['get', 'coverId'], ['get', 'pageId']]]
+                ],
+                'icon-allow-overlap': true,
+                'icon-ignore-placement': true,
+                'icon-size': 1.15 // ~64px
             },
             paint: { 'icon-opacity': 1 }
         });
     }
 
     try {
-        if (mapInstance.getLayer('wikimedia-thumbnails')) mapInstance.moveLayer('wikimedia-thumbnails');
+        if (mapInstance.getLayer('wikimedia-thumbnails-small')) mapInstance.moveLayer('wikimedia-thumbnails-small');
+        if (mapInstance.getLayer('wikimedia-thumbnails-large')) mapInstance.moveLayer('wikimedia-thumbnails-large');
     } catch (e) { }
 }
 
 function setupWikimediaEventListeners(mapInstance) {
     const layers = [
-        'wikimedia-thumbnails'
+        'wikimedia-thumbnails-small',
+        'wikimedia-thumbnails-large'
     ];
     layers.forEach(layerId => {
         mapInstance.on('click', layerId, (e) => {
@@ -571,7 +666,7 @@ function setupWikimediaEventListeners(mapInstance) {
                 mapInstance.getSource(WIKIMEDIA_SOURCE_ID).getClusterExpansionZoom(f.properties.cluster_id, (err, zoom) => {
                     if (!err) mapInstance.easeTo({ center: f.geometry.coordinates, zoom: zoom + 1 });
                 });
-            } else showPhotoPopup(mapInstance, f);
+            } else showPhotoPopup(mapInstance, f, layerId);
         });
 
         let hoverTimer = null;
@@ -579,7 +674,7 @@ function setupWikimediaEventListeners(mapInstance) {
             mapInstance.getCanvas().style.cursor = 'pointer';
             if (hoverTimer) clearTimeout(hoverTimer);
             if (activePopup && activePopup.isOpen()) return;
-            showPhotoPopup(mapInstance, e.features[0]);
+            showPhotoPopup(mapInstance, e.features[0], layerId);
         });
 
         mapInstance.on('mouseleave', layerId, () => {
@@ -605,58 +700,11 @@ function stripHtmlTags(html) {
     return div.textContent || '';
 }
 
-async function showPhotoPopup(mapInstance, feature) {
+async function showPhotoPopup(mapInstance, feature, layerId) {
     const coordinates = feature.geometry.coordinates.slice();
     const { cluster, cluster_id } = feature.properties;
 
-    if (activePopup) activePopup.remove();
-
-    const popupId = `wikimedia-popup-${Date.now()}`;
-
-    activePopup = new maplibregl.Popup({
-        closeButton: false,
-        closeOnClick: true,
-        maxWidth: '320px',
-        className: 'wikimedia-photo-popup',
-        offset: [0, -10]
-    })
-        .setLngLat(coordinates)
-        .setHTML(`
-        <div class="wikimedia-popup-content" id="${popupId}">
-            <div class="wikimedia-popup-image-container">
-                <div class="wikimedia-popup-carousel">
-                    <div class="wikimedia-popup-carousel__track"></div>
-                    <div class="wikimedia-popup-carousel__dots"></div>
-                    <button class="wikimedia-popup-carousel__nav wikimedia-popup-carousel__nav--prev">←</button>
-                    <button class="wikimedia-popup-carousel__nav wikimedia-popup-carousel__nav--next">→</button>
-                </div>
-                <button class="wikimedia-popup-info-btn">i</button>
-                <div class="wikimedia-popup-info-overlay" aria-hidden="true">
-                    <div class="wikimedia-popup-info-content">
-                        <div class="wikimedia-popup-meta"></div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    `)
-        .addTo(mapInstance);
-
-    const container = document.getElementById(popupId);
-    if (!container) return;
-
-    const track = container.querySelector('.wikimedia-popup-carousel__track');
-    const dotsContainer = container.querySelector('.wikimedia-popup-carousel__dots');
-    const meta = container.querySelector('.wikimedia-popup-meta');
-    const imageContainer = container.querySelector('.wikimedia-popup-image-container');
-
-    const updateContainerHeight = (img) => {
-        if (!img || !img.complete || !img.naturalHeight) return;
-        const aspect = img.naturalWidth / img.naturalHeight;
-        const width = imageContainer.offsetWidth;
-        const height = width / aspect;
-        imageContainer.style.height = `${height}px`;
-    };
-
+    // 1. Fetch photo data (handle clusters)
     let photos = [];
     if (cluster) {
         try {
@@ -666,70 +714,110 @@ async function showPhotoPopup(mapInstance, feature) {
         photos = [feature];
     }
 
-    if (!photos || photos.length === 0) {
-        meta.innerHTML = 'No photos found.';
-        return;
+    if (!photos || photos.length === 0) return;
+
+    const mainPhoto = photos[0];
+    const cached = cachedFeatures.get(Number(mainPhoto.properties.pageId)) || cachedFeatures.get(String(mainPhoto.properties.pageId));
+    let fastThumbUrl = cached?.properties?.thumbnailUrl || mainPhoto.properties.thumbnailUrl;
+
+    const title = mainPhoto.properties.title || mainPhoto.properties.fileName;
+    if (!fastThumbUrl && title) {
+        fastThumbUrl = getPhotoThumbnailUrl(title, 200);
     }
 
-    photos.forEach((p, i) => {
-        const slide = document.createElement('div');
-        slide.className = 'wikimedia-popup-carousel__slide';
+    if (!fastThumbUrl) return;
 
-        const img = document.createElement('img');
-        img.className = 'wikimedia-popup-carousel__image';
-        img.loading = 'lazy';
-        img.src = getPhotoThumbnailUrl(p.properties.title || p.properties.fileName, 600);
-        img.onload = () => {
-            if (currentIndex === i) updateContainerHeight(img);
-        };
+    if (activePopup) activePopup.remove();
 
-        slide.appendChild(img);
-        track.appendChild(slide);
+    const popupId = `wikimedia-popup-${Date.now()}`;
+    const isSmall = layerId === 'wikimedia-thumbnails-small';
+    const initSize = isSmall ? 36 : 64; // Match the underlying GL label size
+    const initRadius = initSize / 2;
 
-        if (photos.length > 1) {
-            const dot = document.createElement('div');
-            dot.className = `wikimedia-popup-carousel__dot ${i === 0 ? 'wikimedia-popup-carousel__dot--active' : ''}`;
-            dot.onclick = () => goToSlide(i);
-            dotsContainer.appendChild(dot);
+    activePopup = new maplibregl.Popup({
+        closeButton: false,
+        closeOnClick: true,
+        className: 'wikimedia-photo-hover-popup',
+        offset: [0, 0], // Center exactly over coordinate
+        anchor: 'center'
+    })
+        .setLngLat(coordinates)
+        .setHTML(`
+        <div class="photo-hover-bubble" id="${popupId}" style="--initial-width: ${initSize}px; --initial-height: ${initSize}px; --initial-radius: ${initRadius}px; background-image: url('${fastThumbUrl}'); background-size: cover; background-position: center;">
+            <div class="photo-hover-bubble__loader" style="display: none;"></div>
+            <img class="photo-hover-bubble__image" aria-hidden="true" crossorigin="anonymous" />
+            <div class="photo-hover-bubble__count-badge" style="display:none;"></div>
+        </div>
+    `)
+        .addTo(mapInstance);
+
+    const container = document.getElementById(popupId);
+    if (!container) return;
+
+    const imgEl = container.querySelector('.photo-hover-bubble__image');
+    const loaderEl = container.querySelector('.photo-hover-bubble__loader');
+    const badgeEl = container.querySelector('.photo-hover-bubble__count-badge');
+
+    if (photos.length > 1) {
+        badgeEl.textContent = `+${photos.length - 1}`;
+        badgeEl.style.display = 'flex';
+    }
+
+    // High res URL to load
+    let sharpUrl = fastThumbUrl;
+    if (title) sharpUrl = getPhotoThumbnailUrl(title, 600);
+
+    // 2. Setup Aspect Ratio Morph
+    const expandTimeout = setTimeout(() => {
+        // If image is taking too long to load, show loader
+        loaderEl.style.display = 'block';
+    }, 500);
+
+    const loader = new Image();
+    loader.onload = () => {
+        clearTimeout(expandTimeout);
+        loaderEl.style.display = 'none';
+
+        const aspect = loader.naturalWidth / loader.naturalHeight;
+        const EXPANDED_MAX_WIDTH = 280;
+        const EXPANDED_MAX_HEIGHT = 220;
+
+        let finalWidth, finalHeight;
+        if (aspect > 1) {
+            finalWidth = EXPANDED_MAX_WIDTH;
+            finalHeight = Math.max(120, EXPANDED_MAX_WIDTH / aspect);
+        } else {
+            finalHeight = EXPANDED_MAX_HEIGHT;
+            finalWidth = Math.max(120, EXPANDED_MAX_HEIGHT * aspect);
         }
-    });
 
-    if (photos.length <= 1) container.querySelectorAll('.wikimedia-popup-carousel__nav').forEach(n => n.style.display = 'none');
+        container.style.setProperty('--expanded-width', `${finalWidth}px`);
+        container.style.setProperty('--expanded-height', `${finalHeight}px`);
 
-    let currentIndex = 0;
-    const goToSlide = (index) => {
-        currentIndex = index;
-        track.style.transform = `translateX(-${index * 100}%)`;
-        container.querySelectorAll('.wikimedia-popup-carousel__dot').forEach((d, i) => d.classList.toggle('wikimedia-popup-carousel__dot--active', i === index));
-        updateMetadata(photos[index]);
+        // Wait for CSS variable application
+        void container.offsetWidth;
+        container.classList.add('expanded');
 
-        // Update height for the new slide
-        const currentSlide = track.children[index];
-        if (currentSlide) {
-            const img = currentSlide.querySelector('img');
-            updateContainerHeight(img);
-        }
+        imgEl.src = sharpUrl;
+
+        // Wait for the expansion animation to start before fading in the sharp image over the blurred background
+        setTimeout(() => {
+            imgEl.style.opacity = '1';
+        }, 50);
     };
 
-    container.querySelector('.wikimedia-popup-carousel__nav--prev').onclick = (e) => { e.stopPropagation(); goToSlide((currentIndex - 1 + photos.length) % photos.length); };
-    container.querySelector('.wikimedia-popup-carousel__nav--next').onclick = (e) => { e.stopPropagation(); goToSlide((currentIndex + 1) % photos.length); };
-
-    const updateMetadata = async (p) => {
-        meta.innerHTML = '';
-        const m = await fetchPhotoMetadata(p.properties.title);
-        if (m) meta.innerHTML = `<p>${stripHtmlTags(m.description).slice(0, 180)}</p><p>By: ${stripHtmlTags(m.author)}</p>`;
+    loader.onerror = () => {
+        clearTimeout(expandTimeout);
+        activePopup.remove();
     };
 
-    updateMetadata(photos[0]);
+    loader.src = sharpUrl;
 
-    const infoBtn = container.querySelector('.wikimedia-popup-info-btn');
-    const overlay = container.querySelector('.wikimedia-popup-info-overlay');
-    infoBtn.onclick = (e) => {
+    container.addEventListener('click', (e) => {
         e.stopPropagation();
-        const h = overlay.getAttribute('aria-hidden') === 'true';
-        overlay.setAttribute('aria-hidden', !h);
-        infoBtn.classList.toggle('active', !h);
-    };
+        activePopup.remove();
+        showElevationChartPhotoPopup(mapInstance, mainPhoto, photos);
+    });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
