@@ -250,7 +250,7 @@ async function updateThumbnailImages(mapInstance) {
         const zoom = mapInstance.getZoom();
         if (zoom < MIN_ZOOM_FOR_THUMBNAILS || !isWikimediaPhotosVisible()) return;
 
-        const layersToQuery = ['wikimedia-photos-base', 'wikimedia-thumbnails-small', 'wikimedia-thumbnails-large'].filter(id => {
+        const layersToQuery = ['wikimedia-photos-base'].filter(id => {
             const l = mapInstance.getLayer(id);
             return l && mapInstance.getLayoutProperty(id, 'visibility') !== 'none';
         });
@@ -295,10 +295,8 @@ async function updateThumbnailImages(mapInstance) {
             }
         }
 
-        // ── Step 2: Query photo features (center area) ──
-        const inset = Math.min(width, height) * 0.15;
-        const centerBbox = [[inset, inset], [width - inset, height - inset]];
-        const features = mapInstance.queryRenderedFeatures(centerBbox, { layers: layersToQuery });
+        // ── Step 2: Query photo features (full screen viewport) ──
+        const features = mapInstance.queryRenderedFeatures(bbox, { layers: layersToQuery });
 
         const featureMap = new Map();
         for (const f of features) {
@@ -403,7 +401,7 @@ async function updateThumbnailImages(mapInstance) {
                             mapInstance.addImage(item.imageId, imgData);
                             // Ensure the map re-runs the logic to update filters with the new image
                             if (lastSelectedIds.has(item.pid)) {
-                                requestAnimationFrame(() => updateThumbnailImages(mapInstance));
+                                scheduleThumbnailUpdate(mapInstance);
                             }
                         }
                     })
@@ -415,6 +413,17 @@ async function updateThumbnailImages(mapInstance) {
     } catch (e) {
         console.error('[WikimediaPhotos] simple update fail:', e);
     }
+}
+
+let updateThumbnailsTimer = null;
+function scheduleThumbnailUpdate(mapInstance) {
+    if (updateThumbnailsTimer) return;
+    updateThumbnailsTimer = setTimeout(() => {
+        updateThumbnailsTimer = null;
+        if (mapInstance && isWikimediaPhotosVisible()) {
+            requestAnimationFrame(() => updateThumbnailImages(mapInstance));
+        }
+    }, 150);
 }
 
 function clearThumbnailImages() {
