@@ -827,6 +827,13 @@ async function showPhotoPopup(mapInstance, feature, layerId) {
         activePopup.remove();
         showElevationChartPhotoPopup(mapInstance, mainPhoto, photos);
     });
+
+    container.addEventListener('mouseleave', () => {
+        if (activePopup) {
+            activePopup.remove();
+            activePopup = null;
+        }
+    });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
