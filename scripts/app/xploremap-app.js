@@ -764,7 +764,7 @@ async function init() {
         subOptions: [
           { id: 'liberty', label: 'Liberty', styleUrl: 'https://tiles.openfreemap.org/styles/liberty' },
           { id: 'terrain-stadia', label: 'Terrain', styleUrl: './terrain_vector_on_stadia.json' },
-          { id: 'liberty-local', label: 'Liberty Local', styleUrl: './osm_liberty.json' },
+          { id: 'liberty-local', label: 'Liberty Local', styleUrl: './Xplore.json' },
         ],
         previewImage: './data/vector-map.svg',
       },
