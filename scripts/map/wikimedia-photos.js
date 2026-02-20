@@ -745,7 +745,7 @@ async function showPhotoPopup(mapInstance, feature, layerId) {
         .setHTML(`
         <div class="photo-hover-bubble" id="${popupId}" style="--initial-width: ${initSize}px; --initial-height: ${initSize}px; --initial-radius: ${initRadius}px; background-image: url('${fastThumbUrl}'); background-size: cover; background-position: center;">
             <div class="photo-hover-bubble__loader" style="display: none;"></div>
-            <img class="photo-hover-bubble__image" aria-hidden="true" crossorigin="anonymous" />
+            <img class="photo-hover-bubble__image" aria-hidden="true" />
             <div class="photo-hover-bubble__count-badge" style="display:none;"></div>
         </div>
     `)
@@ -1106,7 +1106,9 @@ export async function showElevationChartPhotoPopup(mapInstance, photoData, clust
         const slide = document.createElement('div');
         slide.className = 'photo-lightbox__slide';
 
-        const thumbUrl = p.thumbnailUrl || (p.fileName ? getPhotoThumbnailUrl(p.fileName, 400) : '');
+        const props = p.properties || p;
+        const fileName = props.title || props.fileName || '';
+        const thumbUrl = props.thumbnailUrl || (fileName ? getPhotoThumbnailUrl(fileName, 400) : '');
 
         // 1. Placeholder Image (Low-res)
         if (thumbUrl) {
@@ -1121,9 +1123,8 @@ export async function showElevationChartPhotoPopup(mapInstance, photoData, clust
         const img = document.createElement('img');
         img.className = 'photo-lightbox__image';
         img.loading = i === 0 ? 'eager' : 'lazy';
-        const fileName = p.fileName || (p.thumbnailUrl ? decodeURIComponent(p.thumbnailUrl.split('/').pop().split('?')[0]) : '');
         img.src = getPhotoThumbnailUrl(fileName, 1024);
-        img.alt = p.title || 'Photo';
+        img.alt = fileName || 'Photo';
 
         img.onload = () => {
             requestAnimationFrame(() => {
@@ -1186,18 +1187,21 @@ export async function showElevationChartPhotoPopup(mapInstance, photoData, clust
     backdrop.onclick = closeLightbox;
 
     const updateMetadata = async (p) => {
-        const title = p.title || `File:${p.fileName}`;
-        // Show title immediately so it's snappy
-        meta.innerHTML = `<div class="photo-lightbox__meta-title">${title.replace('File:', '')}</div><span class="photo-lightbox__loading">Loading info...</span>`;
+        const props = p.properties || p;
+        let title = props.title || props.fileName || 'Photo';
+        title = String(title).replace('File:', '');
 
-        const m = await fetchPhotoMetadata(title);
+        // Show title immediately so it's snappy
+        meta.innerHTML = `<div class="photo-lightbox__meta-title">${title}</div><span class="photo-lightbox__loading">Loading info...</span>`;
+
+        const m = await fetchPhotoMetadata(props.title || props.fileName);
         if (m) {
             meta.innerHTML = `
                 ${m.description ? `<div class="photo-lightbox__meta-description">${stripHtmlTags(m.description).slice(0, 250)}</div>` : ''}
                 <div class="photo-lightbox__meta-author">© ${stripHtmlTags(m.author)}</div>
             `;
         } else {
-            meta.innerHTML = `<div class="photo-lightbox__meta-title">${title.replace('File:', '')}</div>`;
+            meta.innerHTML = `<div class="photo-lightbox__meta-title">${title}</div>`;
         }
     };
 
