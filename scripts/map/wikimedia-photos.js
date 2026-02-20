@@ -856,7 +856,7 @@ export function initializeWikimediaPhotos(mapInstance, options = {}) {
         addWikimediaLayers(map);
         setupWikimediaEventListeners(map);
         map.on('movestart', onMapMoveStart);
-        map.on('idle', onMapIdle);
+        map.on('moveend', onMapMoveEnd);
         if (enabled && map.getZoom() >= MIN_ZOOM_FOR_PHOTOS) refreshPhotos();
         isInitialized = true;
         setWikimediaPhotosEnabled(enabled);
@@ -1016,8 +1016,8 @@ function onMapMoveStart() {
     }
 }
 
-/** Only fetch when the map is fully idle (no more panning/zooming/animating) */
-function onMapIdle() {
+/** Only fetch when the map finishes moving completely */
+function onMapMoveEnd() {
     if (!map || map.getZoom() < MIN_ZOOM_FOR_PHOTOS) return;
     if (!isWikimediaPhotosVisible()) return;
 
@@ -1060,7 +1060,7 @@ export function forceRefreshWikimediaPhotos() {
 export function destroyWikimediaPhotos() {
     if (!map) return;
     map.off('movestart', onMapMoveStart);
-    map.off('idle', onMapIdle);
+    map.off('moveend', onMapMoveEnd);
     resetSpatialCache();
     WIKIMEDIA_LAYERS.forEach(id => {
         if (map.getLayer(id)) map.removeLayer(id);
