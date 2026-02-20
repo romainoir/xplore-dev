@@ -830,7 +830,6 @@ export function initializeWikimediaPhotos(mapInstance, options = {}) {
         setupWikimediaEventListeners(map);
         map.on('movestart', onMapMoveStart);
         map.on('moveend', onMapMoveEnd);
-        if (enabled && map.getZoom() >= MIN_ZOOM_FOR_PHOTOS) refreshPhotos();
         isInitialized = true;
         setWikimediaPhotosEnabled(enabled);
     };
