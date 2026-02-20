@@ -10,7 +10,6 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 const WIKIMEDIA_SOURCE_ID = 'wikimedia-photos';
-const WIKIMEDIA_CLUSTER_COUNT_LAYER_ID = 'wikimedia-photos-cluster-count';
 
 /** Minimum zoom level to fetch photos and show thumbnails */
 const MIN_ZOOM_FOR_PHOTOS = 12;
@@ -19,7 +18,6 @@ const MIN_ZOOM_FOR_THUMBNAILS = 12;
 /** All layer IDs for Wikimedia photos */
 const WIKIMEDIA_LAYERS = [
     'wikimedia-photos-base',
-    WIKIMEDIA_CLUSTER_COUNT_LAYER_ID,
     'wikimedia-thumbnails-small',
     'wikimedia-thumbnails-large'
 ];
@@ -600,32 +598,7 @@ function addWikimediaLayers(mapInstance) {
         });
     }
 
-    // 2. Cluster Count Text
-    if (!mapInstance.getLayer(WIKIMEDIA_CLUSTER_COUNT_LAYER_ID)) {
-        mapInstance.addLayer({
-            id: WIKIMEDIA_CLUSTER_COUNT_LAYER_ID,
-            type: 'symbol',
-            source: WIKIMEDIA_SOURCE_ID,
-            minzoom: MIN_ZOOM_FOR_PHOTOS,
-            filter: ['all', ['has', 'point_count'], ['<', ['get', 'point_count'], 10]],
-            layout: {
-                'text-field': '{point_count_abbreviated}',
-                'text-font': ['Noto Sans Bold'],
-                'text-size': 11,
-                'text-offset': [1.2, 0],
-                'text-anchor': 'left',
-                'text-allow-overlap': true,
-                'text-ignore-placement': true
-            },
-            paint: {
-                'text-color': '#ffffff',
-                'text-halo-color': 'rgba(0, 0, 0, 0.7)',
-                'text-halo-width': 1.5
-            }
-        });
-    }
-
-    // 3. Unified GL Thumbnails
+    // 2. Unified GL Thumbnails
     if (!mapInstance.getLayer('wikimedia-thumbnails-small')) {
         mapInstance.addLayer({
             id: 'wikimedia-thumbnails-small',
