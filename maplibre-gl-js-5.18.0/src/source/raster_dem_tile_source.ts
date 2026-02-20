@@ -1,22 +1,22 @@
-import {ImageRequest} from '../util/image_request';
-import {ResourceType} from '../util/request_manager';
-import {extend, isImageBitmap, readImageUsingVideoFrame} from '../util/util';
-import {type Evented} from '../util/evented';
-import {browser} from '../util/browser';
-import {offscreenCanvasSupported} from '../util/offscreen_canvas_supported';
-import {OverscaledTileID} from '../tile/tile_id';
-import {RasterTileSource} from './raster_tile_source';
+import { ImageRequest } from '../util/image_request';
+import { ResourceType } from '../util/request_manager';
+import { extend, isImageBitmap, readImageUsingVideoFrame } from '../util/util';
+import { type Evented } from '../util/evented';
+import { browser } from '../util/browser';
+import { offscreenCanvasSupported } from '../util/offscreen_canvas_supported';
+import { OverscaledTileID } from '../tile/tile_id';
+import { RasterTileSource } from './raster_tile_source';
 // ensure DEMData is registered for worker transfer on main thread:
 import '../data/dem_data';
-import type {DEMEncoding} from '../data/dem_data';
+import type { DEMEncoding } from '../data/dem_data';
 
-import type {Source} from './source';
-import type {Dispatcher} from '../util/dispatcher';
-import type {Tile} from '../tile/tile';
-import type {RasterDEMSourceSpecification} from '@maplibre/maplibre-gl-style-spec';
-import {isOffscreenCanvasDistorted} from '../util/offscreen_canvas_distorted';
-import {RGBAImage} from '../util/image';
-import {MessageType} from '../util/actor_messages';
+import type { Source } from './source';
+import type { Dispatcher } from '../util/dispatcher';
+import type { Tile } from '../tile/tile';
+import type { RasterDEMSourceSpecification } from '@maplibre/maplibre-gl-style-spec';
+import { isOffscreenCanvasDistorted } from '../util/offscreen_canvas_distorted';
+import { RGBAImage } from '../util/image';
+import { MessageType } from '../util/actor_messages';
 
 /**
  * A source containing raster DEM tiles (See the [Style Specification](https://maplibre.org/maplibre-style-spec/) for detailed documentation of options.)
@@ -45,7 +45,7 @@ export class RasterDEMTileSource extends RasterTileSource implements Source {
         super(id, options, dispatcher, eventedParent);
         this.type = 'raster-dem';
         this.maxzoom = 22;
-        this._options = extend({type: 'raster-dem'}, options);
+        this._options = extend({ type: 'raster-dem' }, options);
         this.encoding = options.encoding || 'mapbox';
         this.redFactor = options.redFactor;
         this.greenFactor = options.greenFactor;
@@ -68,7 +68,7 @@ export class RasterDEMTileSource extends RasterTileSource implements Source {
             if (response && response.data) {
                 const img = response.data;
                 if (this.map._refreshExpiredTiles && (response.cacheControl || response.expires)) {
-                    tile.setExpiryData({cacheControl: response.cacheControl, expires: response.expires});
+                    tile.setExpiryData({ cacheControl: response.cacheControl, expires: response.expires });
                 }
                 const transfer = isImageBitmap(img) && offscreenCanvasSupported();
                 const rawImageData = transfer ? img : await this.readImageNow(img);
@@ -86,9 +86,10 @@ export class RasterDEMTileSource extends RasterTileSource implements Source {
 
                 if (!tile.actor || tile.state === 'expired') {
                     tile.actor = this.dispatcher.getActor();
-                    const data = await tile.actor.sendAsync({type: MessageType.loadDEMTile, data: params});
+                    const data = await tile.actor.sendAsync({ type: MessageType.loadDEMTile, data: params });
                     tile.dem = data;
                     tile.needsHillshadePrepare = true;
+                    tile.needsHorizonPrepare = true;
                     tile.needsTerrainPrepare = true;
                     tile.state = 'loaded';
                 }
@@ -109,7 +110,7 @@ export class RasterDEMTileSource extends RasterTileSource implements Source {
             const width = img.width + 2;
             const height = img.height + 2;
             try {
-                return new RGBAImage({width, height}, await readImageUsingVideoFrame(img, -1, -1, width, height));
+                return new RGBAImage({ width, height }, await readImageUsingVideoFrame(img, -1, -1, width, height));
             } catch {
                 // fall-back to browser canvas decoding
             }
@@ -117,7 +118,7 @@ export class RasterDEMTileSource extends RasterTileSource implements Source {
         return browser.getImageData(img, 1);
     }
 
-    _getNeighboringTiles(tileID: OverscaledTileID): Record<string, {backfilled: boolean}> {
+    _getNeighboringTiles(tileID: OverscaledTileID): Record<string, { backfilled: boolean }> {
         const canonical = tileID.canonical;
         const dim = Math.pow(2, canonical.z);
 
@@ -126,22 +127,22 @@ export class RasterDEMTileSource extends RasterTileSource implements Source {
         const nx = (canonical.x + 1 + dim) % dim;
         const nxw = canonical.x + 1 === dim ? tileID.wrap + 1 : tileID.wrap;
 
-        const neighboringTiles: Record<string, {backfilled: boolean}> = {};
+        const neighboringTiles: Record<string, { backfilled: boolean }> = {};
         // add adjacent tiles
-        neighboringTiles[new OverscaledTileID(tileID.overscaledZ, pxw, canonical.z, px, canonical.y).key] = {backfilled: false};
-        neighboringTiles[new OverscaledTileID(tileID.overscaledZ, nxw, canonical.z, nx, canonical.y).key] = {backfilled: false};
+        neighboringTiles[new OverscaledTileID(tileID.overscaledZ, pxw, canonical.z, px, canonical.y).key] = { backfilled: false };
+        neighboringTiles[new OverscaledTileID(tileID.overscaledZ, nxw, canonical.z, nx, canonical.y).key] = { backfilled: false };
 
         // Add upper neighboringTiles
         if (canonical.y > 0) {
-            neighboringTiles[new OverscaledTileID(tileID.overscaledZ, pxw, canonical.z, px, canonical.y - 1).key] = {backfilled: false};
-            neighboringTiles[new OverscaledTileID(tileID.overscaledZ, tileID.wrap, canonical.z, canonical.x, canonical.y - 1).key] = {backfilled: false};
-            neighboringTiles[new OverscaledTileID(tileID.overscaledZ, nxw, canonical.z, nx, canonical.y - 1).key] = {backfilled: false};
+            neighboringTiles[new OverscaledTileID(tileID.overscaledZ, pxw, canonical.z, px, canonical.y - 1).key] = { backfilled: false };
+            neighboringTiles[new OverscaledTileID(tileID.overscaledZ, tileID.wrap, canonical.z, canonical.x, canonical.y - 1).key] = { backfilled: false };
+            neighboringTiles[new OverscaledTileID(tileID.overscaledZ, nxw, canonical.z, nx, canonical.y - 1).key] = { backfilled: false };
         }
         // Add lower neighboringTiles
         if (canonical.y + 1 < dim) {
-            neighboringTiles[new OverscaledTileID(tileID.overscaledZ, pxw, canonical.z, px, canonical.y + 1).key] = {backfilled: false};
-            neighboringTiles[new OverscaledTileID(tileID.overscaledZ, tileID.wrap, canonical.z, canonical.x, canonical.y + 1).key] = {backfilled: false};
-            neighboringTiles[new OverscaledTileID(tileID.overscaledZ, nxw, canonical.z, nx, canonical.y + 1).key] = {backfilled: false};
+            neighboringTiles[new OverscaledTileID(tileID.overscaledZ, pxw, canonical.z, px, canonical.y + 1).key] = { backfilled: false };
+            neighboringTiles[new OverscaledTileID(tileID.overscaledZ, tileID.wrap, canonical.z, canonical.x, canonical.y + 1).key] = { backfilled: false };
+            neighboringTiles[new OverscaledTileID(tileID.overscaledZ, nxw, canonical.z, nx, canonical.y + 1).key] = { backfilled: false };
         }
 
         return neighboringTiles;
@@ -158,7 +159,7 @@ export class RasterDEMTileSource extends RasterTileSource implements Source {
 
         tile.state = 'unloaded';
         if (tile.actor) {
-            await tile.actor.sendAsync({type: MessageType.removeDEMTile, data: {type: this.type, uid: tile.uid, source: this.id}});
+            await tile.actor.sendAsync({ type: MessageType.removeDEMTile, data: { type: this.type, uid: tile.uid, source: this.id } });
         }
     }
 }

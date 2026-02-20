@@ -39,6 +39,10 @@ import hillshadePrepareFrag from './hillshade_prepare.fragment.glsl.g';
 import hillshadePrepareVert from './hillshade_prepare.vertex.glsl.g';
 import hillshadeFrag from './hillshade.fragment.glsl.g';
 import hillshadeVert from './hillshade.vertex.glsl.g';
+import shadowFrag from './shadow.fragment.glsl.g';
+import shadowVert from './shadow.vertex.glsl.g';
+import shadowPrepareFrag from './shadow_prepare.fragment.glsl.g';
+import shadowPrepareVert from './shadow_prepare.vertex.glsl.g';
 import lineFrag from './line.fragment.glsl.g';
 import lineVert from './line.vertex.glsl.g';
 import lineGradientFrag from './line_gradient.fragment.glsl.g';
@@ -102,6 +106,8 @@ export const shaders = {
     fillExtrusionPattern: prepare(fillExtrusionPatternFrag, fillExtrusionPatternVert),
     hillshadePrepare: prepare(hillshadePrepareFrag, hillshadePrepareVert),
     hillshade: prepare(hillshadeFrag, hillshadeVert),
+    shadow: prepare(shadowFrag, shadowVert),
+    shadowPrepare: prepare(shadowPrepareFrag, shadowPrepareVert),
     line: prepare(lineFrag, lineVert),
     lineGradient: prepare(lineGradientFrag, lineGradientVert),
     linePattern: prepare(linePatternFrag, linePatternVert),
@@ -217,7 +223,7 @@ uniform ${precision} ${type} u_${name};
         }
     });
 
-    return {fragmentSource, vertexSource, staticAttributes: vertexAttributes, staticUniforms: shaderUniforms};
+    return { fragmentSource, vertexSource, staticAttributes: vertexAttributes, staticUniforms: shaderUniforms };
 }
 
 /** Transpile WebGL2 vertex shader source to WebGL1 */

@@ -734,6 +734,169 @@ async function init() {
     });
 
     imagery.updateImageryControlStates();
+
+    // ─── Native Cast Shadow panel with time slider (H4 Engine) ───
+    if (toolboxes.shadow.box) {
+      const shadowPanel = document.createElement('div');
+      shadowPanel.className = 'shadow-cast-panel';
+      shadowPanel.innerHTML = `
+        <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid rgba(255,255,255,0.1)">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0">
+            <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/>
+            <line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/>
+            <line x1="21" y1="12" x2="23" y2="12"/>
+          </svg>
+          <span style="font-size:12px;font-weight:600;color:#e0e0e0;flex:1">Cast Shadows</span>
+          <label class="shadow-panel__switch">
+            <input type="checkbox" id="shadowCastToggle">
+            <span class="shadow-panel__slider"></span>
+          </label>
+        </div>
+        <div id="shadowTimeControls" style="padding:8px 12px;opacity:0.4;pointer-events:none;transition:opacity .2s">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+            <span style="font-size:11px;color:#aaa;min-width:36px" id="shadowTimeLabel">12:00</span>
+            <input type="range" id="shadowTimeSlider" min="0" max="1440" step="10" value="720"
+              style="flex:1;accent-color:#fab005;height:4px">
+            <span style="font-size:11px;color:#666" id="shadowSunInfo">—</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <span style="font-size:11px;color:#aaa;min-width:36px">Opacity</span>
+            <input type="range" id="shadowOpacitySlider" min="0" max="100" step="5" value="60"
+              style="flex:1;accent-color:#fab005;height:4px">
+            <span style="font-size:11px;color:#aaa;min-width:24px" id="shadowOpacityLabel">60%</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;margin-top:4px">
+            <label style="font-size:11px;color:#aaa;display:flex;align-items:center;gap:4px;cursor:pointer">
+              <input type="checkbox" id="shadowNeighborToggle" checked
+                style="accent-color:#fab005;width:14px;height:14px">
+              Cross-tile continuity
+            </label>
+          </div>
+        </div>
+      `;
+
+      // Inject mini-CSS for the toggle switch
+      if (!document.getElementById('shadowPanelStyles')) {
+        const style = document.createElement('style');
+        style.id = 'shadowPanelStyles';
+        style.textContent = `
+          .shadow-cast-panel { background:rgba(30,30,40,0.95); border-radius:8px; min-width:220px; overflow:hidden; }
+          .shadow-panel__switch { position:relative; width:36px; height:20px; flex-shrink:0 }
+          .shadow-panel__switch input { opacity:0; width:0; height:0 }
+          .shadow-panel__slider { position:absolute; inset:0; background:#444; border-radius:10px; cursor:pointer; transition:.2s }
+          .shadow-panel__slider:before { content:''; position:absolute; height:16px; width:16px; left:2px; bottom:2px; background:#fff; border-radius:50%; transition:.2s }
+          .shadow-panel__switch input:checked + .shadow-panel__slider { background:#fab005 }
+          .shadow-panel__switch input:checked + .shadow-panel__slider:before { transform:translateX(16px) }
+        `;
+        document.head.appendChild(style);
+      }
+
+      toolboxes.shadow.box.appendChild(shadowPanel);
+
+      // Initialize neighbor flag
+      window.__shadowUseNeighbors = true;
+      const neighborToggle = document.getElementById('shadowNeighborToggle');
+      neighborToggle.addEventListener('change', () => {
+        window.__shadowUseNeighbors = neighborToggle.checked;
+        console.log(`[Shadow] Cross-tile neighbors: ${neighborToggle.checked ? 'ON' : 'OFF'}`);
+      });
+
+      const shadowToggle = document.getElementById('shadowCastToggle');
+      const timeSlider = document.getElementById('shadowTimeSlider');
+      const timeLabel = document.getElementById('shadowTimeLabel');
+      const sunInfo = document.getElementById('shadowSunInfo');
+      const timeControls = document.getElementById('shadowTimeControls');
+      const opacitySlider = document.getElementById('shadowOpacitySlider');
+      const opacityLabel = document.getElementById('shadowOpacityLabel');
+
+      let nativeShadowActive = false;
+
+      function getZoomAdaptiveMaxDistance() {
+        const z = map.getZoom();
+        // With 3-cascade adaptive stepping, we can cover 1344 pixels total
+        // At z10: ~76m/pixel × 1344 = ~102km — needs maxDist to match
+        // At z14: ~4.8m/pixel × 1344 = ~6.4km — needs maxDist to match
+        return Math.max(2000, 100000 / Math.pow(2, Math.max(0, z - 10)));
+      }
+
+      function updateShadowFromSlider() {
+        if (!map.getLayer('shadow-cast')) return;
+
+        const minutesSinceMidnight = parseInt(timeSlider.value);
+        const hours = Math.floor(minutesSinceMidnight / 60);
+        const mins = minutesSinceMidnight % 60;
+        timeLabel.textContent = `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
+
+        const center = map.getCenter();
+        const simDate = new Date();
+        simDate.setHours(hours, mins, 0, 0);
+        const sunPos = SunCalc.getPosition(simDate, center.lat, center.lng);
+
+        const azDeg = ((sunPos.azimuth * 180 / Math.PI) + 180) % 360;
+        const altDeg = sunPos.altitude * 180 / Math.PI;
+
+        if (altDeg < 0) {
+          sunInfo.textContent = '🌙 night';
+          sunInfo.style.color = '#666';
+        } else {
+          sunInfo.textContent = `☀️ ${altDeg.toFixed(0)}°`;
+          sunInfo.style.color = altDeg < 10 ? '#ff6b6b' : '#fab005';
+        }
+
+        if (nativeShadowActive) {
+          const effectiveAlt = Math.max(altDeg, 2);
+          const maxDist = getZoomAdaptiveMaxDistance();
+          map.setPaintProperty('shadow-cast', 'shadow-direction', azDeg);
+          map.setPaintProperty('shadow-cast', 'shadow-altitude', effectiveAlt);
+          map.setPaintProperty('shadow-cast', 'shadow-max-distance', maxDist);
+          console.log(`[Shadow] t=${timeLabel.textContent} az=${azDeg.toFixed(1)}° alt=${altDeg.toFixed(1)}° maxD=${maxDist.toFixed(0)}m`);
+        }
+      }
+
+      function updateShadowOpacity() {
+        if (!map.getLayer('shadow-cast')) return;
+        const val = parseInt(opacitySlider.value) / 100;
+        opacityLabel.textContent = `${opacitySlider.value}%`;
+        if (nativeShadowActive) {
+          map.setPaintProperty('shadow-cast', 'shadow-opacity', val);
+        }
+      }
+
+      // Set slider to current time
+      const now = new Date();
+      timeSlider.value = now.getHours() * 60 + now.getMinutes();
+
+      shadowToggle.addEventListener('change', () => {
+        nativeShadowActive = shadowToggle.checked;
+        timeControls.style.opacity = nativeShadowActive ? '1' : '0.4';
+        timeControls.style.pointerEvents = nativeShadowActive ? 'auto' : 'none';
+
+        if (map.getLayer('shadow-cast')) {
+          map.setLayoutProperty('shadow-cast', 'visibility', nativeShadowActive ? 'visible' : 'none');
+          if (nativeShadowActive) {
+            map.moveLayer('shadow-cast');
+            const opVal = parseInt(opacitySlider.value) / 100;
+            map.setPaintProperty('shadow-cast', 'shadow-opacity', opVal);
+            updateShadowFromSlider();
+          }
+        }
+      });
+
+      timeSlider.addEventListener('input', updateShadowFromSlider);
+      opacitySlider.addEventListener('input', updateShadowOpacity);
+
+      // Update maxDistance when zoom changes
+      map.on('zoomend', () => {
+        if (nativeShadowActive) {
+          const maxDist = getZoomAdaptiveMaxDistance();
+          map.setPaintProperty('shadow-cast', 'shadow-max-distance', maxDist);
+        }
+      });
+
+      // Initialize display
+      updateShadowFromSlider();
+    }
   }
 
   // ═════════════════════════════════════════════════════════════════════

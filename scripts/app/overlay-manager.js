@@ -75,6 +75,8 @@ export function getOverlayDefinitions() {
         { id: 'avalanche-native', ...nativeConfig },
         { id: 'detail-native', type: 'hillshade', source: 'hillshadeSource', layout: { visibility: 'none' }, paint: { 'hillshade-exaggeration': 1.0, 'hillshade-illumination-anchor': 'map', 'hillshade-accent-color': '#00ff00' } },
         { id: 'shadow-native', type: 'hillshade', source: 'shadowDemSource', layout: { visibility: 'none' }, paint: { 'hillshade-exaggeration': 1.0, 'hillshade-illumination-anchor': 'map' } },
+        // NOTE: shadow-cast (type:'shadow') is NOT included here because the style-spec diff engine
+        // doesn't recognize the 'shadow' type. It's added dynamically in applyOverlays() instead.
     ];
 
     return { sources, layers };
@@ -192,6 +194,21 @@ export function applyOverlays(map, deps = {}) {
     ensureL({ id: 'avalanche-native', ...nativeConfig }, topLabelId || undefined);
     ensureL({ id: 'detail-native', type: 'hillshade', source: 'hillshadeSource', layout: { 'visibility': 'none' }, paint: { 'hillshade-exaggeration': 1.0, 'hillshade-illumination-anchor': 'map', 'hillshade-accent-color': '#00ff00' } }, topLabelId || undefined);
     ensureL({ id: 'shadow-native', type: 'hillshade', source: 'shadowDemSource', layout: { 'visibility': 'none' }, paint: { 'hillshade-exaggeration': 1.0, 'hillshade-illumination-anchor': 'map' } }, topLabelId || undefined);
+
+    // ─── True native shadow layer (H4 Engine - DEM raymarching) ───
+    ensureL({
+        id: 'shadow-cast',
+        type: 'shadow',
+        source: 'hillshadeSource',
+        layout: { 'visibility': 'none' },
+        paint: {
+            'shadow-opacity': 0.5,
+            'shadow-color': '#000000',
+            'shadow-direction': 315,
+            'shadow-altitude': 45,
+            'shadow-max-distance': 5000
+        }
+    }); // No 'before' — place at top of stack
 
     console.log('[App] Overlays applied');
 

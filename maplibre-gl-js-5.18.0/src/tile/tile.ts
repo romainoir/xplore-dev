@@ -1,38 +1,38 @@
-import {uniqueId, parseCacheControl} from '../util/util';
-import {deserialize as deserializeBucket} from '../data/bucket';
-import {GEOJSON_TILE_LAYER_NAME, type FeatureIndex, type QueryResults} from '../data/feature_index';
-import {GeoJSONFeature} from '../util/vectortile_to_geojson';
-import {featureFilter} from '@maplibre/maplibre-gl-style-spec';
-import {SymbolBucket} from '../data/bucket/symbol_bucket';
-import {CollisionBoxArray} from '../data/array_types.g';
-import {Texture} from '../render/texture';
-import {now} from '../util/time_control';
-import {toEvaluationFeature} from '../data/evaluation_feature';
-import {EvaluationParameters} from '../style/evaluation_parameters';
-import {rtlMainThreadPluginFactory} from '../source/rtl_text_plugin_main_thread';
+import { uniqueId, parseCacheControl } from '../util/util';
+import { deserialize as deserializeBucket } from '../data/bucket';
+import { GEOJSON_TILE_LAYER_NAME, type FeatureIndex, type QueryResults } from '../data/feature_index';
+import { GeoJSONFeature } from '../util/vectortile_to_geojson';
+import { featureFilter } from '@maplibre/maplibre-gl-style-spec';
+import { SymbolBucket } from '../data/bucket/symbol_bucket';
+import { CollisionBoxArray } from '../data/array_types.g';
+import { Texture } from '../render/texture';
+import { now } from '../util/time_control';
+import { toEvaluationFeature } from '../data/evaluation_feature';
+import { EvaluationParameters } from '../style/evaluation_parameters';
+import { rtlMainThreadPluginFactory } from '../source/rtl_text_plugin_main_thread';
 
 const CLOCK_SKEW_RETRY_TIMEOUT = 30000;
 
-import type {SourceFeatureState} from '../source/source_state';
-import type {Bucket} from '../data/bucket';
-import type {StyleLayer} from '../style/style_layer';
-import type {WorkerTileResult} from '../source/worker_source';
-import type {Actor} from '../util/actor';
-import type {DEMData} from '../data/dem_data';
-import type {AlphaImage} from '../util/image';
-import type {ImageAtlas} from '../render/image_atlas';
-import type {ImageManager} from '../render/image_manager';
-import type {Context} from '../gl/context';
-import type {OverscaledTileID} from './tile_id';
-import type {Framebuffer} from '../gl/framebuffer';
-import type {IReadonlyTransform} from '../geo/transform_interface';
-import type {LayerFeatureStates} from '../source/source_state';
+import type { SourceFeatureState } from '../source/source_state';
+import type { Bucket } from '../data/bucket';
+import type { StyleLayer } from '../style/style_layer';
+import type { WorkerTileResult } from '../source/worker_source';
+import type { Actor } from '../util/actor';
+import type { DEMData } from '../data/dem_data';
+import type { AlphaImage } from '../util/image';
+import type { ImageAtlas } from '../render/image_atlas';
+import type { ImageManager } from '../render/image_manager';
+import type { Context } from '../gl/context';
+import type { OverscaledTileID } from './tile_id';
+import type { Framebuffer } from '../gl/framebuffer';
+import type { IReadonlyTransform } from '../geo/transform_interface';
+import type { LayerFeatureStates } from '../source/source_state';
 import type Point from '@mapbox/point-geometry';
-import type {mat4} from 'gl-matrix';
-import type {ExpiryData} from '../util/ajax';
-import type {QueryRenderedFeaturesOptionsStrict, QuerySourceFeatureOptionsStrict} from '../source/query_features';
-import type {DashEntry} from '../render/line_atlas';
-import type {VectorTileLayerLike} from '@maplibre/vt-pbf';
+import type { mat4 } from 'gl-matrix';
+import type { ExpiryData } from '../util/ajax';
+import type { QueryRenderedFeaturesOptionsStrict, QuerySourceFeatureOptionsStrict } from '../source/query_features';
+import type { DashEntry } from '../render/line_atlas';
+import type { VectorTileLayerLike } from '@maplibre/vt-pbf';
 /**
  * The tile's state, can be:
  *
@@ -69,13 +69,13 @@ export class Tile {
     uid: number;
     uses: number;
     tileSize: number;
-    buckets: {[_: string]: Bucket};
+    buckets: { [_: string]: Bucket };
     latestFeatureIndex: FeatureIndex | null;
     latestRawTileData: ArrayBuffer;
     latestEncoding: string;
     imageAtlas: ImageAtlas;
     imageAtlasTexture: Texture;
-    dashPositions: {[_: string]: DashEntry};
+    dashPositions: { [_: string]: DashEntry };
     glyphAtlasImage: AlphaImage;
     glyphAtlasTexture: Texture;
     expirationTime: any;
@@ -93,20 +93,23 @@ export class Tile {
     showCollisionBoxes: boolean;
     placementSource: any;
     actor: Actor;
-    vtLayers: {[_: string]: VectorTileLayerLike};
+    vtLayers: { [_: string]: VectorTileLayerLike };
 
-    neighboringTiles: Record<string, {backfilled: boolean}>;
+    neighboringTiles: Record<string, { backfilled: boolean }>;
     dem: DEMData;
     demMatrix: mat4;
     aborted: boolean;
     needsHillshadePrepare: boolean;
     needsTerrainPrepare: boolean;
+    needsHorizonPrepare: boolean;
     abortController: AbortController;
     texture: any;
     fbo: Framebuffer;
+    horizonFBO: Framebuffer;
     demTexture: Texture;
+    horizonTexture: Texture;
     refreshedUponExpiration: boolean;
-    reloadPromise: {resolve: () => void; reject: () => void};
+    reloadPromise: { resolve: () => void; reject: () => void };
     resourceTiming: Array<PerformanceResourceTiming>;
     queryPadding: number;
 
@@ -114,8 +117,8 @@ export class Tile {
     hasSymbolBuckets: boolean;
     hasRTLText: boolean;
     dependencies: any;
-    rtt: Array<{id: number; stamp: number}>;
-    rttFingerprint: {[sourceId:string]: string};
+    rtt: Array<{ id: number; stamp: number }>;
+    rttFingerprint: { [sourceId: string]: string };
 
     /**
      * @param tileID - the tile ID
@@ -156,7 +159,7 @@ export class Tile {
      * @internal
      * Many-to-one crossfade between a base tile and parent/ancestor tile (when zooming)
      */
-    setCrossFadeLogic({fadingRole, fadingDirection, fadingParentID, fadeEndTime}: CrossFadeArgs) {
+    setCrossFadeLogic({ fadingRole, fadingDirection, fadingParentID, fadeEndTime }: CrossFadeArgs) {
         this.resetFadeLogic();
 
         this.fadingRole = fadingRole;
@@ -192,6 +195,12 @@ export class Tile {
     clearTextures(painter: any) {
         if (this.demTexture) painter.saveTileTexture(this.demTexture);
         this.demTexture = null;
+        if (this.horizonTexture) painter.saveTileTexture(this.horizonTexture);
+        this.horizonTexture = null;
+        if (this.horizonFBO) {
+            this.horizonFBO.destroy();
+            this.horizonFBO = null;
+        }
     }
 
     /**
@@ -338,8 +347,8 @@ export class Tile {
     // Queries non-symbol features rendered for this tile.
     // Symbol features are queried globally
     queryRenderedFeatures(
-        layers: {[_: string]: StyleLayer},
-        serializedLayers: {[_: string]: any},
+        layers: { [_: string]: StyleLayer },
+        serializedLayers: { [_: string]: any },
         sourceFeatureState: SourceFeatureState,
         queryGeometry: Array<Point>,
         cameraQueryGeometry: Array<Point>,
@@ -378,8 +387,8 @@ export class Tile {
         if (!layer) return;
 
         const filter = featureFilter(params?.filter, params?.globalState);
-        const {z, x, y} = this.tileID.canonical;
-        const coord = {z, x, y};
+        const { z, x, y } = this.tileID.canonical;
+        const coord = { z, x, y };
 
         for (let i = 0; i < layer.length; i++) {
             const feature = layer.feature(i);

@@ -1,25 +1,26 @@
-import {type Painter, type RenderOptions} from './painter';
-import {type Tile} from '../tile/tile';
-import {Color} from '@maplibre/maplibre-gl-style-spec';
-import {type OverscaledTileID} from '../tile/tile_id';
-import {drawTerrain} from './draw_terrain';
-import {type Style} from '../style/style';
-import {type Terrain} from './terrain';
-import {RenderPool} from '../gl/render_pool';
-import {type Texture} from './texture';
-import type {StyleLayer} from '../style/style_layer';
-import {ImageSource} from '../source/image_source';
+import { type Painter, type RenderOptions } from './painter';
+import { type Tile } from '../tile/tile';
+import { Color } from '@maplibre/maplibre-gl-style-spec';
+import { type OverscaledTileID } from '../tile/tile_id';
+import { drawTerrain } from './draw_terrain';
+import { type Style } from '../style/style';
+import { type Terrain } from './terrain';
+import { RenderPool } from '../gl/render_pool';
+import { type Texture } from './texture';
+import type { StyleLayer } from '../style/style_layer';
+import { ImageSource } from '../source/image_source';
 
 /**
  * lookup table which layers should rendered to texture
  */
-const LAYERS_TO_TEXTURES: { [keyof in StyleLayer['type']]?: boolean } = {
+const LAYERS_TO_TEXTURES: { [key: string]: boolean } = {
     background: true,
     fill: true,
     line: true,
     raster: true,
     hillshade: true,
-    'color-relief': true
+    'color-relief': true,
+    shadow: true
 };
 
 /**
@@ -34,13 +35,13 @@ export class RenderToTexture {
      * coordsAscending contains a list of all tiles which should be rendered for one render-to-texture tile
      * e.g. render 4 raster-tiles with size 256px to the 512px render-to-texture tile
      */
-    _coordsAscending: {[_: string]: {[_:string]: Array<OverscaledTileID>}};
+    _coordsAscending: { [_: string]: { [_: string]: Array<OverscaledTileID> } };
     /**
      * fingerprint string representing the unique state of source tiles and revision
      * for a given render-to-texture tile. Used to detect changes and trigger re-rendering.
      * Format: "sorted_tile_keys#revision"
      */
-    _rttFingerprints: {[sourceId: string]: {[rttTileKey: string]: string}};
+    _rttFingerprints: { [sourceId: string]: { [rttTileKey: string]: string } };
     /**
      * store for render-stacks
      * a render stack is a set of layers which should be rendered into one texture
@@ -98,7 +99,7 @@ export class RenderToTexture {
                     this._coordsAscending[id][key].push(keys[key]);
                 }
             }
-            
+
         }
 
         this._rttFingerprints = {};
@@ -140,7 +141,7 @@ export class RenderToTexture {
     renderLayer(layer: StyleLayer, renderOptions: RenderOptions): boolean {
         if (layer.isHidden(this.painter.transform.zoom)) return false;
 
-        const options: RenderOptions = {...renderOptions, isRenderingToTexture: true};
+        const options: RenderOptions = { ...renderOptions, isRenderingToTexture: true };
         const type = layer.type;
         const painter = this.painter;
         const isLastLayer = this._renderableLayerIds[this._renderableLayerIds.length - 1] === layer.id;
@@ -180,10 +181,10 @@ export class RenderToTexture {
                 const obj = this.pool.getOrCreateFreeObject();
                 this.pool.useObject(obj);
                 this.pool.stampObject(obj);
-                tile.rtt[stack] = {id: obj.id, stamp: obj.stamp};
+                tile.rtt[stack] = { id: obj.id, stamp: obj.stamp };
                 // prepare PoolObject for rendering
                 painter.context.bindFramebuffer.set(obj.fbo.framebuffer);
-                painter.context.clear({color: Color.transparent, stencil: 0});
+                painter.context.clear({ color: Color.transparent, stencil: 0 });
                 painter.currentStencilSource = undefined;
                 for (let l = 0; l < layers.length; l++) {
                     const layer = painter.style._layers[layers[l]];

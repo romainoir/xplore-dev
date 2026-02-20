@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MapLibre - V5 Cinematic Shadows (Bilinear + Penumbra)</title>
+    <title>MapLibre - V4 True Cast Shadows (Mapterhorn 512px HD)</title>
 
     <script src="https://unpkg.com/maplibre-gl@4.x/dist/maplibre-gl.js"></script>
     <link href="https://unpkg.com/maplibre-gl@4.x/dist/maplibre-gl.css" rel="stylesheet" />
@@ -106,8 +106,8 @@
 <body>
 
     <div id="panel">
-        <h3>☀️ Cast Shadows HD</h3>
-        <div class="subtitle">Bilinear & Soft Penumbra (512px)</div>
+        <h3>☀️ Cast Shadows Engine</h3>
+        <div class="subtitle">Mapterhorn Natif 512px WebP</div>
 
         <div class="control-group">
             <label for="date-input">Date</label>
@@ -127,6 +127,7 @@
     const pendingFetches = new Map();
     const abortFlags = new Set();
     
+    // NOUVEAU : Canvas 512x512 pour décoder le format WebP Mapterhorn
     const decodeCanvas = new OffscreenCanvas(512, 512);
     const decodeCtx = decodeCanvas.getContext('2d', { willReadFrequently: true });
 
@@ -141,6 +142,7 @@
         
         const promise = (async () => {
             try {
+                // Utilisation de Mapterhorn en WebP
                 const res = await fetch(`https://tiles.mapterhorn.com/${z}/${wX}/${y}.webp`);
                 if (!res.ok) return null;
                 const blob = await res.blob();
@@ -149,6 +151,7 @@
                 decodeCtx.drawImage(bitmap, 0, 0);
                 const data = decodeCtx.getImageData(0, 0, 512, 512).data;
                 
+                // Tableau de 262 144 élévations (512x512)
                 const elev = new Float32Array(262144);
                 let maxElev = -32768;
                 for (let i = 0; i < 262144; i++) {
@@ -165,29 +168,26 @@
         pendingFetches.delete(key);
         if (result) {
             tileCache.set(key, result);
-            if (tileCache.size > 200) tileCache.delete(tileCache.keys().next().value); 
+            if (tileCache.size > 100) tileCache.delete(tileCache.keys().next().value); // Cache réduit pour épargner la RAM
         }
         return result;
     }
 
-    async function loadGrid3x3(z, x, y, dx_ray, dy_ray, exaggeration) {
-        // ASYMÉTRIE : On décale la grille de 3x3 tuiles dans la direction exacte du soleil !
-        // Cela permet de voir 2 tuiles (1024 pixels) plus loin sans charger plus de mémoire.
-        const startX = dx_ray > 0.3 ? x : (dx_ray < -0.3 ? x - 2 : x - 1);
-        const startY = dy_ray > 0.3 ? y : (dy_ray < -0.3 ? y - 2 : y - 1);
+    async function loadDirectionalGrid(z, x, y, dx_ray, dy_ray, exaggeration) {
+        const startX = dx_ray > 0 ? x : x - 1;
+        const startY = dy_ray > 0 ? y : y - 1;
         
-        const grid = new Float32Array(1536 * 1536).fill(-32768);
+        // Grille géante 2x2 tuiles de 512px = 1024x1024 = 1.048.576 pixels
+        const grid = new Float32Array(1024 * 1024).fill(-32768);
         let maxElev = -32768;
         const promises = [];
         
-        for (let dy = 0; dy < 3; dy++) {
-            for (let dx = 0; dx < 3; dx++) {
+        for (let dy = 0; dy < 2; dy++) {
+            for (let dx = 0; dx < 2; dx++) {
                 promises.push(getDEMTile(z, startX + dx, startY + dy, exaggeration).then(t => {
                     if (!t) return;
                     if (t.maxElev > maxElev) maxElev = t.maxElev;
-                    for (let r = 0; r < 512; r++) {
-                        grid.set(t.elev.subarray(r * 512, r * 512 + 512), (dy * 512 + r) * 1536 + (dx * 512));
-                    }
+                    for (let r = 0; r < 512; r++) grid.set(t.elev.subarray(r * 512, r * 512 + 512), (dy * 512 + r) * 1024 + (dx * 512));
                 }));
             }
         }
@@ -195,62 +195,37 @@
         return { grid, maxElev, gX_min: startX / Math.pow(2, z), gY_min: startY / Math.pow(2, z), px_per_g: Math.pow(2, z) * 512 };
     }
 
-    // LE SECRET DES OMBRES PARFAITES : L'Interpolation Bilinéaire
-    function sampleBilinear(grid, gX, gY, gX_min, gY_min, px_per_g) {
-        const x = (gX - gX_min) * px_per_g;
-        const y = (gY - gY_min) * px_per_g;
-        
-        if (x < 0 || y < 0) return -32768;
-        
-        const ix0 = Math.floor(x);
-        const iy0 = Math.floor(y);
-        
-        if (ix0 >= 1535 || iy0 >= 1535) return -32768;
-        
-        const fx = x - ix0;
-        const fy = y - iy0;
-        const idx = iy0 * 1536 + ix0;
-        
-        const e00 = grid[idx];
-        if (e00 === -32768) return -32768;
-
-        const e10 = grid[idx + 1];
-        const e01 = grid[idx + 1536];
-        const e11 = grid[idx + 1537];
-        
-        if (e10 === -32768 || e01 === -32768 || e11 === -32768) return e00; 
-        
-        // Calcule la pente géométrique douce entre les pixels
-        return e00 + fx * (e10 - e00) + fy * (e01 + fx * (e11 - e01) - (e00 + fx * (e10 - e00)));
-    }
-
     self.onmessage = async (e) => {
-        if (e.data.cmd === 'abort') { abortFlags.add(e.data.id); return; }
+        if (e.data.cmd === 'abort') {
+            abortFlags.add(e.data.id);
+            return;
+        }
 
         const { id, z, x, y, az, alt, exaggeration } = e.data;
 
         try {
             if (alt <= 0 || z < 8) { 
                 const canvas = new OffscreenCanvas(512, 512);
-                if (alt <= 0) { canvas.getContext('2d').fillStyle = 'rgba(10, 14, 25, 0.85)'; canvas.getContext('2d').fillRect(0, 0, 512, 512); }
+                if (alt <= 0) { 
+                    canvas.getContext('2d').fillStyle = 'rgba(10, 14, 25, 0.85)'; 
+                    canvas.getContext('2d').fillRect(0, 0, 512, 512); 
+                }
                 const blob = await canvas.convertToBlob({ type: 'image/png' });
                 const buffer = await blob.arrayBuffer();
                 return self.postMessage({ id, buffer }, [buffer]);
             }
 
-            // Vecteur directionnel Web Mercator vers le soleil
             const dx_ray = -Math.sin(az);
             const dy_ray = Math.cos(az);
             
-            // ARCHITECTURE LOD (Locale HD et Lointaine Z-3)
-            const local = await loadGrid3x3(z, x, y, dx_ray, dy_ray, exaggeration);
+            const local = await loadDirectionalGrid(z, x, y, dx_ray, dy_ray, exaggeration);
             if (abortFlags.has(id)) { abortFlags.delete(id); return; }
 
             let coarse = null;
-            if (z >= 11) {
-                const z_coarse = z - 3;
-                const scale = 1 << 3;
-                coarse = await loadGrid3x3(z_coarse, Math.floor(x / scale), Math.floor(y / scale), dx_ray, dy_ray, exaggeration);
+            if (z >= 10) { 
+                const z_coarse = z - 4;
+                const scale = 1 << 4;
+                coarse = await loadDirectionalGrid(z_coarse, Math.floor(x / scale), Math.floor(y / scale), dx_ray, dy_ray, exaggeration);
             }
             if (abortFlags.has(id)) { abortFlags.delete(id); return; }
 
@@ -259,22 +234,22 @@
             const n = Math.PI - 2.0 * Math.PI * (y + 0.5) / Math.pow(2, z);
             const lat = Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
             const M_PER_GLOBAL_UNIT = 2 * Math.PI * 6378137 * Math.cos(lat); 
+            // La Résolution passe en 512 (Deux fois plus précise qu'avant)
             const local_res = M_PER_GLOBAL_UNIT / (512 * Math.pow(2, z)); 
             
             const tanAlt = Math.max(0.001, Math.tan(alt));
             const MAX_DIST = 60000; 
             
-            // Paramètre pour la netteté de l'ombre (Définit la taille virtuelle du soleil dans le ciel)
-            const SHARPNESS = 80.0;
-            
-            const STEP_NEAR = Math.max(local_res * 1.5, 6.0);  
-            const STEP_MED  = Math.max(local_res * 6.0, 30.0); 
-            const STEP_FAR  = Math.max(local_res * 20.0, 120.0);
+            // Les pas ont été ajustés pour absorber la charge de la HD
+            const STEP_NEAR = Math.max(local_res * 2.0, 10.0);  
+            const STEP_MED  = Math.max(local_res * 8.0, 60.0); 
+            const STEP_FAR  = Math.max(local_res * 20.0, 180.0);
 
             const outData = new Uint8ClampedArray(512 * 512 * 4);
             const dx_g = dx_ray / M_PER_GLOBAL_UNIT;
             const dy_g = dy_ray / M_PER_GLOBAL_UNIT;
 
+            // Rendu Natif 512x512
             for (let py = 0; py < 512; py++) {
                 if (py % 64 === 0 && abortFlags.has(id)) { abortFlags.delete(id); return; }
 
@@ -282,20 +257,26 @@
                     const gX0 = (x + (px + 0.5) / 512) / Math.pow(2, z);
                     const gY0 = (y + (py + 0.5) / 512) / Math.pow(2, z);
                     
-                    const baseElev = sampleBilinear(local.grid, gX0, gY0, local.gX_min, local.gY_min, local.px_per_g);
+                    // L'opérateur "| 0" est utilisé ici pour de l'entier hyper-rapide (V8 Engine)
+                    const s_ix = (gX0 - local.gX_min) * local.px_per_g | 0;
+                    const s_iy = (gY0 - local.gY_min) * local.px_per_g | 0;
+                    
+                    if (s_ix < 0 || s_ix >= 1024 || s_iy < 0 || s_iy >= 1024) continue;
+                    
+                    const baseElev = local.grid[s_iy * 1024 + s_ix];
                     if (baseElev === -32768) continue;
                     
                     const max_search_dist = Math.min(MAX_DIST, (globalMaxElev - baseElev) / tanAlt);
                     if (max_search_dist <= 0) continue; 
                     
-                    let min_penumbra = 1.0;
-                    let shadowDist = 0;
+                    let inShadow = false;
+                    let hitDist = 0;
                     let d_m = local_res * 2.0; 
                     
                     while (d_m < max_search_dist) {
                         let step_m = STEP_NEAR;
-                        if (d_m > 4000) step_m = STEP_FAR;
-                        else if (d_m > 1000) step_m = STEP_MED;
+                        if (d_m > 3000) step_m = STEP_FAR;
+                        else if (d_m > 600) step_m = STEP_MED;
 
                         d_m += step_m;
                         const drop = (d_m * d_m) / 14860000;
@@ -306,41 +287,29 @@
                         const gX = gX0 + dx_g * d_m;
                         const gY = gY0 + dy_g * d_m;
 
-                        let elev = sampleBilinear(local.grid, gX, gY, local.gX_min, local.gY_min, local.px_per_g);
-                        if (elev === -32768 && coarse) elev = sampleBilinear(coarse.grid, gX, gY, coarse.gX_min, coarse.gY_min, coarse.px_per_g);
-                        
-                        if (elev !== -32768) {
-                            const diff = cz - elev;
-                            if (diff < 0) {
-                                // Le rayon percute franchement la montagne : C'est le centre de l'ombre
-                                min_penumbra = 0.0;
-                                shadowDist = d_m;
-                                break;
-                            }
-                            // Formule IQ Soft Shadows : Calcule à quelle distance le rayon a frôlé la crête
-                            if (d_m > local_res * 5.0) {
-                                const penumbra = SHARPNESS * diff / d_m;
-                                if (penumbra < min_penumbra) {
-                                    min_penumbra = penumbra;
-                                    shadowDist = d_m;
-                                }
-                            }
-                        } else break; 
+                        const ixL = (gX - local.gX_min) * local.px_per_g | 0;
+                        const iyL = (gY - local.gY_min) * local.px_per_g | 0;
+
+                        if (ixL >= 0 && ixL < 1024 && iyL >= 0 && iyL < 1024) {
+                            if (local.grid[iyL * 1024 + ixL] > cz) { inShadow = true; hitDist = d_m; break; }
+                        } else if (coarse) {
+                            const ixM = (gX - coarse.gX_min) * coarse.px_per_g | 0;
+                            const iyM = (gY - coarse.gY_min) * coarse.px_per_g | 0;
+                            if (ixM >= 0 && ixM < 1024 && iyM >= 0 && iyM < 1024) {
+                                if (coarse.grid[iyM * 1024 + ixM] > cz) { inShadow = true; hitDist = d_m; break; }
+                            } else break; 
+                        } else break;
                     }
                     
-                    if (min_penumbra < 1.0) {
-                        // L'ombre est plus douce et s'estompe quand la montagne qui la projette est lointaine
-                        const fade = Math.max(0.0, 1.0 - (shadowDist / MAX_DIST));
-                        const intensity = 1.0 - min_penumbra;
-                        const alpha = Math.floor(215 * fade * intensity);
-                        
+                    if (inShadow) {
+                        const fade = Math.max(0.15, 1.0 - (hitDist / MAX_DIST));
+                        const alpha = Math.floor(210 * fade); 
                         const idx = (py * 512 + px) * 4;
                         outData[idx] = 10; outData[idx+1] = 12; outData[idx+2] = 20; outData[idx+3] = alpha; 
                     }
                 }
             }
-
-            // Anti-Aliasing final (Gaussian blur très léger) pour fondre les derniers micro-crénelages d'écran
+            
             const blurData = new Uint8ClampedArray(512 * 512 * 4);
             for (let py = 0; py < 512; py++) {
                 for (let px = 0; px < 512; px++) {
@@ -351,7 +320,8 @@
                         for (let kx = -1; kx <= 1; kx++) {
                             const nx = px + kx;
                             if (nx >= 0 && nx <= 511) {
-                                a += outData[(ny * 512 + nx) * 4 + 3]; count++;
+                                a += outData[(ny * 512 + nx) * 4 + 3];
+                                count++;
                             }
                         }
                     }
@@ -403,7 +373,9 @@
                 const parts = url.pathname.split('/').filter(Boolean);
                 if (parts.length < 3) return resolve({ data: null });
 
-                pendingRequests.set(id, (buffer) => { resolve({ data: buffer }); });
+                pendingRequests.set(id, (buffer) => {
+                    resolve({ data: buffer });
+                });
 
                 worker.postMessage({
                     id, z: parseInt(parts[0]), x: parseInt(parts[1]), y: parseInt(parts[2]),
@@ -428,7 +400,15 @@
                 version: 8,
                 sources: {
                     'satellite': { type: 'raster', tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'], tileSize: 256, maxzoom: 19 },
-                    'terrain-source': { type: 'raster-dem', tiles: ['https://tiles.mapterhorn.com/{z}/{x}/{y}.webp'], encoding: 'terrarium', tileSize: 512, maxzoom: 15 }
+
+                    // --- INTÉGRATION MAPTERHORN 512px ---
+                    'terrain-source': {
+                        type: 'raster-dem',
+                        tiles: ['https://tiles.mapterhorn.com/{z}/{x}/{y}.webp'],
+                        encoding: 'terrarium',
+                        tileSize: 512, // Indispensable pour que le relief 3D soit correctement dimensionné !
+                        maxzoom: 15 // Mapterhorn supporte un zoom plus profond
+                    }
                 },
                 layers: [{ id: 'satellite-layer', type: 'raster', source: 'satellite' }]
             }
@@ -448,15 +428,21 @@
                 }
             });
 
+            // La couche d'ombres est désormais calculée et tuilée en 512x512
             map.addSource('cast-shadows-source', {
                 type: 'raster',
                 tiles: [`shadow://{z}/{x}/{y}?az=0&alt=1&ex=${EXAGGERATION}&ts=0`],
-                tileSize: 512, maxzoom: 15
+                tileSize: 512,
+                maxzoom: 15
             });
 
             map.addLayer({
                 id: 'cast-shadows-layer', type: 'raster', source: 'cast-shadows-source',
-                paint: { 'raster-opacity': 0.85, 'raster-fade-duration': 0, 'raster-resampling': 'linear' }
+                paint: {
+                    'raster-opacity': 0.85,
+                    'raster-fade-duration': 0,
+                    'raster-resampling': 'linear'
+                }
             });
 
             updateShadows();
@@ -467,6 +453,7 @@
 
         const now = new Date();
         dateInput.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
         let debounceTimer;
 
         function getSunPosUI() {
@@ -500,17 +487,15 @@
             const maplibreAzimuth = (sunPos.azimuth * 180 / Math.PI + 180) % 360;
             if (map.getLayer('hillshade-layer')) {
                 map.setPaintProperty('hillshade-layer', 'hillshade-illumination-direction', maplibreAzimuth);
-                // La "Golden Hour" teinte doucement l'éclairage de la montagne en orange
                 if (sunPos.altitude * 180 / Math.PI < 15) {
                     map.setPaintProperty('hillshade-layer', 'hillshade-highlight-color', '#ffcca3');
-                    map.setPaintProperty('hillshade-layer', 'hillshade-shadow-color', 'rgba(30, 20, 40, 0.3)');
                 } else {
                     map.setPaintProperty('hillshade-layer', 'hillshade-highlight-color', '#ffffff');
-                    map.setPaintProperty('hillshade-layer', 'hillshade-shadow-color', 'rgba(20, 20, 30, 0.25)');
                 }
             }
 
-            source.setTiles([`shadow://{z}/{x}/{y}?az=${sunPos.azimuth.toFixed(4)}&alt=${sunPos.altitude.toFixed(4)}&ex=${EXAGGERATION}&ts=${Date.now()}`]);
+            const shadowUrl = `shadow://{z}/{x}/{y}?az=${sunPos.azimuth.toFixed(4)}&alt=${sunPos.altitude.toFixed(4)}&ex=${EXAGGERATION}&ts=${Date.now()}`;
+            source.setTiles([shadowUrl]);
         }
 
         timeInput.addEventListener('input', () => {
