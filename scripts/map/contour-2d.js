@@ -166,15 +166,15 @@ export async function initContours(map) {
             layout: {
                 'symbol-placement': 'line',
                 'text-field': ['concat', ['to-string', ['get', 'ele']], ' m'],
-                'text-size': 5,
+                'text-size': 7,
                 'text-font': ['Noto Sans Bold'],
                 'text-anchor': 'center',
                 'symbol-spacing': 250,
                 'text-max-angle': 30,
                 'text-allow-overlap': false,
                 'text-ignore-placement': false,
-                'text-rotation-alignment': 'auto',
-                'text-pitch-alignment': 'viewport',
+                //'text-rotation-alignment': 'auto',
+                //'text-pitch-alignment': 'viewport',
             },
             paint: {
                 'text-color': 'rgba(60, 40, 20, 0.85)',
