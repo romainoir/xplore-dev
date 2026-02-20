@@ -26,7 +26,7 @@ const WIKIMEDIA_LAYERS = [
 
 
 /** Maximum number of photos to fetch per request */
-const FETCH_LIMIT = 200;
+const FETCH_LIMIT = 100;
 
 /** Debounce delay for map move events (ms) */
 const FETCH_DEBOUNCE_MS = 200;
@@ -71,7 +71,7 @@ let fetchAbortController = null;
 const FETCH_BOUNDS_PADDING = 0.5; // Load 50% wider area to prevent popping
 
 /** Prune cache when it exceeds this many features */
-const MAX_CACHED_FEATURES = 800; // Keep fewer features in memory
+const MAX_CACHED_FEATURES = 500; // Keep fewer features in memory
 
 /** Max concurrent thumbnail image loads */
 const MAX_CONCURRENT_THUMB_LOADS = 6;
@@ -315,10 +315,27 @@ async function updateThumbnailImages(mapInstance) {
             } catch (e) { }
         }
 
-        // ── Step 3: Check POI distances and size properties ──
+        // ── Step 3: Find single closest feature for each POI ──
         const targetLarge = new Set();
         const targetSmall = new Set();
         const keptIds = new Set();
+
+        const closestFeaturesToPOIs = new Set();
+        for (const poi of poiScreenPoints) {
+            let closestDistSq = POI_PROXIMITY_SQ;
+            let closestPid = null;
+
+            for (const [pid, entry] of featureMap) {
+                const dx = poi.x - entry.screenPt.x;
+                const dy = poi.y - entry.screenPt.y;
+                const distSq = dx * dx + dy * dy;
+                if (distSq <= closestDistSq) {
+                    closestDistSq = distSq;
+                    closestPid = pid;
+                }
+            }
+            if (closestPid) closestFeaturesToPOIs.add(closestPid);
+        }
 
         for (const pid of lastSelectedIds) {
             keptIds.add(pid);
@@ -326,17 +343,7 @@ async function updateThumbnailImages(mapInstance) {
 
         for (const [pid, entry] of featureMap) {
             keptIds.add(pid);
-            let isLarge = false;
-            // Find minimum distance to any POI
-            for (const poi of poiScreenPoints) {
-                const dx = poi.x - entry.screenPt.x;
-                const dy = poi.y - entry.screenPt.y;
-                if ((dx * dx + dy * dy) <= POI_PROXIMITY_SQ) {
-                    isLarge = true;
-                    break;
-                }
-            }
-            if (isLarge) targetLarge.add(pid);
+            if (closestFeaturesToPOIs.has(pid)) targetLarge.add(pid);
             else targetSmall.add(pid);
         }
 
