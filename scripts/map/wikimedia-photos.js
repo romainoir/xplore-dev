@@ -15,12 +15,14 @@ const WIKIMEDIA_CLUSTER_LAYER_ID = 'wikimedia-photos-clusters';
 const WIKIMEDIA_CLUSTER_COUNT_LAYER_ID = 'wikimedia-photos-cluster-count';
 const WIKIMEDIA_PHOTO_ICON_ID = 'wikimedia-photo-marker';
 
-/** Minimum zoom level to display and fetch photos */
-/** Minimum zoom level to display and fetch photos */
+/** Minimum zoom level to fetch photos and show thumbnails */
 const MIN_ZOOM_FOR_PHOTOS = 12;
 
-/** Minimum zoom level to show photo thumbnails for large clusters */
-const MIN_ZOOM_FOR_THUMBNAILS = 12.0;
+/** Minimum zoom level to show base photo dots (red markers) */
+const MIN_ZOOM_FOR_PHOTO_DOTS = 14;
+
+/** Minimum zoom level to show circular photo thumbnails */
+const MIN_ZOOM_FOR_THUMBNAILS = 12;
 
 /** All layer IDs for Wikimedia photos */
 const WIKIMEDIA_LAYERS = [
@@ -32,7 +34,7 @@ const WIKIMEDIA_LAYERS = [
 
 
 /** Maximum number of photos to fetch per request */
-const FETCH_LIMIT = 500;
+const FETCH_LIMIT = 200;
 
 /** Debounce delay for map move events (ms) */
 const FETCH_DEBOUNCE_MS = 200;
@@ -53,7 +55,6 @@ const THUMBNAIL_MARKER_SIZE = 56;
 
 let map = null;
 let isInitialized = false;
-let fetchDebounceTimer = null;
 let activePopup = null;
 
 /** Map of coordinateKey -> maplibregl.Marker for thumbnail markers */
@@ -217,9 +218,8 @@ function createCircularThumbnailImage(url) {
         img.src = url;
     });
 }
-/** Max screen distance (px) from a POI for a photo to earn a thumbnail */
-const POI_PROXIMITY_PX = 150;
-const POI_PROXIMITY_SQ = POI_PROXIMITY_PX * POI_PROXIMITY_PX;
+/** Max geographic distance (meters) from a POI for a photo to earn a thumbnail */
+const POI_PROXIMITY_METERS = 100;
 
 /** Landscape-photography POI filter (OpenMapTiles schema) */
 const NATURE_LAYER_PATTERNS = ['mountain_peak', 'water_name', 'waterway'];
@@ -256,6 +256,70 @@ const loadedImages = new Set();
 let lastSelectedIds = new Set();
 let thumbnailGeneration = 0;
 
+// ── DEBUG: POI proximity circle visualization ──
+const DEBUG_POI_SOURCE = 'debug-poi-circles';
+const DEBUG_POI_CIRCLE_LAYER = 'debug-poi-circle-fill';
+const DEBUG_POI_DOT_LAYER = 'debug-poi-dots';
+
+function updateDebugPoiCircles(mapInstance, poiCoords) {
+    // Build GeoJSON: a point for each POI + a polygon circle at POI_PROXIMITY_METERS radius
+    const features = [];
+    for (const coords of poiCoords) {
+        // Dot at center
+        features.push({
+            type: 'Feature',
+            geometry: { type: 'Point', coordinates: coords },
+            properties: { type: 'dot' }
+        });
+        // Approximate circle polygon (32 segments)
+        const [lng, lat] = coords;
+        const R = 6371000; // Earth radius in meters
+        const d = POI_PROXIMITY_METERS;
+        const circleCoords = [];
+        for (let i = 0; i <= 32; i++) {
+            const angle = (i / 32) * 2 * Math.PI;
+            const dLat = (d * Math.cos(angle)) / R * (180 / Math.PI);
+            const dLng = (d * Math.sin(angle)) / (R * Math.cos(lat * Math.PI / 180)) * (180 / Math.PI);
+            circleCoords.push([lng + dLng, lat + dLat]);
+        }
+        features.push({
+            type: 'Feature',
+            geometry: { type: 'Polygon', coordinates: [circleCoords] },
+            properties: { type: 'circle' }
+        });
+    }
+
+    const data = { type: 'FeatureCollection', features };
+
+    if (!mapInstance.getSource(DEBUG_POI_SOURCE)) {
+        mapInstance.addSource(DEBUG_POI_SOURCE, { type: 'geojson', data });
+        mapInstance.addLayer({
+            id: DEBUG_POI_CIRCLE_LAYER,
+            type: 'fill',
+            source: DEBUG_POI_SOURCE,
+            filter: ['==', ['get', 'type'], 'circle'],
+            paint: {
+                'fill-color': '#00ffff',
+                'fill-opacity': 0.12
+            }
+        });
+        mapInstance.addLayer({
+            id: DEBUG_POI_DOT_LAYER,
+            type: 'circle',
+            source: DEBUG_POI_SOURCE,
+            filter: ['==', ['get', 'type'], 'dot'],
+            paint: {
+                'circle-radius': 5,
+                'circle-color': '#ffff00',
+                'circle-stroke-width': 1.5,
+                'circle-stroke-color': '#000000'
+            }
+        });
+    } else {
+        mapInstance.getSource(DEBUG_POI_SOURCE).setData(data);
+    }
+}
+
 /**
  * Scans the map for photos near POIs that need thumbnails, fetches them, and adds to sprite.
  * Uses hysteresis: previously shown thumbnails stay visible while on-screen.
@@ -266,7 +330,7 @@ async function updateThumbnailImages(mapInstance) {
         const zoom = mapInstance.getZoom();
         if (zoom < MIN_ZOOM_FOR_THUMBNAILS || !isWikimediaPhotosVisible()) return;
 
-        const layersToQuery = [WIKIMEDIA_CLUSTER_LAYER_ID, WIKIMEDIA_LAYER_ID].filter(id => {
+        const layersToQuery = [WIKIMEDIA_CLUSTER_LAYER_ID, WIKIMEDIA_LAYER_ID, 'wikimedia-thumbnails'].filter(id => {
             const l = mapInstance.getLayer(id);
             return l && mapInstance.getLayoutProperty(id, 'visibility') !== 'none';
         });
@@ -292,6 +356,7 @@ async function updateThumbnailImages(mapInstance) {
             .filter(id => mapInstance.getLayer(id));
 
         const poiScreenPoints = [];
+        const poiGeoPoints = []; // DEBUG: collect geographic coords for visualization
         if (symbolLayerIds.length > 0) {
             const poiFeatures = mapInstance.queryRenderedFeatures(bbox, { layers: symbolLayerIds });
             for (const pf of poiFeatures) {
@@ -306,18 +371,22 @@ async function updateThumbnailImages(mapInstance) {
                         || NATURE_CLASSES.has(cls)
                         || NATURE_SUBCLASSES.has(sub)) {
                         poiScreenPoints.push(mapInstance.project(coords));
+                        poiGeoPoints.push(coords);
                     }
                 } catch (e) { }
             }
         }
 
+        // DEBUG: Draw POI proximity circles on the map
+        updateDebugPoiCircles(mapInstance, poiGeoPoints);
+
         // ── Step 2: Query photo features (center area) ──
-        const inset = Math.min(width, height) * 0.2;
+        const inset = Math.min(width, height) * 0.15;
         const centerBbox = [[inset, inset], [width - inset, height - inset]];
         const features = mapInstance.queryRenderedFeatures(centerBbox, { layers: layersToQuery });
 
-        // Build a map of pid → screenPt for all visible features
-        const featureMap = new Map(); // pid → { screenPt, isCluster }
+        // Build a map of pid → { screenPt, geoCoords, isCluster }
+        const featureMap = new Map();
         for (const f of features) {
             try {
                 const props = f.properties || {};
@@ -325,50 +394,68 @@ async function updateThumbnailImages(mapInstance) {
                 const pid = String(isCluster ? props.coverId : props.pageId);
                 if (!pid || pid === 'undefined') continue;
                 if (!featureMap.has(pid)) {
-                    featureMap.set(pid, { screenPt: mapInstance.project(f.geometry.coordinates), isCluster });
+                    featureMap.set(pid, {
+                        screenPt: mapInstance.project(f.geometry.coordinates),
+                        geoCoords: f.geometry.coordinates,
+                        isCluster
+                    });
                 }
             } catch (e) { }
         }
 
         // ── Step 3: Hysteresis — keep previously selected IDs that are still on-screen ──
+        //    Also enforce spacing: tilt/rotation can make previously-separated thumbnails overlap
         const keptIds = new Set();
         const placedPoints = [];
-        const spacing = 80;
+        const spacing = 75; // Must exceed rendered thumbnail size (56px × 1.12 ≈ 63px)
         const spacingSq = spacing * spacing;
 
         for (const pid of lastSelectedIds) {
             const entry = featureMap.get(pid);
             if (entry) {
-                keptIds.add(pid);
-                placedPoints.push(entry.screenPt);
+                const tooClose = placedPoints.some(p => {
+                    const dx = p.x - entry.screenPt.x;
+                    const dy = p.y - entry.screenPt.y;
+                    return (dx * dx + dy * dy) < spacingSq;
+                });
+                if (!tooClose) {
+                    keptIds.add(pid);
+                    placedPoints.push(entry.screenPt);
+                }
             }
         }
 
-        // ── Step 4: Score NEW candidates by POI distance ──
-        if (poiScreenPoints.length > 0) {
+        // ── Step 4: Score NEW candidates by GEOGRAPHIC distance to nearest POI ──
+        // Convert proximity threshold from meters to degrees (approximate)
+        const centerLat = mapInstance.getCenter().lat;
+        const metersPerDegLat = 111320;
+        const metersPerDegLng = 111320 * Math.cos(centerLat * Math.PI / 180);
+        const proximityDegLat = POI_PROXIMITY_METERS / metersPerDegLat;
+        const proximityDegLng = POI_PROXIMITY_METERS / metersPerDegLng;
+
+        if (poiGeoPoints.length > 0) {
             const scored = [];
             for (const [pid, entry] of featureMap) {
                 if (keptIds.has(pid)) continue; // Already kept via hysteresis
+                const [photoLng, photoLat] = entry.geoCoords;
+
                 let minDistSq = Infinity;
-                for (const poi of poiScreenPoints) {
-                    const dx = poi.x - entry.screenPt.x;
-                    const dy = poi.y - entry.screenPt.y;
-                    const dSq = dx * dx + dy * dy;
+                for (const poiCoord of poiGeoPoints) {
+                    // Normalized distance in "proximity units" (1.0 = at threshold)
+                    const dLat = (poiCoord[1] - photoLat) / proximityDegLat;
+                    const dLng = (poiCoord[0] - photoLng) / proximityDegLng;
+                    const dSq = dLat * dLat + dLng * dLng;
                     if (dSq < minDistSq) minDistSq = dSq;
                 }
-                if (minDistSq <= POI_PROXIMITY_SQ) {
+                if (minDistSq <= 1.0) { // Within proximity radius
                     scored.push({ pid, screenPt: entry.screenPt, distSq: minDistSq, isCluster: entry.isCluster });
                 }
             }
 
-            // Sort: clusters first, then closest to POI
-            scored.sort((a, b) => {
-                if (a.isCluster && !b.isCluster) return -1;
-                if (!a.isCluster && b.isCluster) return 1;
-                return a.distSq - b.distSq;
-            });
+            // Sort: closest to POI first
+            scored.sort((a, b) => a.distSq - b.distSq);
 
-            // Apply spacing against already-placed points
+            // Apply spacing against already-placed points (screen distance — correct for overlap)
             for (const item of scored) {
                 const tooClose = placedPoints.some(p => {
                     const dx = p.x - item.screenPt.x;
@@ -412,25 +499,7 @@ async function updateThumbnailImages(mapInstance) {
             }
         }
 
-        if (queue.length > 0) {
-            console.log(`[WikimediaPhotos] Queueing ${queue.length} new thumbnails for map...`);
-            for (const item of queue.slice(0, 15)) {
-                if (loadedImages.has(item.imageId)) continue;
-                loadedImages.add(item.imageId);
-                try {
-                    const imgData = await createCircularThumbnailImage(item.url);
-                    if (imgData && mapInstance.getStyle()) {
-                        mapInstance.addImage(item.imageId, imgData);
-                        console.log(`[WikimediaPhotos] Thumbnail ADDED to sprite: ${item.imageId}`);
-                    }
-                } catch (err) {
-                    console.warn(`[WikimediaPhotos] Load FAILED for ${item.imageId}:`, err);
-                    loadedImages.delete(item.imageId);
-                }
-            }
-        }
-
-        // 3. Update Thumbnail Layer Filter & Z-Order
+        // 3. Update Thumbnail Layer Filter immediately (cached sprites will show right away)
         if (mapInstance.getLayer('wikimedia-thumbnails')) {
             const filter = ['in',
                 ['to-string', ['case', ['has', 'point_count'], ['get', 'coverId'], ['get', 'pageId']]],
@@ -441,6 +510,28 @@ async function updateThumbnailImages(mapInstance) {
                 mapInstance.moveLayer('wikimedia-thumbnails');
             } catch (e) { }
             console.log(`[WikimediaPhotos] Updated thumbnail filter with ${selectedIds.size} IDs`);
+        }
+
+        // 4. Load new images in PARALLEL (don't block the filter update)
+        if (queue.length > 0) {
+            console.log(`[WikimediaPhotos] Loading ${queue.length} new thumbnails in parallel...`);
+            const batch = queue.slice(0, 15);
+            batch.forEach(item => {
+                if (loadedImages.has(item.imageId)) return;
+                loadedImages.add(item.imageId);
+                createCircularThumbnailImage(item.url)
+                    .then(imgData => {
+                        if (gen !== thumbnailGeneration) return; // Stale
+                        if (imgData && mapInstance.getStyle()) {
+                            mapInstance.addImage(item.imageId, imgData);
+                            console.log(`[WikimediaPhotos] Thumbnail ADDED: ${item.imageId}`);
+                        }
+                    })
+                    .catch(err => {
+                        console.warn(`[WikimediaPhotos] Load FAILED for ${item.imageId}:`, err);
+                        loadedImages.delete(item.imageId);
+                    });
+            });
         }
 
     } catch (e) {
@@ -618,7 +709,7 @@ function addWikimediaLayers(mapInstance) {
             id: WIKIMEDIA_CLUSTER_LAYER_ID,
             type: 'symbol',
             source: WIKIMEDIA_SOURCE_ID,
-            minzoom: MIN_ZOOM_FOR_PHOTOS,
+            minzoom: MIN_ZOOM_FOR_PHOTO_DOTS,
             filter: ['has', 'point_count'],
             layout: {
                 'icon-image': WIKIMEDIA_PHOTO_ICON_ID,
@@ -636,7 +727,7 @@ function addWikimediaLayers(mapInstance) {
             id: WIKIMEDIA_LAYER_ID,
             type: 'symbol',
             source: WIKIMEDIA_SOURCE_ID,
-            minzoom: MIN_ZOOM_FOR_PHOTOS,
+            minzoom: MIN_ZOOM_FOR_PHOTO_DOTS,
             filter: ['!', ['has', 'point_count']],
             layout: {
                 'icon-image': WIKIMEDIA_PHOTO_ICON_ID,
@@ -655,7 +746,7 @@ function addWikimediaLayers(mapInstance) {
             id: WIKIMEDIA_CLUSTER_COUNT_LAYER_ID,
             type: 'symbol',
             source: WIKIMEDIA_SOURCE_ID,
-            minzoom: MIN_ZOOM_FOR_PHOTOS,
+            minzoom: MIN_ZOOM_FOR_PHOTO_DOTS,
             filter: ['all', ['has', 'point_count'], ['<', ['get', 'point_count'], 10]],
             layout: {
                 'text-field': '{point_count_abbreviated}',
@@ -680,7 +771,7 @@ function addWikimediaLayers(mapInstance) {
             id: 'wikimedia-thumbnails',
             type: 'symbol',
             source: WIKIMEDIA_SOURCE_ID,
-            minzoom: MIN_ZOOM_FOR_PHOTOS,
+            minzoom: MIN_ZOOM_FOR_THUMBNAILS,
             layout: {
                 'icon-image': [
                     'concat', 'thumb-',
@@ -885,7 +976,8 @@ export function initializeWikimediaPhotos(mapInstance, options = {}) {
     const initialize = () => {
         addWikimediaLayers(map);
         setupWikimediaEventListeners(map);
-        map.on('moveend', onMapMoveEnd);
+        map.on('movestart', onMapMoveStart);
+        map.on('idle', onMapIdle);
         if (enabled && map.getZoom() >= MIN_ZOOM_FOR_PHOTOS) refreshPhotos();
         isInitialized = true;
         setWikimediaPhotosEnabled(enabled);
@@ -1028,20 +1120,29 @@ async function refreshPhotos() {
 
         console.log(`[WikimediaPhotos] refreshPhotos: Fetched ${data.features.length} features, cache now ${cachedFeatures.size}. New features: ${newCount}.`);
 
-        // Wait for MapLibre to finish rendering the new/cached data before querying
-        map.once('idle', () => {
-            console.log('[WikimediaPhotos] Map Idle, triggering thumbnail update...');
-            updateThumbnailImages(map);
-        });
+        // Short delay for MapLibre to process the new source data, then update thumbnails
+        setTimeout(() => {
+            if (map && isWikimediaPhotosVisible()) updateThumbnailImages(map);
+        }, 100);
     } catch (e) {
         if (e.name === 'AbortError') return; // Pan cancelled this request, no problem
         console.warn('[WikimediaPhotos] Fetch failed:', e);
     }
 }
 
-function onMapMoveEnd() {
-    if (fetchDebounceTimer) clearTimeout(fetchDebounceTimer);
-    fetchDebounceTimer = setTimeout(refreshPhotos, FETCH_DEBOUNCE_MS);
+/** Abort any in-flight fetch when the user starts panning/zooming */
+function onMapMoveStart() {
+    if (fetchAbortController) {
+        fetchAbortController.abort();
+        fetchAbortController = null;
+    }
+}
+
+/** Only fetch when the map is fully idle (no more panning/zooming/animating) */
+function onMapIdle() {
+    if (!map || map.getZoom() < MIN_ZOOM_FOR_PHOTOS) return;
+    if (!isWikimediaPhotosVisible()) return;
+    refreshPhotos();
 }
 
 export function setWikimediaPhotosEnabled(enabled) {
@@ -1075,7 +1176,8 @@ export function forceRefreshWikimediaPhotos() {
 
 export function destroyWikimediaPhotos() {
     if (!map) return;
-    map.off('moveend', onMapMoveEnd);
+    map.off('movestart', onMapMoveStart);
+    map.off('idle', onMapIdle);
     resetSpatialCache();
     [WIKIMEDIA_LAYER_ID, WIKIMEDIA_CLUSTER_LAYER_ID, WIKIMEDIA_CLUSTER_COUNT_LAYER_ID, 'wikimedia-thumbnails'].forEach(id => {
         if (map.getLayer(id)) map.removeLayer(id);
