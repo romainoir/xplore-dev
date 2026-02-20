@@ -26,13 +26,8 @@ const WIKIMEDIA_LAYERS = [
 /** Maximum number of photos to fetch per request */
 const FETCH_LIMIT = 100;
 
-/** Debounce delay for map move events (ms) */
-const FETCH_DEBOUNCE_MS = 200;
-
-/** Thumbnail marker size (diameter in pixels) */
-const THUMBNAIL_MARKER_SIZE = 56;
-
-
+/** Thumbnail sprite size (diameter in pixels) */
+const THUMBNAIL_SPRITE_SIZE = 56;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // State
@@ -40,20 +35,12 @@ const THUMBNAIL_MARKER_SIZE = 56;
 
 let map = null;
 let isInitialized = false;
-let fetchDebounceTimer = null;
 let activePopup = null;
-
-let activeFilterIds = new Set();
-let moveEndDebounceTimer = null;
-let moveDebounceTimer = null;
 let idleDebounceTimer = null;
 
 let thumbnailGeneration = 0;
 let lastSelectedIds = new Set();
 const loadedImages = new Set();
-
-/** Map of coordinateKey -> maplibregl.Marker for thumbnail markers */
-const thumbnailMarkers = new Map();
 
 // ── Spatial Cache State ──
 /** Accumulated photo features keyed by pageId — never refetched */
@@ -66,91 +53,13 @@ let lastFetchBounds = null;
 let fetchAbortController = null;
 
 /** How much to expand the viewport bounds when fetching (0.5 = 50% on each side) */
-const FETCH_BOUNDS_PADDING = 0.5; // Load 50% wider area to prevent popping
+const FETCH_BOUNDS_PADDING = 0.5;
 
 /** Prune cache when it exceeds this many features */
-const MAX_CACHED_FEATURES = 500; // Keep fewer features in memory
-
-/** Max concurrent thumbnail image loads */
-const MAX_CONCURRENT_THUMB_LOADS = 6;
+const MAX_CACHED_FEATURES = 500;
 
 
 
-
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Photo Marker Icon
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Creates a camera icon for photo markers
- */
-function createPhotoMarkerIcon(color = PHOTO_MARKER_COLOR) {
-    const size = 48;
-    const canvas = document.createElement('canvas');
-    canvas.width = size;
-    canvas.height = size;
-    const ctx = canvas.getContext('2d');
-    ctx.clearRect(0, 0, size, size);
-
-    const centerX = size / 2;
-    const centerY = size / 2;
-    const radius = size * 0.38;
-
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.35)';
-    ctx.shadowBlur = 6;
-    ctx.shadowOffsetX = 0;
-    ctx.shadowOffsetY = 2;
-
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
-    ctx.fillStyle = '#ffffff';
-    ctx.fill();
-
-    ctx.shadowColor = 'transparent';
-    ctx.shadowBlur = 0;
-
-    const innerRadius = radius - 3;
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, innerRadius, 0, Math.PI * 2);
-    ctx.fillStyle = color;
-    ctx.fill();
-
-    ctx.fillStyle = '#ffffff';
-    const iconSize = innerRadius * 0.7;
-    const iconX = centerX - iconSize / 2;
-    const iconY = centerY - iconSize / 2;
-
-    const bodyWidth = iconSize;
-    const bodyHeight = iconSize * 0.68;
-    const bodyY = iconY + iconSize * 0.22;
-    const bodyRadius = 2;
-
-    ctx.beginPath();
-    ctx.roundRect(iconX, bodyY, bodyWidth, bodyHeight, bodyRadius);
-    ctx.fill();
-
-    const bumpWidth = iconSize * 0.38;
-    const bumpHeight = iconSize * 0.16;
-    ctx.beginPath();
-    ctx.roundRect(centerX - bumpWidth / 2, iconY + iconSize * 0.08, bumpWidth, bumpHeight, 1);
-    ctx.fill();
-
-    ctx.fillStyle = color;
-    const lensRadius = iconSize * 0.22;
-    ctx.beginPath();
-    ctx.arc(centerX, bodyY + bodyHeight / 2, lensRadius, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.fillStyle = '#ffffff';
-    ctx.globalAlpha = 0.4;
-    ctx.beginPath();
-    ctx.arc(centerX - lensRadius * 0.25, bodyY + bodyHeight / 2 - lensRadius * 0.2, lensRadius * 0.35, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.globalAlpha = 1;
-
-    return ctx.getImageData(0, 0, size, size);
-}
 
 
 
@@ -160,7 +69,7 @@ function createPhotoMarkerIcon(color = PHOTO_MARKER_COLOR) {
  */
 function createCircularThumbnailImage(url) {
     return new Promise((resolve, reject) => {
-        const size = THUMBNAIL_MARKER_SIZE; // 56px defined in constants
+        const size = THUMBNAIL_SPRITE_SIZE;
         const img = new Image();
         img.crossOrigin = 'Anonymous';
         img.onload = () => {
@@ -394,20 +303,16 @@ async function updateThumbnailImages(mapInstance) {
             try { mapInstance.moveLayer('wikimedia-thumbnails-small'); } catch (e) { }
         }
 
-        // 4. Load new images in PARALLEL
+        // 4. Load all queued images in parallel (browser limits concurrent connections per host)
         if (queue.length > 0) {
-            const batch = queue.slice(0, 15);
-            batch.forEach(item => {
+            queue.forEach(item => {
                 if (loadedImages.has(item.imageId)) return;
                 loadedImages.add(item.imageId);
                 createCircularThumbnailImage(item.url)
                     .then(imgData => {
                         if (imgData && mapInstance.getStyle()) {
                             mapInstance.addImage(item.imageId, imgData);
-                            // Ensure the map re-runs the logic to update filters with the new image
-                            if (lastSelectedIds.has(item.pid)) {
-                                scheduleThumbnailUpdate(mapInstance);
-                            }
+                            scheduleThumbnailUpdate(mapInstance);
                         }
                     })
                     .catch(err => {
@@ -443,20 +348,20 @@ const photoMetadataCache = new Map();
 
 
 /**
- * Hybrid fetch: uses list=geosearch for 100% coordinate coverage,
- * then parallel imageinfo calls for thumbnail URLs.
+ * Fetch geotagged photos from Wikimedia Commons within bounds.
+ * Uses a single list=geosearch API call — thumbnail URLs are derived
+ * from the title via getPhotoThumbnailUrl(), eliminating the need
+ * for expensive secondary imageinfo batch requests.
  */
 export async function fetchWikimediaPhotosInBounds(bounds, signal) {
     const sw = bounds.getSouthWest();
     const ne = bounds.getNorthEast();
 
     const baseUrl = 'https://commons.wikimedia.org/w/api.php?action=query&format=json&origin=*';
-    // Use list=geosearch to get all titles/coords in bounds
-    // gsbbox = top|left|bottom|right
     const searchUrl = `${baseUrl}&list=geosearch&gsbbox=${ne.lat}|${sw.lng}|${sw.lat}|${ne.lng}&gsnamespace=6&gslimit=${FETCH_LIMIT}`;
 
     try {
-        console.log(`[WikimediaPhotos] Fetching: ${searchUrl} (Bounding Box: ${ne.lat},${sw.lng} to ${sw.lat},${ne.lng})`);
+        console.log(`[WikimediaPhotos] Fetching geosearch (${FETCH_LIMIT} limit)`);
         const searchRes = await fetch(searchUrl, { signal });
         const text = await searchRes.text();
         let searchData;
@@ -473,44 +378,21 @@ export async function fetchWikimediaPhotosInBounds(bounds, signal) {
         }
 
         if (!searchData.query || !searchData.query.geosearch) {
-            console.warn('[WikimediaPhotos] No geosearch results or query missing. Full Response:', JSON.stringify(searchData));
+            console.warn('[WikimediaPhotos] No geosearch results.');
             return { type: 'FeatureCollection', features: [] };
         }
 
         const photos = searchData.query.geosearch;
-        console.log(`[WikimediaPhotos] Found ${photos.length} photos in geosearch`);
-        // Batch process imageinfo for thumbnails (max 50 per call)
-        const batchSize = 50;
-        const thumbnailData = new Map();
+        console.log(`[WikimediaPhotos] Found ${photos.length} photos`);
 
-        const fetchBatch = async (batch) => {
-            const titles = batch.map(p => p.title).join('|');
-            const infoUrl = `${baseUrl}&prop=imageinfo&iiprop=url&iiurlwidth=200&titles=${encodeURIComponent(titles)}`;
-            const infoRes = await fetch(infoUrl, { signal });
-            const infoData = await infoRes.json();
-            if (infoData.query && infoData.query.pages) {
-                Object.values(infoData.query.pages).forEach(page => {
-                    if (page.imageinfo && page.imageinfo[0]) {
-                        thumbnailData.set(page.title, page.imageinfo[0].thumburl);
-                    }
-                });
-            }
-        };
-
-        const batches = [];
-        for (let i = 0; i < photos.length; i += batchSize) {
-            batches.push(fetchBatch(photos.slice(i, i + batchSize)));
-        }
-
-        await Promise.all(batches);
-
+        // Build features directly — thumbnail URLs are derived from titles
         const features = photos.map(p => ({
             type: 'Feature',
             geometry: { type: 'Point', coordinates: [p.lon, p.lat] },
             properties: {
                 pageId: p.pageid,
                 title: p.title,
-                thumbnailUrl: thumbnailData.get(p.title) || ''
+                thumbnailUrl: getPhotoThumbnailUrl(p.title, 200)
             }
         }));
 
@@ -996,7 +878,6 @@ function onMapMoveEnd() {
     if (idleDebounceTimer) clearTimeout(idleDebounceTimer);
     idleDebounceTimer = setTimeout(() => {
         refreshPhotos();
-        requestAnimationFrame(() => updateThumbnailImages(map));
     }, 150);
 }
 
@@ -1038,7 +919,6 @@ export function destroyWikimediaPhotos() {
         if (map.getLayer(id)) map.removeLayer(id);
     });
     if (map.getSource(WIKIMEDIA_SOURCE_ID)) map.removeSource(WIKIMEDIA_SOURCE_ID);
-    if (map.hasImage(WIKIMEDIA_PHOTO_ICON_ID)) map.removeImage(WIKIMEDIA_PHOTO_ICON_ID);
     if (activePopup) activePopup.remove();
     clearThumbnailImages();
     map = null;
