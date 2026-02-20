@@ -65,14 +65,19 @@ const MAX_CACHED_FEATURES = 500;
 
 /**
  * Creates a circular thumbnail image with a border using Canvas.
+ * Uses fetch() + blob URL to avoid CORS issues with Wikimedia's 302 redirects.
  * Returns ImageData suitable for map.addImage()
  */
 function createCircularThumbnailImage(url) {
-    return new Promise((resolve, reject) => {
+    return fetch(url).then(res => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.blob();
+    }).then(blob => new Promise((resolve, reject) => {
+        const objectUrl = URL.createObjectURL(blob);
         const size = THUMBNAIL_SPRITE_SIZE;
         const img = new Image();
-        img.crossOrigin = 'Anonymous';
         img.onload = () => {
+            URL.revokeObjectURL(objectUrl);
             const canvas = document.createElement('canvas');
             canvas.width = size;
             canvas.height = size;
@@ -110,9 +115,12 @@ function createCircularThumbnailImage(url) {
             // 4. Return Data
             resolve(ctx.getImageData(0, 0, size, size));
         };
-        img.onerror = () => reject(new Error('Image fetch failed'));
-        img.src = url;
-    });
+        img.onerror = () => {
+            URL.revokeObjectURL(objectUrl);
+            reject(new Error('Image decode failed'));
+        };
+        img.src = objectUrl;
+    }));
 }
 /** Max screen distance (px) from a POI for a photo to earn a thumbnail */
 const POI_PROXIMITY_PX = 150;
@@ -757,15 +765,22 @@ function getCenterBounds(mapInstance) {
     );
 }
 
-/** Expand a LngLatBounds by a padding factor on each side */
+/** Expand a LngLatBounds by a padding factor on each side, clamped to prevent API errors */
 function expandBounds(bounds, padding) {
     const n = bounds.getNorth(), s = bounds.getSouth();
     const e = bounds.getEast(), w = bounds.getWest();
     const latPad = (n - s) * padding;
     const lngPad = (e - w) * padding;
+    // Wikimedia geosearch limits bounding box to ~10km per side (~0.09° at mid-latitudes)
+    // Clamp total span to avoid API "area too large" errors
+    const MAX_SPAN = 0.18; // ~20km total span — stays within Wikimedia limits
+    const totalLat = Math.min((n - s) + 2 * latPad, MAX_SPAN);
+    const totalLng = Math.min((e - w) + 2 * lngPad, MAX_SPAN);
+    const centerLat = (n + s) / 2;
+    const centerLng = (e + w) / 2;
     return new maplibregl.LngLatBounds(
-        [w - lngPad, s - latPad],
-        [e + lngPad, n + latPad]
+        [centerLng - totalLng / 2, centerLat - totalLat / 2],
+        [centerLng + totalLng / 2, centerLat + totalLat / 2]
     );
 }
 
@@ -792,9 +807,17 @@ function pruneDistantFeatures(viewportBounds) {
 
 /** Reset the spatial cache (e.g. when disabling photos or destroying) */
 function resetSpatialCache() {
-    console.log('[WikimediaPhotos] resetSpatialCache called. Clearing cache...');
+    console.log('[WikimediaPhotos] resetSpatialCache called. Clearing all caches...');
     cachedFeatures.clear();
     lastFetchBounds = null;
+    // Clear loaded sprite images from MapLibre
+    if (map) {
+        for (const imageId of loadedImages) {
+            try { if (map.hasImage(imageId)) map.removeImage(imageId); } catch (e) { }
+        }
+    }
+    loadedImages.clear();
+    lastSelectedIds.clear();
     if (fetchAbortController) {
         fetchAbortController.abort();
         fetchAbortController = null;
@@ -864,6 +887,11 @@ async function refreshPhotos() {
 
 /** Abort any in-flight fetch when the user starts panning/zooming */
 function onMapMoveStart() {
+    // Cancel pending debounce timer so intermediate moveend events during flyTo don't trigger fetches
+    if (idleDebounceTimer) {
+        clearTimeout(idleDebounceTimer);
+        idleDebounceTimer = null;
+    }
     if (fetchAbortController) {
         fetchAbortController.abort();
         fetchAbortController = null;
@@ -878,7 +906,7 @@ function onMapMoveEnd() {
     if (idleDebounceTimer) clearTimeout(idleDebounceTimer);
     idleDebounceTimer = setTimeout(() => {
         refreshPhotos();
-    }, 150);
+    }, 500);
 }
 
 export function setWikimediaPhotosEnabled(enabled) {
