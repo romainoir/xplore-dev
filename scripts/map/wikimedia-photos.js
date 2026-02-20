@@ -26,7 +26,7 @@ const WIKIMEDIA_LAYERS = [
 
 
 /** Maximum number of photos to fetch per request */
-const FETCH_LIMIT = 500;
+const FETCH_LIMIT = 200;
 
 /** Debounce delay for map move events (ms) */
 const FETCH_DEBOUNCE_MS = 200;
@@ -68,10 +68,10 @@ let lastFetchBounds = null;
 let fetchAbortController = null;
 
 /** How much to expand the viewport bounds when fetching (0.5 = 50% on each side) */
-const FETCH_BOUNDS_PADDING = 0.5;
+const FETCH_BOUNDS_PADDING = 0.5; // Load 50% wider area to prevent popping
 
 /** Prune cache when it exceeds this many features */
-const MAX_CACHED_FEATURES = 2000;
+const MAX_CACHED_FEATURES = 800; // Keep fewer features in memory
 
 /** Max concurrent thumbnail image loads */
 const MAX_CONCURRENT_THUMB_LOADS = 6;
@@ -568,7 +568,7 @@ function addWikimediaLayers(mapInstance) {
             data: { type: 'FeatureCollection', features: [] },
             cluster: true,
             clusterMaxZoom: 18,
-            clusterRadius: 32,
+            clusterRadius: 48,
             clusterProperties: {
                 'coverId': ['min', ['get', 'pageId']]
             }
