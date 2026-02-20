@@ -112,78 +112,84 @@ export async function initContours(map) {
     const majorColor = darkenColor(contourColor, 0.3);
 
     // ── Minor contour lines (every 10m) — visible in 2D only ──
-    map.addLayer({
-        id: LINE_MINOR,
-        type: 'line',
-        source: CONTOUR_SRC,
-        'source-layer': 'contours',
-        filter: ['==', ['get', 'level'], 0],
-        paint: {
-            'line-color': contourColor,
-            'line-width': 1,
-            'line-opacity': [
-                'interpolate', ['linear'], ['zoom'],
-                11, 0,
-                13, 0.6,   // shader minor alpha is 0.6
-            ],
-        },
-        layout: { 'line-join': 'round' },
-        minzoom: 11,
-    });
+    if (!map.getLayer(LINE_MINOR)) {
+        map.addLayer({
+            id: LINE_MINOR,
+            type: 'line',
+            source: CONTOUR_SRC,
+            'source-layer': 'contours',
+            filter: ['==', ['get', 'level'], 0],
+            paint: {
+                'line-color': contourColor,
+                'line-width': 1,
+                'line-opacity': [
+                    'interpolate', ['linear'], ['zoom'],
+                    11, 0,
+                    13, 0.6,   // shader minor alpha is 0.6
+                ],
+            },
+            layout: { 'line-join': 'round' },
+            minzoom: 11,
+        });
+    }
 
     // ── Major contour lines (every 100m) — visible in 2D only ──
-    map.addLayer({
-        id: LINE_MAJOR,
-        type: 'line',
-        source: CONTOUR_SRC,
-        'source-layer': 'contours',
-        filter: ['>', ['get', 'level'], 0],
-        paint: {
-            'line-color': majorColor,
-            'line-width': 1.5,
-            'line-opacity': [
-                'interpolate', ['linear'], ['zoom'],
-                11, 0,
-                13, 1,
-            ],
-        },
-        layout: { 'line-join': 'round' },
-        minzoom: 11,
-    });
+    if (!map.getLayer(LINE_MAJOR)) {
+        map.addLayer({
+            id: LINE_MAJOR,
+            type: 'line',
+            source: CONTOUR_SRC,
+            'source-layer': 'contours',
+            filter: ['>', ['get', 'level'], 0],
+            paint: {
+                'line-color': majorColor,
+                'line-width': 1.5,
+                'line-opacity': [
+                    'interpolate', ['linear'], ['zoom'],
+                    11, 0,
+                    13, 1,
+                ],
+            },
+            layout: { 'line-join': 'round' },
+            minzoom: 11,
+        });
+    }
 
     // ── Labels on major contours — always visible (both 2D & 3D) ──
-    map.addLayer({
-        id: LABEL_ID,
-        type: 'symbol',
-        source: CONTOUR_SRC,
-        'source-layer': 'contours',
-        filter: ['>', ['get', 'level'], 0],
-        layout: {
-            'symbol-placement': 'line',
-            'text-field': ['concat', ['to-string', ['get', 'ele']], ' m'],
-            'text-size': 10,
-            'text-font': ['Noto Sans Bold'],
-            'text-anchor': 'center',
-            'symbol-spacing': 250,
-            'text-max-angle': 30,
-            'text-allow-overlap': false,
-            'text-ignore-placement': false,
-            'text-rotation-alignment': 'auto',
-            'text-pitch-alignment': 'viewport',
-        },
-        paint: {
-            'text-color': 'rgba(60, 40, 20, 0.85)',
-            'text-halo-color': 'rgba(255, 255, 255, 0.95)',
-            'text-halo-width': 2.5,
-            'text-opacity': [
-                'interpolate', ['linear'], ['zoom'],
-                11, 0,
-                13, 0.85,
-                16, 1,
-            ],
-        },
-        minzoom: 11,
-    });
+    if (!map.getLayer(LABEL_ID)) {
+        map.addLayer({
+            id: LABEL_ID,
+            type: 'symbol',
+            source: CONTOUR_SRC,
+            'source-layer': 'contours',
+            filter: ['>', ['get', 'level'], 0],
+            layout: {
+                'symbol-placement': 'line',
+                'text-field': ['concat', ['to-string', ['get', 'ele']], ' m'],
+                'text-size': 10,
+                'text-font': ['Noto Sans Bold'],
+                'text-anchor': 'center',
+                'symbol-spacing': 250,
+                'text-max-angle': 30,
+                'text-allow-overlap': false,
+                'text-ignore-placement': false,
+                'text-rotation-alignment': 'auto',
+                'text-pitch-alignment': 'viewport',
+            },
+            paint: {
+                'text-color': 'rgba(60, 40, 20, 0.85)',
+                'text-halo-color': 'rgba(255, 255, 255, 0.95)',
+                'text-halo-width': 2.5,
+                'text-opacity': [
+                    'interpolate', ['linear'], ['zoom'],
+                    11, 0,
+                    13, 0.85,
+                    16, 1,
+                ],
+            },
+            minzoom: 11,
+        });
+    }
 
     // Initial sync + listen for 2D ↔ 3D switches
     syncVisibility(map);
