@@ -166,7 +166,7 @@ export async function initContours(map) {
             layout: {
                 'symbol-placement': 'line',
                 'text-field': ['concat', ['to-string', ['get', 'ele']], ' m'],
-                'text-size': 10,
+                'text-size': 5,
                 'text-font': ['Noto Sans Bold'],
                 'text-anchor': 'center',
                 'symbol-spacing': 250,
