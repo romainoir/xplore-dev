@@ -15,23 +15,14 @@ import type { ShadowStyleLayer } from '../../style/style_layer/shadow_style_laye
 export type ShadowUniformsType = {
     'u_image': Uniform1i;
     'u_image_raw': Uniform1i;
-    'u_neigh_n': Uniform1i;
-    'u_neigh_ne': Uniform1i;
-    'u_neigh_e': Uniform1i;
-    'u_neigh_se': Uniform1i;
-    'u_neigh_s': Uniform1i;
-    'u_neigh_sw': Uniform1i;
-    'u_neigh_w': Uniform1i;
-    'u_neigh_nw': Uniform1i;
+    'u_neigh_lat': Uniform1i;
+    'u_neigh_long': Uniform1i;
+    'u_neigh_diag': Uniform1i;
 
-    'u_neigh_zoom_n': Uniform4f;
-    'u_neigh_zoom_ne': Uniform4f;
-    'u_neigh_zoom_e': Uniform4f;
-    'u_neigh_zoom_se': Uniform4f;
-    'u_neigh_zoom_s': Uniform4f;
-    'u_neigh_zoom_sw': Uniform4f;
-    'u_neigh_zoom_w': Uniform4f;
-    'u_neigh_zoom_nw': Uniform4f;
+    'u_neigh_zoom_lat': Uniform4f;
+    'u_neigh_zoom_long': Uniform4f;
+    'u_neigh_zoom_diag': Uniform4f;
+    'u_neigh_offsets': Uniform2f;
 
     'u_grandparent_dem': Uniform1i;
     'u_grandparent_zoom': Uniform4f;
@@ -61,23 +52,14 @@ export type ShadowUniformsType = {
 const shadowUniforms = (context: Context, locations: UniformLocations): ShadowUniformsType => ({
     'u_image': new Uniform1i(context, locations.u_image),
     'u_image_raw': new Uniform1i(context, locations.u_image_raw),
-    'u_neigh_n': new Uniform1i(context, locations.u_neigh_n),
-    'u_neigh_ne': new Uniform1i(context, locations.u_neigh_ne),
-    'u_neigh_e': new Uniform1i(context, locations.u_neigh_e),
-    'u_neigh_se': new Uniform1i(context, locations.u_neigh_se),
-    'u_neigh_s': new Uniform1i(context, locations.u_neigh_s),
-    'u_neigh_sw': new Uniform1i(context, locations.u_neigh_sw),
-    'u_neigh_w': new Uniform1i(context, locations.u_neigh_w),
-    'u_neigh_nw': new Uniform1i(context, locations.u_neigh_nw),
+    'u_neigh_lat': new Uniform1i(context, locations.u_neigh_lat),
+    'u_neigh_long': new Uniform1i(context, locations.u_neigh_long),
+    'u_neigh_diag': new Uniform1i(context, locations.u_neigh_diag),
 
-    'u_neigh_zoom_n': new Uniform4f(context, locations.u_neigh_zoom_n),
-    'u_neigh_zoom_ne': new Uniform4f(context, locations.u_neigh_zoom_ne),
-    'u_neigh_zoom_e': new Uniform4f(context, locations.u_neigh_zoom_e),
-    'u_neigh_zoom_se': new Uniform4f(context, locations.u_neigh_zoom_se),
-    'u_neigh_zoom_s': new Uniform4f(context, locations.u_neigh_zoom_s),
-    'u_neigh_zoom_sw': new Uniform4f(context, locations.u_neigh_zoom_sw),
-    'u_neigh_zoom_w': new Uniform4f(context, locations.u_neigh_zoom_w),
-    'u_neigh_zoom_nw': new Uniform4f(context, locations.u_neigh_zoom_nw),
+    'u_neigh_zoom_lat': new Uniform4f(context, locations.u_neigh_zoom_lat),
+    'u_neigh_zoom_long': new Uniform4f(context, locations.u_neigh_zoom_long),
+    'u_neigh_zoom_diag': new Uniform4f(context, locations.u_neigh_zoom_diag),
+    'u_neigh_offsets': new Uniform2f(context, locations.u_neigh_offsets),
 
     'u_grandparent_dem': new Uniform1i(context, locations.u_grandparent_dem),
     'u_grandparent_zoom': new Uniform4f(context, locations.u_grandparent_zoom),
@@ -170,23 +152,14 @@ const shadowUniformValues = (
     return {
         'u_image': 0,
         'u_image_raw': 1,
-        'u_neigh_n': 4,
-        'u_neigh_ne': 5,
-        'u_neigh_e': 6,
-        'u_neigh_se': 7,
-        'u_neigh_s': 8,
-        'u_neigh_sw': 9,
-        'u_neigh_w': 10,
-        'u_neigh_nw': 11,
+        'u_neigh_lat': 4,
+        'u_neigh_long': 5,
+        'u_neigh_diag': 6,
 
-        'u_neigh_zoom_n': neighborZoomInfos[0],
-        'u_neigh_zoom_ne': neighborZoomInfos[1],
-        'u_neigh_zoom_e': neighborZoomInfos[2],
-        'u_neigh_zoom_se': neighborZoomInfos[3],
-        'u_neigh_zoom_s': neighborZoomInfos[4],
-        'u_neigh_zoom_sw': neighborZoomInfos[5],
-        'u_neigh_zoom_w': neighborZoomInfos[6],
-        'u_neigh_zoom_nw': neighborZoomInfos[7],
+        'u_neigh_zoom_lat': neighborZoomInfos[0],
+        'u_neigh_zoom_long': neighborZoomInfos[1],
+        'u_neigh_zoom_diag': neighborZoomInfos[2],
+        'u_neigh_offsets': [dirX >= 0 ? 1 : -1, dirY >= 0 ? 1 : -1],
 
         'u_grandparent_dem': 12,
         'u_grandparent_zoom': grandparentZoomConfig || [0, 0, 0, 0],

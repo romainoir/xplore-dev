@@ -2,23 +2,14 @@
 
 uniform sampler2D u_image;       // 0: Center FBO/DEM
 uniform sampler2D u_image_raw;   // 1: Center Raw Backup
-uniform sampler2D u_neigh_n;     // 4
-uniform sampler2D u_neigh_ne;    // 5
-uniform sampler2D u_neigh_e;     // 6
-uniform sampler2D u_neigh_se;    // 7
-uniform sampler2D u_neigh_s;     // 8
-uniform sampler2D u_neigh_sw;    // 9
-uniform sampler2D u_neigh_w;     // 10
-uniform sampler2D u_neigh_nw;    // 11
+uniform sampler2D u_neigh_lat;   // 4: Lateral (E/W)
+uniform sampler2D u_neigh_long;  // 5: Longitudinal (N/S)
+uniform sampler2D u_neigh_diag;  // 6: Diagonal
 
-uniform vec4 u_neigh_zoom_n;
-uniform vec4 u_neigh_zoom_ne;
-uniform vec4 u_neigh_zoom_e;
-uniform vec4 u_neigh_zoom_se;
-uniform vec4 u_neigh_zoom_s;
-uniform vec4 u_neigh_zoom_sw;
-uniform vec4 u_neigh_zoom_w;
-uniform vec4 u_neigh_zoom_nw;
+uniform vec4 u_neigh_zoom_lat;
+uniform vec4 u_neigh_zoom_long;
+uniform vec4 u_neigh_zoom_diag;
+uniform vec2 u_neigh_offsets;    // [dx, dy] sun-facing neighbor direction
 
 uniform sampler2D u_grandparent_dem; // 12
 uniform vec4 u_grandparent_zoom; // [scale, offsetX, offsetY, zoomDiff]
@@ -87,27 +78,35 @@ float decodeNeighbor(sampler2D tex, vec2 uv, vec4 z) {
     return decodeElevation(tex, transformUV(uv, z));
 }
 
-// New robust global elevation lookup matching Copy 18
+// New robust global elevation lookup optimized for 3 sun-facing neighbors
 float sampleGlobalElevation(vec2 uv) {
     if (uv.x >= 0.0 && uv.x <= 1.0 && uv.y >= 0.0 && uv.y <= 1.0) {
         return sampleElevation(u_image, uv);
     }
     
-    // Fast Sampling for Neighbors
-    if (uv.x < 0.0) {
-        vec2 uv_w = uv + vec2(1.0, 0.0);
-        if (uv.y >= 0.0 && uv.y <= 1.0) return decodeNeighbor(u_neigh_w, uv_w, u_neigh_zoom_w);
-        if (uv.y < 0.0) return decodeNeighbor(u_neigh_nw, uv_w + vec2(0.0, 1.0), u_neigh_zoom_nw);
-        return decodeNeighbor(u_neigh_sw, uv_w - vec2(0.0, 1.0), u_neigh_zoom_sw);
+    float dx = u_neigh_offsets.x;
+    float dy = u_neigh_offsets.y;
+
+    // Lateral Neighbor (West or East)
+    if ((uv.x < 0.0 && dx < 0.0) || (uv.x > 1.0 && dx > 0.0)) {
+        vec2 uv_lat = uv - vec2(dx, 0.0);
+        if (uv.y >= 0.0 && uv.y <= 1.0) return decodeNeighbor(u_neigh_lat, uv_lat, u_neigh_zoom_lat);
+        
+        // Diagonal Neighbor
+        if ((uv.y < 0.0 && dy < 0.0) || (uv.y > 1.0 && dy > 0.0)) {
+            return decodeNeighbor(u_neigh_diag, uv_lat - vec2(0.0, dy), u_neigh_zoom_diag);
+        }
     }
-    if (uv.x > 1.0) {
-        vec2 uv_e = uv - vec2(1.0, 0.0);
-        if (uv.y >= 0.0 && uv.y <= 1.0) return decodeNeighbor(u_neigh_e, uv_e, u_neigh_zoom_e);
-        if (uv.y < 0.0) return decodeNeighbor(u_neigh_ne, uv_e + vec2(0.0, 1.0), u_neigh_zoom_ne);
-        return decodeNeighbor(u_neigh_se, uv_e - vec2(0.0, 1.0), u_neigh_zoom_se);
+    
+    // Longitudinal Neighbor (North or South)
+    if ((uv.y < 0.0 && dy < 0.0) || (uv.y > 1.0 && dy > 0.0)) {
+        if (uv.x >= 0.0 && uv.x <= 1.0) {
+            return decodeNeighbor(u_neigh_long, uv - vec2(0.0, dy), u_neigh_zoom_long);
+        }
     }
-    if (uv.y < 0.0) return decodeNeighbor(u_neigh_n, uv + vec2(0.0, 1.0), u_neigh_zoom_n);
-    return decodeNeighbor(u_neigh_s, uv - vec2(0.0, 1.0), u_neigh_zoom_s);
+    
+    // Fallback to center tile raw if neighbor not provided or in non-sun direction
+    return decodeElevation(u_image_raw, fract(uv));
 }
 
 // Compute Sobel gradient for surface normal

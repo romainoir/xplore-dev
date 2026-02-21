@@ -360,22 +360,16 @@ function renderShadowTiles(
             continue; // No DEM texture available yet
         }
 
-        // Bind 8 neighbors (N, NE, E, SE, S, SW, W, NW) to units 4-11
-        // (V4.15.25: Shifted to avoid internal collisions)
-        const neighborInfos = [
-            getNeighborTileWithZoom(ctx, coord, 0, -1),  // N
-            getNeighborTileWithZoom(ctx, coord, 1, -1),  // NE
-            getNeighborTileWithZoom(ctx, coord, 1, 0),   // E
-            getNeighborTileWithZoom(ctx, coord, 1, 1),   // SE
-            getNeighborTileWithZoom(ctx, coord, 0, 1),   // S
-            getNeighborTileWithZoom(ctx, coord, -1, 1),  // SW
-            getNeighborTileWithZoom(ctx, coord, -1, 0),  // W
-            getNeighborTileWithZoom(ctx, coord, -1, -1)  // NW
-        ];
+        // Bind 3 sun-facing neighbors (Lateral, Longitudinal, Diagonal) to units 4-6
+        const sunDirProperties = layer.getShadowProperties();
+        const sdirX = Math.sin(sunDirProperties.directionRadians);
+        const sdirY = -Math.cos(sunDirProperties.directionRadians);
+        const neighborOffsets = getSunFacingNeighborOffsets(sdirX, sdirY);
 
         const neighborZoomInfos: Array<[number, number, number, number]> = [];
-        for (let i = 0; i < 8; i++) {
-            const info = neighborInfos[i];
+        for (let i = 0; i < 3; i++) {
+            const offset = neighborOffsets[i];
+            const info = getNeighborTileWithZoom(ctx, coord, offset[0], offset[1]);
 
             context.activeTexture.set(gl.TEXTURE4 + i);
             const tex = info.tile ? ensureDemTexture(painter, info.tile) : null;
@@ -420,16 +414,8 @@ function renderShadowTiles(
             gpInfo.zoomInfo
         );
 
-        // === DIAGNOSTIC: Log East/NE results for the FIRST tile every 120 frames ===
         if (!(globalThis as any).__shadowDiag) (globalThis as any).__shadowDiag = 0;
-        const localShouldLog = (globalThis as any).__shadowDiag % 120 === 1;
-        if (localShouldLog && coord === coords[0]) {
-            console.log(`[SHADOW-TILE] z${coord.canonical.z} x${coord.canonical.x} y${coord.canonical.y}`);
-            const ne = neighborInfos[1];
-            const e = neighborInfos[2];
-            console.log(`[SHADOW-NE] tile=${ne.tile ? ne.tile.tileID.key : 'MISS'} zoomInfo=${JSON.stringify(ne.zoomInfo)}`);
-            console.log(`[SHADOW-E]  tile=${e.tile ? e.tile.tileID.key : 'MISS'} zoomInfo=${JSON.stringify(e.zoomInfo)}`);
-        }
+        (globalThis as any).__shadowDiag++;
 
         const projectionData = transform.getProjectionData({
             overscaledTileID: coord,
