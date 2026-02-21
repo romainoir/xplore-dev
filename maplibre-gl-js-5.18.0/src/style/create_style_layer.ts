@@ -3,6 +3,7 @@ import { HeatmapStyleLayer } from './style_layer/heatmap_style_layer';
 import { HillshadeStyleLayer } from './style_layer/hillshade_style_layer';
 import { ColorReliefStyleLayer } from './style_layer/color_relief_style_layer';
 import { ShadowStyleLayer } from './style_layer/shadow_style_layer';
+import { DaylightStyleLayer } from './style_layer/daylight_style_layer';
 import { FillStyleLayer } from './style_layer/fill_style_layer';
 import { FillExtrusionStyleLayer } from './style_layer/fill_extrusion_style_layer';
 import { LineStyleLayer } from './style_layer/line_style_layer';
@@ -20,6 +21,9 @@ export function createStyleLayer(layer: LayerSpecification | CustomLayerInterfac
     // Shadow is not in the style-spec yet, handle before the switch
     if ((layer as any).type === 'shadow') {
         return new ShadowStyleLayer(layer as any, globalState);
+    }
+    if ((layer as any).type === 'daylight') {
+        return new DaylightStyleLayer(layer as any, globalState);
     }
     switch (layer.type) {
         case 'background':

@@ -1,34 +1,34 @@
-import {create as createSource} from '../source/source';
+import { create as createSource } from '../source/source';
 
-import {Tile} from './tile';
-import {ErrorEvent, Event, Evented} from '../util/evented';
-import {TileCache} from './tile_cache';
-import {MercatorCoordinate} from '../geo/mercator_coordinate';
-import {EXTENT} from '../data/extent';
+import { Tile } from './tile';
+import { ErrorEvent, Event, Evented } from '../util/evented';
+import { TileCache } from './tile_cache';
+import { MercatorCoordinate } from '../geo/mercator_coordinate';
+import { EXTENT } from '../data/extent';
 import type Point from '@mapbox/point-geometry';
-import {now} from '../util/time_control';
-import {OverscaledTileID} from './tile_id';
-import {SourceFeatureState} from '../source/source_state';
-import {config} from '../util/config';
-import {coveringTiles, coveringZoomLevel} from '../geo/projection/covering_tiles';
-import {Bounds} from '../geo/bounds';
-import {EXTENT_BOUNDS} from '../data/extent_bounds';
-import {GEOJSON_TILE_LAYER_NAME} from '../data/feature_index';
-import {hasRasterTransition, isRasterType, updateFadingTiles} from './tile_manager_raster';
-import {backfillDEM} from './tile_manager_raster_dem';
-import {InViewTiles} from './tile_manager_in_view_tiles';
+import { now } from '../util/time_control';
+import { OverscaledTileID } from './tile_id';
+import { SourceFeatureState } from '../source/source_state';
+import { config } from '../util/config';
+import { coveringTiles, coveringZoomLevel } from '../geo/projection/covering_tiles';
+import { Bounds } from '../geo/bounds';
+import { EXTENT_BOUNDS } from '../data/extent_bounds';
+import { GEOJSON_TILE_LAYER_NAME } from '../data/feature_index';
+import { hasRasterTransition, isRasterType, updateFadingTiles } from './tile_manager_raster';
+import { backfillDEM } from './tile_manager_raster_dem';
+import { InViewTiles } from './tile_manager_in_view_tiles';
 
-import type {Context} from '../gl/context';
-import type {Source} from '../source/source';
-import type {Map} from '../ui/map';
-import type {Style} from '../style/style';
-import type {Dispatcher} from '../util/dispatcher';
-import type {IReadonlyTransform, ITransform} from '../geo/transform_interface';
-import type {TileState} from './tile';
-import type {ICanonicalTileID, SourceSpecification} from '@maplibre/maplibre-gl-style-spec';
-import type {MapSourceDataEvent} from '../ui/events';
-import type {Terrain} from '../render/terrain';
-import type {CanvasSourceSpecification} from '../source/canvas_source';
+import type { Context } from '../gl/context';
+import type { Source } from '../source/source';
+import type { Map } from '../ui/map';
+import type { Style } from '../style/style';
+import type { Dispatcher } from '../util/dispatcher';
+import type { IReadonlyTransform, ITransform } from '../geo/transform_interface';
+import type { TileState } from './tile';
+import type { ICanonicalTileID, SourceSpecification } from '@maplibre/maplibre-gl-style-spec';
+import type { MapSourceDataEvent } from '../ui/events';
+import type { Terrain } from '../render/terrain';
+import type { CanvasSourceSpecification } from '../source/canvas_source';
 
 type TileResult = {
     tile: Tile;
@@ -191,7 +191,7 @@ export class TileManager extends Evented {
         } catch (err) {
             tile.state = 'errored';
             if ((err as any).status !== 404) {
-                this._source.fire(new ErrorEvent(err, {tile}));
+                this._source.fire(new ErrorEvent(err, { tile }));
             } else {
                 // continue to try loading parent/children tiles if a tile doesn't exist (404)
                 this.update(this.transform, this.terrain);
@@ -208,7 +208,7 @@ export class TileManager extends Evented {
         if (this._source.abortTile)
             this._source.abortTile(tile);
 
-        this._source.fire(new Event('dataabort', {tile, coord: tile.tileID, dataType: 'source'}));
+        this._source.fire(new Event('dataabort', { tile, coord: tile.tileID, dataType: 'source' }));
     }
 
     serialize() {
@@ -216,7 +216,7 @@ export class TileManager extends Evented {
     }
 
     prepare(context: Context) {
-        if  (this._source.prepare) {
+        if (this._source.prepare) {
             this._source.prepare();
         }
 
@@ -310,7 +310,7 @@ export class TileManager extends Evented {
         this._state.initializeTileState(tile, this.map ? this.map.painter : null);
 
         if (!tile.aborted) {
-            this._source.fire(new Event('data', {dataType: 'source', tile, coord: tile.tileID}));
+            this._source.fire(new Event('data', { dataType: 'source', tile, coord: tile.tileID }));
         }
     }
     /**
@@ -505,7 +505,7 @@ export class TileManager extends Evented {
                 tileSize: this.usedForTerrain ? this.tileSize : this._source.tileSize,
                 minzoom: this._source.minzoom,
                 maxzoom: this._source.type === 'vector' && this.map._zoomLevelsToOverscale !== undefined
-                    ? transform.maxZoom - this.map._zoomLevelsToOverscale 
+                    ? transform.maxZoom - this.map._zoomLevelsToOverscale
                     : this._source.maxzoom,
                 roundZoom: this.usedForTerrain ? false : this._source.roundZoom,
                 reparseOverscaled: this._source.reparseOverscaled,
@@ -523,12 +523,18 @@ export class TileManager extends Evented {
             idealTileIDs = this._addTerrainIdealTiles(idealTileIDs);
         }
 
+        // For procedural terrain features like global shadows, force a 1-tile loading halo
+        // so frustum culling doesn't break raymarching boundaries.
+        if (this._source.type === 'raster-dem') {
+            idealTileIDs = this._addNeighborTiles(idealTileIDs);
+        }
+
         const noPendingDataEmissions = idealTileIDs.length === 0 && !this._updated && this._didEmitContent;
         this._updated = true;
         // if we won't have any tiles to fetch and content is already emitted
         // there will be no more data emissions, so we need to emit the event with isSourceLoaded = true
         if (noPendingDataEmissions) {
-            this.fire(new Event('data', {sourceDataType: 'idle', dataType: 'source', sourceId: this.id}));
+            this.fire(new Event('data', { sourceDataType: 'idle', dataType: 'source', sourceId: this.id }));
         }
 
         // Retain is a list of tiles that we shouldn't delete, even if they are not
@@ -609,6 +615,47 @@ export class TileManager extends Evented {
         return idealTileIDs.concat(ancestors);
     }
 
+    /**
+     * Add a 1-tile bounding halo around ideal tiles.
+     * Crucial for 3D terrain where frustum culling removes neighbor tiles that are still 
+     * needed for cross-tile raymarching (e.g. shadows, horizon maps) if they are behind the camera!
+     */
+    _addNeighborTiles(idealTileIDs: OverscaledTileID[]): OverscaledTileID[] {
+        const result = [...idealTileIDs];
+        const seen = new Set<string>(idealTileIDs.map(t => t.key));
+
+        for (const tileID of idealTileIDs) {
+            for (let dx = -1; dx <= 1; dx++) {
+                for (let dy = -1; dy <= 1; dy++) {
+                    if (dx === 0 && dy === 0) continue;
+
+                    const m = 1 << tileID.canonical.z;
+                    const nx = tileID.canonical.x + dx;
+                    const ny = tileID.canonical.y + dy;
+
+                    if (ny >= 0 && ny < m) {
+                        const wrapX = Math.floor(nx / m);
+                        const wrapPos = nx - wrapX * m;
+
+                        const neighborID = new OverscaledTileID(
+                            tileID.overscaledZ,
+                            tileID.wrap + wrapX,
+                            tileID.canonical.z,
+                            wrapPos,
+                            ny
+                        );
+
+                        if (!seen.has(neighborID.key)) {
+                            seen.add(neighborID.key);
+                            result.push(neighborID);
+                        }
+                    }
+                }
+            }
+        }
+        return result;
+    }
+
     releaseSymbolFadeTiles() {
         for (const id of this._inViewTiles.getAllIds()) {
             if (this._inViewTiles.getTileById(id).holdingForSymbolFade()) {
@@ -633,7 +680,7 @@ export class TileManager extends Evented {
         }
 
         // retain the tile even if it's not loaded because it's an ideal tile.
-        const retainTileMap: Record<string, OverscaledTileID> = idealTileIDs.reduce((acc, t) => { acc[t.key] = t; return acc;}, {});
+        const retainTileMap: Record<string, OverscaledTileID> = idealTileIDs.reduce((acc, t) => { acc[t.key] = t; return acc; }, {});
         const tileIdsWithoutData = this._retainLoadedChildren(retainTileMap, idealTilesWithoutData);
 
         // for remaining missing tiles with incomplete child coverage, seek a loaded parent tile
@@ -705,7 +752,7 @@ export class TileManager extends Evented {
         tile.uses++;
         this._inViewTiles.setTile(tileID.key, tile);
         if (!cached) {
-            this._source.fire(new Event('dataloading', {tile, coord: tile.tileID, dataType: 'source'}));
+            this._source.fire(new Event('dataloading', { tile, coord: tile.tileID, dataType: 'source' }));
         }
 
         return tile;

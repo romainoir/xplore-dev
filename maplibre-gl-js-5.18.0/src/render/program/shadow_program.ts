@@ -149,6 +149,16 @@ const shadowUniformValues = (
         maxDistC = 800.0 * (1 - t) + 400.0 * t;
     }
 
+    // POC Tuning Overrides
+    if (typeof window !== 'undefined') {
+        if ((window as any)._shadowStepSize !== undefined) {
+            stepSizePixels = (window as any)._shadowStepSize;
+        }
+        if ((window as any)._shadowMaxSteps !== undefined) {
+            maxSteps = (window as any)._shadowMaxSteps;
+        }
+    }
+
     return {
         'u_image': 0,
         'u_image_raw': 1,

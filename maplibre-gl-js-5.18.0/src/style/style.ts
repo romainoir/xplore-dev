@@ -1101,8 +1101,8 @@ export class Style extends Evented {
 
             layer = createStyleLayer(layerObject, this._globalState);
 
-        } else if ((layerObject as any).type === 'shadow') {
-            // Shadow is a custom engine layer type not in the style-spec, skip validation
+        } else if ((layerObject as any).type === 'shadow' || (layerObject as any).type === 'daylight') {
+            // Shadow and Daylight are custom engine layer types not in the style-spec, skip validation
             if ('source' in layerObject && typeof layerObject.source === 'object') {
                 this.addSource(id, layerObject.source as any);
                 layerObject = clone(layerObject);
@@ -1468,7 +1468,9 @@ export class Style extends Evented {
         if (!this._loaded) return;
 
         const sources = mapObject(this.tileManagers, (source) => source.serialize());
-        const layers = this._serializeByIds(this._order, true);
+        // Filter out shadow and daylight layers from serialization to avoid style-spec errors
+        const orderWithoutCustom = this._order.filter(id => (this._layers[id] as any).type !== 'shadow' && (this._layers[id] as any).type !== 'daylight');
+        const layers = this._serializeByIds(orderWithoutCustom, true);
         const terrain = this.map.getTerrain() || undefined;
         const myStyleSheet = this.stylesheet;
 

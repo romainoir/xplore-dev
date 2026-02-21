@@ -27,6 +27,7 @@ import { drawFillExtrusion } from './draw_fill_extrusion';
 import { drawHillshade } from './draw_hillshade';
 import { drawColorRelief } from './draw_color_relief';
 import { drawShadow } from './draw_shadow';
+import { drawDaylight } from './draw_daylight';
 import { drawRaster } from './draw_raster';
 import { drawBackground } from './draw_background';
 import { drawDebug, drawDebugPadding, selectDebugSource } from './draw_debug';
@@ -60,6 +61,7 @@ import { isFillExtrusionStyleLayer } from '../style/style_layer/fill_extrusion_s
 import { isHillshadeStyleLayer } from '../style/style_layer/hillshade_style_layer';
 import { isColorReliefStyleLayer } from '../style/style_layer/color_relief_style_layer';
 import { isShadowStyleLayer } from '../style/style_layer/shadow_style_layer';
+import { isDaylightStyleLayer } from '../style/style_layer/daylight_style_layer';
 import { isRasterStyleLayer } from '../style/style_layer/raster_style_layer';
 import { isBackgroundStyleLayer } from '../style/style_layer/background_style_layer';
 import { isCustomStyleLayer } from '../style/style_layer/custom_style_layer';
@@ -681,6 +683,8 @@ export class Painter {
             drawHillshade(painter, tileManager, layer, coords, renderOptions);
         } else if (isShadowStyleLayer(layer)) {
             drawShadow(painter, tileManager, layer, coords, renderOptions);
+        } else if (isDaylightStyleLayer(layer)) {
+            drawDaylight(painter, tileManager, layer, coords, renderOptions);
         } else if (isColorReliefStyleLayer(layer)) {
             drawColorRelief(painter, tileManager, layer, coords, renderOptions);
         } else if (isRasterStyleLayer(layer)) {

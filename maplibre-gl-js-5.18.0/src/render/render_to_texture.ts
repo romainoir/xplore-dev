@@ -20,7 +20,8 @@ const LAYERS_TO_TEXTURES: { [key: string]: boolean } = {
     raster: true,
     hillshade: true,
     'color-relief': true,
-    shadow: true
+    shadow: true,
+    daylight: true
 };
 
 /**

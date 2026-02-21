@@ -5,7 +5,8 @@ import type { HeatmapStyleLayer } from './heatmap_style_layer';
 import type { HillshadeStyleLayer } from './hillshade_style_layer';
 import type { ColorReliefStyleLayer } from './color_relief_style_layer';
 import type { ShadowStyleLayer } from './shadow_style_layer';
+import type { DaylightStyleLayer } from './daylight_style_layer';
 import type { LineStyleLayer } from './line_style_layer';
 import type { SymbolStyleLayer } from './symbol_style_layer';
 
-export type TypedStyleLayer = CircleStyleLayer | FillStyleLayer | FillExtrusionStyleLayer | HeatmapStyleLayer | HillshadeStyleLayer | ColorReliefStyleLayer | ShadowStyleLayer | LineStyleLayer | SymbolStyleLayer;
+export type TypedStyleLayer = CircleStyleLayer | FillStyleLayer | FillExtrusionStyleLayer | HeatmapStyleLayer | HillshadeStyleLayer | ColorReliefStyleLayer | ShadowStyleLayer | DaylightStyleLayer | LineStyleLayer | SymbolStyleLayer;

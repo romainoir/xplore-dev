@@ -32,6 +32,11 @@ uniform vec3 u_tile_id;         // z, x, y
 // Debug Mode
 uniform int u_debug_mode;
 
+// Raymarching Tuning
+uniform float u_shadow_step_size;
+uniform float u_shadow_max_steps;
+uniform float u_shadow_acceleration;
+
 #define PI 3.141592653589793
 // MAX steps for the MOST intensive case (cascade 2)
 // Reduced from 256 to 128/96 for performance on mobile/integrated GPUs
@@ -40,8 +45,8 @@ uniform int u_debug_mode;
 // These are dynamically clamped by shadowMaxDistance/MPP further down.
 // Pass 1: Local Raymarch (Cascade Detail) -> maxStepsDetail.
 // Pass 2: Grandparent Raymarch (Cascade Global) -> maxStepsGP.
-// Using 72 as a hard safety cap for the loop.
-#define hardMaxSteps 72.0
+// Raised cap to 256 for POC slider overhead
+#define hardMaxSteps 256.0
 
 // Robust Hash (Dave Hoskins) for UV jittering
 float hash12(vec2 p) {
@@ -165,9 +170,14 @@ float sampleGlobalElevation(vec2 uv) {
     return decodeElevation(u_image_raw, fract(uv));
 }
 
+// Helper: geographic aspect from derivatives (matches Copy 18)
+float get_aspect(vec2 deriv) {
+    return deriv.x != 0.0 ? atan(deriv.y, -deriv.x) : (3.14159265 / 2.0 * (deriv.y > 0.0 ? 1.0 : -1.0));
+}
+
 // Compute Sobel gradient for surface normal
 vec2 computeSobelGradient(vec2 uv) {
-    vec2 epsilon = 1.0 / u_dimension;
+    vec2 epsilon = 1.5 / u_dimension; // Hits between pixels to force bilinear smoothing
 
     float a = sampleElevation(u_image, uv + vec2(-epsilon.x, -epsilon.y));
     float b = sampleElevation(u_image, uv + vec2(0.0, -epsilon.y));
@@ -178,10 +188,11 @@ vec2 computeSobelGradient(vec2 uv) {
     float h = sampleElevation(u_image, uv + vec2(0.0, epsilon.y));
     float i = sampleElevation(u_image, uv + vec2(epsilon.x, epsilon.y));
 
+    // Denominator scaled for 1.5px offset (3px spread)
     return vec2(
         (c + f + f + i) - (a + d + d + g),
         (g + h + h + i) - (a + b + b + c)
-    ) / (8.0 * max(u_metersPerPixel, 0.0001));
+    ) / (12.0 * max(u_metersPerPixel, 0.0001));
 }
 
 float sampleGrandparentElevation(vec2 uv) {
@@ -252,12 +263,11 @@ float run_raymarch(vec3 lightDir, float altitude, vec2 uvStep, float zStep, floa
         
         float h_diff = currentZ - effectiveHeight;
         
-        if (h_diff < 0.0) { softShadow = 0.0; break; }
-        
-        // PCSS Penumbra accumulation (Copy 18 matches `k_penumbra * h_diff / ((i * stepSizePixels) + 1.0)`)
-        // Our new formula was dividing by accumulated distance in meters, which hardens shadows over long distances.
-        softShadow = min(softShadow, k_penumbra * h_diff / ((i * stepSizePixels) + 1.0));
-        if (softShadow < 0.02) { softShadow = 0.0; break; } 
+        // HARD SHADOW: Break immediately on hit. No expensive per-step PCSS divisions.
+        if (h_diff < 0.0) { 
+            softShadow = 0.0; 
+            break; 
+        }
         
         // Copy 18 style adaptive acceleration rate
         float curAccel = 1.0 + (i * accelerationRate);
@@ -337,15 +347,18 @@ void main() {
     }
 
     float altitude = max(0.001, u_sunAltitude); // Prevent div by 0 
+    float azimuth = atan(u_sunDirection.x, -u_sunDirection.y); 
     
-    // Day/Night switch
-    if (u_sunAltitude <= 0.0) {
-        fragColor = vec4(u_shadowColor.rgb * 0.5, u_shadowOpacity * 0.8);
-        return;
-    }
-
+    // Day/Night and Visual Refinements
+    float sunAlt = u_sunAltitude;
+    float isNight = smoothstep(0.05, -0.05, sunAlt);
+    
+    // Smooth transition for sunset colors
+    // 0.40 (Clear Day) -> 0.15 (Sunset) -> 0.0 (Night)
+    float sunsetMix = smoothstep(0.40, 0.05, sunAlt);
+    float nightMix = smoothstep(0.10, -0.15, sunAlt);
     vec2 grad = computeSobelGradient(v_pos);
-    float aspect = atan(-grad.x, -grad.y); 
+    float aspect = get_aspect(grad); 
     
     vec3 normal = normalize(vec3(-grad.x, -grad.y, 1.0));
     float tanAlt = tan(altitude);
@@ -373,20 +386,20 @@ void main() {
             vec2 gpUVStep = (u_sunDirection / (u_dimension.x - 2.0)) * gpStepPixels * gpUVScale;
             float gpZStep = gpStepPixels * gpMetersPerPixel * tanAlt;
             float gpDistMeters = gpStepPixels * gpMetersPerPixel;
-            float gpMaxSteps = clamp(u_shadowMaxDistance / max(1.0, gpDistMeters), 16.0, 64.0); // Capped at 64
+            float gpMaxSteps = min(u_shadow_max_steps, 64.0); // Allow tuning but cap at 64 for global pass
             
             shadow1 = run_raymarch(lightDir, altitude, gpUVStep, gpZStep, gpDistMeters, gpStepPixels, gpMaxSteps, u_shadow_penumbra, 0.015, 1.0, true, startElevation, v_pos);
         }
         
         // PASS 2: NORMAL (Medium/Local Range Cascade)
-        float stepSize2 = 3.0; // Fast step
+        float stepSize2 = max(u_shadow_step_size, 0.5); // Use Tuning Uniform
         vec2 uvStep2 = (u_sunDirection / (u_dimension.x - 2.0)) * stepSize2;
         float zStep2 = stepSize2 * u_metersPerPixel * tanAlt;
         float distMeters2 = stepSize2 * u_metersPerPixel;
-        // Reduced max steps to 64 for extreme performance
-        float maxSteps2 = clamp(u_shadowMaxDistance / max(1.0, distMeters2), 16.0, 64.0); 
+        // Use Tuning Uniform strictly to override the max distance limits
+        float maxSteps2 = u_shadow_max_steps;
         
-        float shadow2 = run_raymarch(lightDir, altitude, uvStep2, zStep2, distMeters2, stepSize2, maxSteps2, u_shadow_penumbra, 0.03, 1.0, false, startElevation, v_pos);
+        float shadow2 = run_raymarch(lightDir, altitude, uvStep2, zStep2, distMeters2, stepSize2, maxSteps2, u_shadow_penumbra, u_shadow_acceleration, 1.0, false, startElevation, v_pos);
 
         // Combine Cascades seamlessly
         shadow = max(shadow1, shadow2);
@@ -394,47 +407,61 @@ void main() {
         shadow = 1.0;
     }
 
-    // Atmospheric Coloring & Shading
-    float shadowFactor = max(shadow, selfShadow);
-    
-    float t_lit = clamp(dotNL - dotNL_flat, 0.0, 1.0);
+    // --- IMPROVED SUNSET & NIGHT COMPOSITION ---
     float t_shd = clamp(dotNL_flat - dotNL, 0.0, 1.0);
+    float t_lit = clamp(dotNL - dotNL_flat, 0.0, 1.0);
 
-    float sunAlt = u_sunAltitude;
-    float goldenGate = smoothstep(0.25, 0.05, sunAlt); 
-
-    // Dynamic Sunset Tinting
-    vec3 TINT_DAY = u_shadow_shadow_color.rgb;     // Custom Day Shadow Color
-    vec3 TINT_TWILIGHT = vec3(0.15, 0.05, 0.35);    // Hardcoded Indigo (Sunset)
-    float tintMix = smoothstep(0.45, 0.10, sunAlt); 
-    vec3 shadowTint = mix(TINT_DAY, TINT_TWILIGHT, tintMix);
+    // Igor-Style AO: Topographical interior detail
+    // At night, we force the 'sun' to be overhead to keep AO definition
+    float igor_azi = azimuth + PI;
+    float slope_strength = atan(length(grad)) * (2.0 / PI);
+    float aspect_strength = 1.0 - abs(mod((aspect + igor_azi) / PI + 0.5, 2.0) - 1.0);
     
+    // When sun is below horizon, dampen the aspect dependency to simulate global sky AO
+    float igor_ao = slope_strength * mix(aspect_strength, 0.5, nightMix);
+    
+    // Combine shadow components
+    float shadowFactor = max(shadow, selfShadow);
     float baseShadow = max(shadowFactor * 0.75, t_shd);
-    float sAlpha = baseShadow * u_shadowOpacity;
+    
+    // Ensure terrain detail remains visible in deep night/shadow
+    float sAlpha = baseShadow + igor_ao * 0.45;
 
-    // Highlight
+    // VIBRANT SUNSET COLORATION
+    // Stage 1: Royal Purple (Deep Night)
+    // Stage 2: Deep Red/Magenta (Afterglow)
+    // Stage 3: Golden/Orange (Sunset)
+    // Stage 4: Custom Day Shadow Color
+    vec3 PURPLE_NIGHT = vec3(0.05, 0.02, 0.15);
+    vec3 RED_AFTERGLOW = vec3(0.35, 0.05, 0.10);
+    vec3 GOLDEN_SUNSET = vec3(0.15, 0.08, 0.30); // Deep Indigo-Purple base for sunset
+    vec3 DAY_SHADOW = u_shadow_shadow_color.rgb;
+
+    vec3 shadowColor = mix(DAY_SHADOW, GOLDEN_SUNSET, sunsetMix);
+    shadowColor = mix(shadowColor, RED_AFTERGLOW, smoothstep(0.15, -0.05, sunAlt));
+    shadowColor = mix(shadowColor, PURPLE_NIGHT, nightMix);
+
+    // Final Shadow Opacity (Night is deeper)
+    float dynamicOpacity = mix(u_shadowOpacity, u_shadowOpacity * 1.2, nightMix);
+    sAlpha *= dynamicOpacity;
+
+    // VIBRANT HIGHLIGHTS
     vec4 styleHighlight = u_shadow_highlight_color;
-    vec3 SUN_NOON = styleHighlight.rgb;
-    vec3 SUN_GOLDEN = vec3(1.0, 0.7, 0.3); // Golden Orange
-    vec3 sunTint = mix(SUN_NOON, SUN_GOLDEN, tintMix);
+    vec3 GOLD_HIGHLIGHT = vec3(1.0, 0.6, 0.2);
+    vec3 RED_HIGHLIGHT = vec3(1.0, 0.3, 0.1);
     
-    float dayIntensity = 0.25; 
-    float sunsetBoost = 1.0 + tintMix * 2.0; 
-    float highlightScale = dayIntensity;
+    vec3 sunTint = mix(styleHighlight.rgb, GOLD_HIGHLIGHT, sunsetMix);
+    sunTint = mix(sunTint, RED_HIGHLIGHT, smoothstep(0.10, -0.05, sunAlt));
     
-    float hAlpha = t_lit * (1.0 - shadowFactor) * u_shadowOpacity * sunsetBoost * highlightScale;
-    
-    // Debanding
-    vec2 tileOffset = vec2(u_tile_id.y, u_tile_id.z) * u_dimension.x;
-    vec2 pixelCoord = tileOffset + v_pos * u_dimension.x;
-    float noise = hash12(pixelCoord * 2.0);
-    sAlpha += (noise - 0.5) * 0.04;
-    
-    // Render Layer (Highlights additively over Shadows)
-    vec3 finalColor = mix(shadowTint, sunTint, clamp(hAlpha, 0.0, 1.0));
+    // Highlight fades as sun goes below horizon
+    float hAlpha = t_lit * (1.0 - shadowFactor) * u_shadowOpacity * (1.0 + sunsetMix * 3.0) * 0.25;
+    hAlpha *= (1.0 - nightMix);
+
+    // Final result: Weighted sum blend
+    vec3 finalColor = sunTint * hAlpha + shadowColor * sAlpha * (1.0 - hAlpha);
     float finalAlpha = clamp(max(hAlpha, sAlpha), 0.0, 1.0);
 
-    fragColor = vec4(finalColor * finalAlpha, finalAlpha);
+    fragColor = vec4(finalColor, finalAlpha);
 
 #ifdef OVERDRAW_INSPECTOR
     fragColor = vec4(1.0);
