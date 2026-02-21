@@ -40,8 +40,8 @@ uniform int u_debug_mode;
 // These are dynamically clamped by shadowMaxDistance/MPP further down.
 // Pass 1: Local Raymarch (Cascade Detail) -> maxStepsDetail.
 // Pass 2: Grandparent Raymarch (Cascade Global) -> maxStepsGP.
-// Using 128 as a hard safety cap for the loop.
-#define hardMaxSteps 128.0
+// Using 72 as a hard safety cap for the loop.
+#define hardMaxSteps 72.0
 
 // Robust Hash (Dave Hoskins) for UV jittering
 float hash12(vec2 p) {
@@ -84,6 +84,54 @@ float sampleElevation(sampler2D dem, vec2 uv) {
 float decodeNeighbor(sampler2D tex, vec2 uv, vec4 z) {
     if (z.x < 0.01) return decodeElevation(u_image_raw, uv);
     return decodeElevation(tex, transformUV(uv, z));
+}
+
+// Fast Nearest-Neighbor decoded altitude
+float decodeElevationNearest(sampler2D tex, vec2 uv) {
+    vec2 pos = uv * (u_dimension - 2.0) + 1.0;
+    vec2 i = floor(pos) + 0.5;
+    return decodeElevation(tex, i / u_dimension);
+}
+
+// Fast Decode helper with Zoom
+float decodeNeighborNearest(sampler2D tex, vec2 uv, vec4 z) {
+    if (z.x < 0.01) return decodeElevationNearest(u_image_raw, uv);
+    return decodeElevationNearest(tex, transformUV(uv, z));
+}
+
+// Nearest-neighbor robust global lookup (4x faster for raymarching)
+float sampleGlobalElevationNearest(vec2 uv) {
+    if (uv.x >= 0.0 && uv.x <= 1.0 && uv.y >= 0.0 && uv.y <= 1.0) {
+        return decodeElevationNearest(u_image, uv);
+    }
+    
+    float dx = u_neigh_offsets.x;
+    float dy = u_neigh_offsets.y;
+
+    if ((uv.x < 0.0 && dx < 0.0) || (uv.x > 1.0 && dx > 0.0)) {
+        vec2 uv_lat = uv - vec2(dx, 0.0);
+        if (uv.y >= 0.0 && uv.y <= 1.0) return decodeNeighborNearest(u_neigh_lat, uv_lat, u_neigh_zoom_lat);
+        if ((uv.y < 0.0 && dy < 0.0) || (uv.y > 1.0 && dy > 0.0)) {
+            return decodeNeighborNearest(u_neigh_diag, uv_lat - vec2(0.0, dy), u_neigh_zoom_diag);
+        }
+    }
+    
+    if ((uv.y < 0.0 && dy < 0.0) || (uv.y > 1.0 && dy > 0.0)) {
+        if (uv.x >= 0.0 && uv.x <= 1.0) {
+            return decodeNeighborNearest(u_neigh_long, uv - vec2(0.0, dy), u_neigh_zoom_long);
+        }
+    }
+    
+    return decodeElevationNearest(u_image_raw, fract(uv));
+}
+
+float sampleGrandparentElevationNearest(vec2 uv) {
+    if (u_grandparent_zoom.w <= 0.0) return -99999.0;
+    float scale = u_grandparent_zoom.x;
+    float offsetX = u_grandparent_zoom.y;
+    float offsetY = u_grandparent_zoom.z;
+    vec2 gpUV = vec2(offsetX + uv.x * scale, offsetY + uv.y * scale);
+    return decodeElevationNearest(u_grandparent_dem, gpUV);
 }
 
 // New robust global elevation lookup optimized for 3 sun-facing neighbors
@@ -188,12 +236,12 @@ float run_raymarch(vec3 lightDir, float altitude, vec2 uvStep, float zStep, floa
         float h = 0.0;
         
         if (useGrandparent) {
-             h = sampleGrandparentElevation(currentUV);
+             h = sampleGrandparentElevationNearest(currentUV);
              if (h < -50000.0) break; 
         } else {
              // Stop tracing if we leave the 3x3 loaded neighbor area
              if (currentUV.x < -1.0 || currentUV.x > 2.0 || currentUV.y < -1.0 || currentUV.y > 2.0) break;
-             h = sampleGlobalElevation(currentUV);
+             h = sampleGlobalElevationNearest(currentUV);
         }
 
         float distanceKm = accumulatedDistance / 1000.0;
@@ -319,24 +367,24 @@ void main() {
         // If zoomDiff >= 1.0, we have successfully fallen back to a lower-zoom parent tile
         if (zoomDiff >= 1.0 && u_grandparent_zoom.x > 0.001) {
             float gpMetersPerPixel = u_metersPerPixel * pow(2.0, zoomDiff);
-            float gpStepPixels = 3.0; // Copy 18 Normal Keyframe Z10
+            float gpStepPixels = 4.0; // Fast step
             float gpUVScale = 1.0 / max(0.0001, u_grandparent_zoom.x);
             
             vec2 gpUVStep = (u_sunDirection / (u_dimension.x - 2.0)) * gpStepPixels * gpUVScale;
             float gpZStep = gpStepPixels * gpMetersPerPixel * tanAlt;
             float gpDistMeters = gpStepPixels * gpMetersPerPixel;
-            float gpMaxSteps = clamp(u_shadowMaxDistance / max(1.0, gpDistMeters), 16.0, 96.0); // Z10 maxSteps
+            float gpMaxSteps = clamp(u_shadowMaxDistance / max(1.0, gpDistMeters), 16.0, 64.0); // Capped at 64
             
             shadow1 = run_raymarch(lightDir, altitude, gpUVStep, gpZStep, gpDistMeters, gpStepPixels, gpMaxSteps, u_shadow_penumbra, 0.015, 1.0, true, startElevation, v_pos);
         }
         
         // PASS 2: NORMAL (Medium/Local Range Cascade)
-        float stepSize2 = 2.0; 
+        float stepSize2 = 3.0; // Fast step
         vec2 uvStep2 = (u_sunDirection / (u_dimension.x - 2.0)) * stepSize2;
         float zStep2 = stepSize2 * u_metersPerPixel * tanAlt;
         float distMeters2 = stepSize2 * u_metersPerPixel;
-        // Reduced from 128 to 96 for performance
-        float maxSteps2 = clamp(u_shadowMaxDistance / max(1.0, distMeters2), 16.0, 96.0); 
+        // Reduced max steps to 64 for extreme performance
+        float maxSteps2 = clamp(u_shadowMaxDistance / max(1.0, distMeters2), 16.0, 64.0); 
         
         float shadow2 = run_raymarch(lightDir, altitude, uvStep2, zStep2, distMeters2, stepSize2, maxSteps2, u_shadow_penumbra, 0.03, 1.0, false, startElevation, v_pos);
 
