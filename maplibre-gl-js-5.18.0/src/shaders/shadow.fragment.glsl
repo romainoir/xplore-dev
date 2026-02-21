@@ -33,7 +33,15 @@ uniform vec3 u_tile_id;         // z, x, y
 uniform int u_debug_mode;
 
 #define PI 3.141592653589793
-#define MAX_STEPS 128
+// MAX steps for the MOST intensive case (cascade 2)
+// Reduced from 256 to 128/96 for performance on mobile/integrated GPUs
+// (LocalPass Detail Cascade 2)
+// (LongPass Grandparent Cascade 1)
+// These are dynamically clamped by shadowMaxDistance/MPP further down.
+// Pass 1: Local Raymarch (Cascade Detail) -> maxStepsDetail.
+// Pass 2: Grandparent Raymarch (Cascade Global) -> maxStepsGP.
+// Using 128 as a hard safety cap for the loop.
+#define hardMaxSteps 128.0
 
 // Robust Hash (Dave Hoskins) for UV jittering
 float hash12(vec2 p) {
@@ -172,7 +180,9 @@ float run_raymarch(vec3 lightDir, float altitude, vec2 uvStep, float zStep, floa
     maxSteps = min(maxSteps, min(stepsToXBound, stepsToYBound));
     maxSteps = max(maxSteps, 1.0); // Always take at least 1 step
 
-    for(float i = 0.0; i < 256.0; i++) {
+    float CURVATURE_CONST = 1.0 / (2.0 * EARTH_RADIUS_KM);
+    
+    for(float i = 0.0; i < hardMaxSteps; i++) {
         if (i >= maxSteps) break; 
         
         float h = 0.0;
@@ -187,10 +197,10 @@ float run_raymarch(vec3 lightDir, float altitude, vec2 uvStep, float zStep, floa
         }
 
         float distanceKm = accumulatedDistance / 1000.0;
-        if (distanceKm > 200.0) break; // Hard threshold against global infinite tracing
+        if (distanceKm > 200.0) break; 
 
-        float curvatureDrop = (distanceKm * distanceKm) / (2.0 * EARTH_RADIUS_KM) * 1000.0;
-        float effectiveHeight = h - curvatureDrop;
+        // Optimized curvature calculation
+        float effectiveHeight = h - (distanceKm * distanceKm * CURVATURE_CONST * 1000.0);
         
         float h_diff = currentZ - effectiveHeight;
         
@@ -226,13 +236,22 @@ void main() {
         // Sample global elevation at the target offset
         float elev = sampleGlobalElevation(localUV + targetOffset);
         
+        // Debug Blackout: Only show Center (0,0) and active sun-facing neighbors
+        bool isActive = (targetOffset.x == 0.0 && targetOffset.y == 0.0) || // Center
+                       (targetOffset.x == u_neigh_offsets.x && targetOffset.y == 0.0) || // Lateral
+                       (targetOffset.x == 0.0 && targetOffset.y == u_neigh_offsets.y) || // Longitudinal
+                       (targetOffset.x == u_neigh_offsets.x && targetOffset.y == u_neigh_offsets.y); // Diagonal
+        
         // Elevation heatmap coloring
         float t = clamp(elev / 4000.0, 0.0, 1.0);
-        vec3 color;
-        if (t < 0.25)      color = mix(vec3(0.0, 0.0, 0.1), vec3(0.4, 0.0, 0.6), t / 0.25);
-        else if (t < 0.5)  color = mix(vec3(0.4, 0.0, 0.6), vec3(0.9, 0.1, 0.1), (t - 0.25) / 0.25);
-        else if (t < 0.75) color = mix(vec3(0.9, 0.1, 0.1), vec3(1.0, 0.6, 0.0), (t - 0.5) / 0.25);
-        else               color = mix(vec3(1.0, 0.6, 0.0), vec3(1.0, 1.0, 0.8), (t - 0.75) / 0.25);
+        vec3 color = vec3(0.0); // Default to black
+        
+        if (isActive) {
+            if (t < 0.25)      color = mix(vec3(0.0, 0.0, 0.1), vec3(0.4, 0.0, 0.6), t / 0.25);
+            else if (t < 0.5)  color = mix(vec3(0.4, 0.0, 0.6), vec3(0.9, 0.1, 0.1), (t - 0.25) / 0.25);
+            else if (t < 0.75) color = mix(vec3(0.9, 0.1, 0.1), vec3(1.0, 0.6, 0.0), (t - 0.5) / 0.25);
+            else               color = mix(vec3(1.0, 0.6, 0.0), vec3(1.0, 1.0, 0.8), (t - 0.75) / 0.25);
+        }
         
         // Tint neighbors green
         if (gridX != 1 || gridY != 1) {
@@ -312,11 +331,12 @@ void main() {
         }
         
         // PASS 2: NORMAL (Medium/Local Range Cascade)
-        float stepSize2 = 2.0; // Copy 18 Detail Keyframe Z12
+        float stepSize2 = 2.0; 
         vec2 uvStep2 = (u_sunDirection / (u_dimension.x - 2.0)) * stepSize2;
         float zStep2 = stepSize2 * u_metersPerPixel * tanAlt;
         float distMeters2 = stepSize2 * u_metersPerPixel;
-        float maxSteps2 = clamp(u_shadowMaxDistance / max(1.0, distMeters2), 16.0, 128.0); // Z12 maxSteps
+        // Reduced from 128 to 96 for performance
+        float maxSteps2 = clamp(u_shadowMaxDistance / max(1.0, distMeters2), 16.0, 96.0); 
         
         float shadow2 = run_raymarch(lightDir, altitude, uvStep2, zStep2, distMeters2, stepSize2, maxSteps2, u_shadow_penumbra, 0.03, 1.0, false, startElevation, v_pos);
 
