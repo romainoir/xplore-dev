@@ -18,6 +18,7 @@ The **Igor Hillshade** method (inspired by GDAL) was integrated as a high-contra
 Refined the analytical AO (Hillshade) logic within the core terrain shader (`terrain.fragment.glsl`).
 - **Raw DEM Sampling**: Switched to sampling high-precision raw DEM textures for AO calculation, eliminating the "faceting" artifacts caused by mesh-based elevation data.
 - **Strengthened Relief**: Increased the AO darkening intensity from 18% to **35%**, significantly enhancing the definition of ridges, crevices, and steep gullies.
+- **Resolution & Scaling Fix**: Corrected a 2-pixel mismatch in the sampling step within `terrain.fragment.glsl`. Updated `terrain_program.ts` to calculate `u_metersPerPixel` using the **native tile resolution** (`canonical.z`) instead of the map zoom. This ensures AO detail remains sharp and spatially correct even when highly overscaled (Z16-Z18).
 
 ## 4. Performance & Stability
 - Maintained a stable **60 FPS** on high-end hardware during full-res rendering (Z15+).
