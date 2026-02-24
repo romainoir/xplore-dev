@@ -2327,6 +2327,15 @@ export class Map extends Camera {
     }
 
     /**
+     * Reads the entire 2048x2048 Elevation Atlas FBO pixels for debugging purposes.
+     * @returns Uint8Array containing the raw RGBA pixels, or null if terrain is not active.
+     */
+    readElevationAtlasPixels(): Uint8Array | null {
+        if (!this.terrain) return null;
+        return this.terrain.readElevationAtlasPixels();
+    }
+
+    /**
      * Gets the elevation at a given location, in meters above sea level.
      * This override is robust across 2D and 3D modes. In 2D mode, it searches for any available
      * raster-dem source in the style to provide elevation querying capability even when 3D terrain

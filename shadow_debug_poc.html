@@ -150,6 +150,27 @@
             style="width:100%;background:#4dabf7;color:white;border:none;padding:6px;border-radius:4px;cursor:pointer;font-size:11px;margin-top:10px;">
             Hard Reload Page (Clear Cache)
         </button>
+        <button id="show-atlas-btn"
+            style="width:100%;background:#f1c40f;color:#000;border:none;padding:10px;border-radius:4px;cursor:pointer;font-weight:bold;margin-top:10px;">
+            Show Internal Elevation Atlas (Debug)
+        </button>
+    </div>
+
+    <div id="atlas-debug-overlay"
+        style="display:none; position:absolute; top:10px; right:10px; background:rgba(0,0,0,0.9); padding:15px; border-radius:8px; z-index:2000; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+        <h3 style="margin-top:0; color:#f1c40f;">Elevation Atlas (2048x2048)</h3>
+        <p style="font-size:12px; color:#aaa; margin-top:-10px;">This is the exact texture the shadow raymarcher sees.
+            The boxes show the currently packed tiles.</p>
+        <div
+            style="position:relative; width:400px; height:400px; background:#222; border:1px solid #444; overflow:hidden;">
+            <canvas id="atlas-canvas" width="2048" height="2048"
+                style="width:100%; height:100%; position:absolute; top:0; left:0;"></canvas>
+            <canvas id="atlas-overlay-canvas" width="400" height="400"
+                style="width:100%; height:100%; position:absolute; top:0; left:0; pointer-events:none;"></canvas>
+        </div>
+        <button id="close-atlas-btn"
+            style="width:100%; background:#e74c3c; color:white; border:none; padding:8px; border-radius:4px; cursor:pointer; font-weight:bold; margin-top:10px;">Close
+            Overlay</button>
     </div>
     </div>
     </div>
@@ -359,6 +380,156 @@
                 fpsDiv.style.color = fps > 40 ? '#2ecc71' : fps > 20 ? '#f1c40f' : '#e74c3c';
                 requestAnimationFrame(fpsTick);
             })();
+
+            // === ELEVATION ATLAS DEBUG OVERLAY LOGIC ===
+            const atlasOverlay = document.getElementById('atlas-debug-overlay');
+            const showAtlasBtn = document.getElementById('show-atlas-btn');
+            const closeAtlasBtn = document.getElementById('close-atlas-btn');
+            const atlasCanvas = document.getElementById('atlas-canvas');
+            const overlayCanvas = document.getElementById('atlas-overlay-canvas');
+
+            let debugInterval;
+
+            showAtlasBtn.addEventListener('click', () => {
+                atlasOverlay.style.display = 'block';
+                map.triggerRepaint();
+                debugInterval = setInterval(updateAtlasDebug, 200);
+            });
+
+            closeAtlasBtn.addEventListener('click', () => {
+                atlasOverlay.style.display = 'none';
+                clearInterval(debugInterval);
+            });
+
+            function updateAtlasDebug() {
+                if (!window._elevationAtlasDebug) return;
+
+                const pixels = map.readElevationAtlasPixels();
+                if (!pixels) return;
+
+                if (typeof window._debugElevationUnpackCount === 'undefined') {
+                    window._debugElevationUnpackCount = 0;
+                }
+
+                const ctx = atlasCanvas.getContext('2d');
+
+                // Decode MapLibre High-Precision Float Elevation Atlas
+                // The Atlas uses a custom 4-byte float packing, NOT Terrain-RGB.
+                // Formula from terrain_elevation.fragment.glsl pack():
+                // bitSh = vec4(256^3, 256^2, 256, 1)
+                for (let i = 0; i < pixels.length; i += 4) {
+                    const r = pixels[i] / 255.0;
+                    const g = pixels[i + 1] / 255.0;
+                    const b = pixels[i + 2] / 255.0;
+                    const a = pixels[i + 3] / 255.0;
+
+                    // Treat completely transparent pixels as empty (no tile data)
+                    if (pixels[i + 3] === 0) {
+                        pixels[i] = 30;
+                        pixels[i + 1] = 30;
+                        pixels[i + 2] = 30;
+                        pixels[i + 3] = 255;
+                        continue;
+                    }
+
+                    // MapLibre Float Unpacking
+                    // r has highest scale (1/(256^3)), a has lowest scale (1)
+                    // The GLSL bitUnsh is: vec4(1.0 / (256.0 * 256.0 * 256.0), 1.0 / (256.0 * 256.0), 1.0 / 256.0, 1.0)
+                    const bitR = 1.0 / 16777216.0;
+                    const bitG = 1.0 / 65536.0;
+                    const bitB = 1.0 / 256.0;
+                    const bitA = 1.0;
+
+                    const dot = (r * bitR) + (g * bitG) + (b * bitB) + (a * bitA);
+                    const elev = (dot * 20000.0) - 10000.0;
+
+                    // Normalize to 0..1 based on roughly 0m to 4800m (Mont Blanc)
+                    const normalized = Math.max(0, Math.min(1, elev / 4800));
+
+                    if (window._debugElevationUnpackCount < 10 && a > 0) {
+                        console.log(`Unpack pixel ${i / 4}: RGBA[${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, ${Math.round(a * 255)}] -> Elev: ${elev.toFixed(2)}m (Norm: ${normalized.toFixed(3)})`);
+                        window._debugElevationUnpackCount++;
+                    }
+
+                    // Basic Hue ramp: Blue (low) -> Green -> Yellow -> Red -> White (high)
+                    let col;
+                    if (a === 0) {
+                        col = [30, 30, 30]; // Dark grey for out-of-bounds / empty
+                    } else if (normalized < 0.25) {
+                        const t = normalized / 0.25;
+                        col = [0, Math.floor(t * 255), 255]; // Blue to Cyan
+                    } else if (normalized < 0.5) {
+                        const t = (normalized - 0.25) / 0.25;
+                        col = [0, 255, Math.floor((1 - t) * 255)]; // Cyan to Green
+                    } else if (normalized < 0.75) {
+                        const t = (normalized - 0.5) / 0.25;
+                        col = [Math.floor(t * 255), 255, 0]; // Green to Yellow
+                    } else if (normalized < 0.95) {
+                        const t = (normalized - 0.75) / 0.20;
+                        col = [255, Math.floor((1 - t) * 255), 0]; // Yellow to Red
+                    } else {
+                        const t = (normalized - 0.95) / 0.05;
+                        const v = 255;
+                        col = [v, Math.floor(t * v), Math.floor(t * v)]; // Red to White
+                    }
+
+                    pixels[i] = col[0];
+                    pixels[i + 1] = col[1];
+                    pixels[i + 2] = col[2];
+                    pixels[i + 3] = 255; // Force solid alpha for canvas display
+                }
+
+                const imgData = new ImageData(new Uint8ClampedArray(pixels.buffer), 2048, 2048);
+
+                // WebGL readPixels returns data upside down relative to Canvas, flip it
+                const flippedCtx = document.createElement('canvas').getContext('2d');
+                flippedCtx.canvas.width = 2048; flippedCtx.canvas.height = 2048;
+                flippedCtx.putImageData(imgData, 0, 0);
+
+                ctx.save();
+                ctx.scale(1, -1);
+                ctx.translate(0, -2048);
+                ctx.drawImage(flippedCtx.canvas, 0, 0);
+                ctx.restore();
+
+                // Draw Tile Outlines
+                const meta = window._elevationAtlasDebug;
+                const oCtx = overlayCanvas.getContext('2d');
+                oCtx.clearRect(0, 0, 400, 400);
+
+                const [minX, minY, maxX, maxY] = meta.bounds;
+                const spanX = maxX - minX;
+                const spanY = maxY - minY;
+
+                const zColors = { 10: '#3498db', 11: '#2ecc71', 12: '#f1c40f', 13: '#e67e22', 14: '#e74c3c', 15: '#9b59b6' };
+
+                meta.tiles.forEach(t => {
+                    const scale = 1 << t.z;
+                    const tx = t.x / scale;
+                    const ty = t.y / scale;
+                    const tw = 1 / scale;
+                    const th = 1 / scale;
+
+                    const relX = (tx - minX) / spanX;
+                    const relY = (ty - minY) / spanY;
+                    const relW = tw / spanX;
+                    const relH = th / spanY;
+
+                    const px = relX * 400;
+                    const py = relY * 400;
+                    const pw = relW * 400;
+                    const ph = relH * 400;
+
+                    const color = zColors[t.z] || '#ffffff';
+                    oCtx.strokeStyle = color;
+                    oCtx.lineWidth = 2;
+                    oCtx.strokeRect(px, py, pw, ph);
+
+                    oCtx.fillStyle = color;
+                    oCtx.font = "bold 10px monospace";
+                    oCtx.fillText(`Z${t.z}`, px + 4, py + 12);
+                });
+            }
         });
     </script>
 </body>

@@ -198,6 +198,23 @@ function drawElevation(painter: Painter, terrain: Terrain) {
         const uniformValues = terrainElevationUniformValues(0);
         program.draw(context, gl.TRIANGLES, depthMode, StencilMode.disabled, colorMode, CullFaceMode.backCCW, uniformValues, terrainData, projectionData, 'terrain', mesh.vertexBuffer, mesh.indexBuffer, mesh.segments);
     }
+
+    // Expose metadata to window for debug UI in shadow_debug_poc.html
+    if (typeof window !== 'undefined') {
+        const capturedIds = Array.from(captureSet.values()).map(t => ({
+            z: t.tileID.canonical.z,
+            x: t.tileID.canonical.x,
+            y: t.tileID.canonical.y,
+            key: t.tileID.key
+        }));
+        (window as any)._elevationAtlasDebug = {
+            bounds: [minX, minY, maxX, maxY], // WebMercator [0..1]
+            size: atlasSize,
+            tiles: capturedIds,
+            timestamp: performance.now()
+        };
+    }
+
     context.bindFramebuffer.set(null);
     context.viewport.set([0, 0, painter.width, painter.height]);
 }

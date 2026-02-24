@@ -61265,6 +61265,23 @@ class Terrain {
         return depthValue;
     }
     /**
+     * Reads the entire 2048x2048 Elevation Atlas FBO pixels for debugging purposes.
+     * @returns Uint8Array containing the raw RGBA pixels of the atlas
+     * @internal
+     */
+    readElevationAtlasPixels() {
+        if (!this._fboElevation)
+            return null;
+        const context = this.painter.context;
+        const gl = context.gl;
+        const size = Terrain.ATLAS_SIZE;
+        const pixels = new Uint8Array(size * size * 4);
+        context.bindFramebuffer.set(this._fboElevation.framebuffer);
+        gl.readPixels(0, 0, size, size, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+        context.bindFramebuffer.set(null);
+        return pixels;
+    }
+    /**
      * create a regular mesh which will be used by all terrain-tiles
      * @returns the created regular mesh
      */
@@ -65674,6 +65691,21 @@ function drawElevation(painter, terrain) {
         projectionData['mainMatrix'] = finalMatrix; // This maps to u_projection_matrix in the shader
         const uniformValues = terrainElevationUniformValues(0);
         program.draw(context, gl.TRIANGLES, depthMode, StencilMode.disabled, colorMode, CullFaceMode.backCCW, uniformValues, terrainData, projectionData, 'terrain', mesh.vertexBuffer, mesh.indexBuffer, mesh.segments);
+    }
+    // Expose metadata to window for debug UI in shadow_debug_poc.html
+    if (typeof window !== 'undefined') {
+        const capturedIds = Array.from(captureSet.values()).map(t => ({
+            z: t.tileID.canonical.z,
+            x: t.tileID.canonical.x,
+            y: t.tileID.canonical.y,
+            key: t.tileID.key
+        }));
+        window._elevationAtlasDebug = {
+            bounds: [minX, minY, maxX, maxY], // WebMercator [0..1]
+            size: atlasSize,
+            tiles: capturedIds,
+            timestamp: performance.now()
+        };
     }
     context.bindFramebuffer.set(null);
     context.viewport.set([0, 0, painter.width, painter.height]);
@@ -72630,6 +72662,15 @@ let Map$1 = class Map extends Camera {
     getTerrain() {
         var _a, _b;
         return (_b = (_a = this.terrain) === null || _a === void 0 ? void 0 : _a.options) !== null && _b !== void 0 ? _b : null;
+    }
+    /**
+     * Reads the entire 2048x2048 Elevation Atlas FBO pixels for debugging purposes.
+     * @returns Uint8Array containing the raw RGBA pixels, or null if terrain is not active.
+     */
+    readElevationAtlasPixels() {
+        if (!this.terrain)
+            return null;
+        return this.terrain.readElevationAtlasPixels();
     }
     /**
      * Gets the elevation at a given location, in meters above sea level.

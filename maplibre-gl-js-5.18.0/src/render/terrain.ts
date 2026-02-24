@@ -456,6 +456,26 @@ export class Terrain {
     }
 
     /**
+     * Reads the entire 2048x2048 Elevation Atlas FBO pixels for debugging purposes.
+     * @returns Uint8Array containing the raw RGBA pixels of the atlas
+     * @internal
+     */
+    readElevationAtlasPixels(): Uint8Array | null {
+        if (!this._fboElevation) return null;
+
+        const context = this.painter.context;
+        const gl = context.gl;
+        const size = Terrain.ATLAS_SIZE;
+        const pixels = new Uint8Array(size * size * 4);
+
+        context.bindFramebuffer.set(this._fboElevation.framebuffer);
+        gl.readPixels(0, 0, size, size, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+        context.bindFramebuffer.set(null);
+
+        return pixels;
+    }
+
+    /**
      * create a regular mesh which will be used by all terrain-tiles
      * @returns the created regular mesh
      */
