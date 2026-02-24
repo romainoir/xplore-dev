@@ -12,10 +12,27 @@ uniform vec4 u_contour_color;
 uniform float u_zoom;
 uniform float u_tile_zoom;
 
+uniform sampler2D u_shadow_atlas;
+uniform vec4 u_atlas_bounds; // [minX, minY, maxX, maxY]
+uniform float u_shadow_intensity;
+uniform int u_debug_mode;
+uniform float u_sun_altitude;  // Sun altitude in radians (0 = horizon, PI/2 = zenith)
+uniform vec2 u_sun_direction;  // Normalized sun direction [sin(azimuth), -cos(azimuth)]
+
+// Per-tile DEM for full-res AO (separate names to avoid prelude precision conflict)
+uniform highp sampler2D u_dem_ao;        // DEM texture (same data as u_terrain, different unit)
+uniform highp vec4 u_dem_ao_unpack;      // DEM unpack vector
+uniform highp float u_dem_ao_dim;        // DEM dimension
+uniform highp float u_dem_ao_exag;       // terrain exaggeration
+uniform sampler2D u_elevation_atlas;     // seamless global elevation atlas (packed float)
+uniform float u_metersPerPixel;          // geographic scale for normal calculation
+
 in vec2 v_texture_pos;
+in vec2 v_atlas_uv;
 in float v_fog_depth;
 in float v_elevation;
 in float v_dist_linear;
+in vec2 v_dem_coord; // Interpolated DEM coordinate from vertex shader
 
 const float gamma = 2.2;
 
@@ -25,6 +42,26 @@ vec4 gammaToLinear(vec4 color) {
 
 vec4 linearToGamma(vec4 color) {
     return pow(color, vec4(1.0 / gamma));
+}
+
+// Unpack elevation from the high-precision atlas (matches terrain_elevation.fragment.glsl)
+float unpackAtlas(vec2 uv) {
+    vec4 packed = texture(u_elevation_atlas, uv);
+    const highp vec4 bitUnsh = vec4(1.0 / (256.0 * 256.0 * 256.0), 1.0 / (256.0 * 256.0), 1.0 / 256.0, 1.0);
+    float normalizedElev = dot(packed, bitUnsh);
+    return (normalizedElev * 20000.0 - 10000.0) * u_dem_ao_exag;
+}
+
+// Sample raw DEM elevation at a coord in DEM-space
+float sampleDemElev(vec2 coord) {
+    vec2 f = fract(coord);
+    float d = 1.0 / (u_dem_ao_dim + 2.0);
+    vec2 c = (floor(coord) + 0.5) * d;
+    vec4 rgbTL = texture(u_dem_ao, c) * 255.0 * u_dem_ao_unpack; float tl = rgbTL.r + rgbTL.g + rgbTL.b - u_dem_ao_unpack.a;
+    vec4 rgbTR = texture(u_dem_ao, c + vec2(d, 0.0)) * 255.0 * u_dem_ao_unpack; float tr = rgbTR.r + rgbTR.g + rgbTR.b - u_dem_ao_unpack.a;
+    vec4 rgbBL = texture(u_dem_ao, c + vec2(0.0, d)) * 255.0 * u_dem_ao_unpack; float bl = rgbBL.r + rgbBL.g + rgbBL.b - u_dem_ao_unpack.a;
+    vec4 rgbBR = texture(u_dem_ao, c + vec2(d, d)) * 255.0 * u_dem_ao_unpack; float br = rgbBR.r + rgbBR.g + rgbBR.b - u_dem_ao_unpack.a;
+    return mix(mix(tl, tr, f.x), mix(bl, br, f.x), f.y) * u_dem_ao_exag;
 }
 
 void main() {
@@ -79,6 +116,61 @@ void main() {
             vec3 color = mix(base_color, vec3(0.0), alpha_major * 0.15);
 
             fragColor = mix(fragColor, vec4(color, 1.0), final_alpha * u_contour_color.a);
+        }
+    }
+
+    // ── Global Shadow + Full-Res AO Hillshade + Time-of-Day Coloring ──
+    vec2 atlasUV = v_atlas_uv;
+    if (atlasUV.x >= -0.001 && atlasUV.x <= 1.001 && atlasUV.y >= -0.001 && atlasUV.y <= 1.001) {
+        float globalShadow = texture(u_shadow_atlas, clamp(atlasUV, 0.0, 1.0)).r;
+
+        // ── Raw DEM-Based Subtle AO (high-resolution relief) ──
+        // Using v_dem_coord ensures we sample the raw DEM texture directly, 
+        // avoiding the faceting artifacts of the mesh-based elevation atlas.
+        float eA = sampleDemElev(v_dem_coord + vec2(-1.0, -1.0));
+        float eB = sampleDemElev(v_dem_coord + vec2( 0.0, -1.0));
+        float eC = sampleDemElev(v_dem_coord + vec2( 1.0, -1.0));
+        float eD = sampleDemElev(v_dem_coord + vec2(-1.0,  0.0));
+        float eE = sampleDemElev(v_dem_coord);
+        float eF = sampleDemElev(v_dem_coord + vec2( 1.0,  0.0));
+        float eG = sampleDemElev(v_dem_coord + vec2(-1.0,  1.0));
+        float eH = sampleDemElev(v_dem_coord + vec2( 0.0,  1.0));
+        float eI = sampleDemElev(v_dem_coord + vec2( 1.0,  1.0));
+
+        // Sobel gradient geographically scaled (meters/meter)
+        // Sobel factor is 8.0. Spatial step is u_metersPerPixel.
+        vec2 grad = vec2((eC + eF + eF + eI) - (eA + eD + eD + eG), (eG + eH + eH + eI) - (eA + eB + eB + eC)) / 8.0;
+        
+        // The normal math: normalize(-df/dx, -df/dy, 1/mpp_scaling) 
+        // This is equivalent to normalize(-dx, -dy, mpp)
+        vec3 normal = normalize(vec3(-grad.x, -grad.y, u_metersPerPixel));
+
+        vec3 aoLight = normalize(vec3(0.1, 0.2, 1.0)); 
+        float dotAO = clamp(dot(normal, aoLight), 0.0, 1.0);
+        float ao = dotAO * 0.35 + 0.65; // Strengthened range for high-res DEM detail
+
+        // ── Combine Cast Shadow + Subtle AO ──
+        float shadowDarken = 1.0 - globalShadow * u_shadow_intensity * 0.65;
+        fragColor.rgb *= shadowDarken * ao;
+
+        // ── Debug Overlays ──
+        if (u_debug_mode > 0) {
+            if (atlasUV.x >= 0.0 && atlasUV.x <= 1.0 && atlasUV.y >= 0.0 && atlasUV.y <= 1.0) {
+                if (u_debug_mode == 3) {
+                    vec2 grid = fract(atlasUV * 16.0);
+                    float line = step(0.98, grid.x) + step(0.98, grid.y);
+                    fragColor.rgb = mix(fragColor.rgb, vec3(0.0, 0.2, 0.8), 0.4);
+                    fragColor.rgb = mix(fragColor.rgb, vec3(1.0, 1.0, 0.0), line * 0.5);
+                    fragColor.rgb = mix(fragColor.rgb, vec3(atlasUV, 0.0), 0.2);
+                } else if (u_debug_mode == 2) {
+                    fragColor.rgb = mix(fragColor.rgb, vec3(globalShadow, globalShadow * 0.6, 0.0), 0.8);
+                } else if (u_debug_mode == 4) {
+                    float normalized = clamp(eE / 4000.0, 0.0, 1.0);
+                    fragColor.rgb = vec3(normalized);
+                } else if (u_debug_mode == 5) {
+                    fragColor.rgb = normal * 0.5 + 0.5;
+                }
+            }
         }
     }
 }

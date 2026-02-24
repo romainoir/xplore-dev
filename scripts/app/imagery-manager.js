@@ -37,6 +37,7 @@ function createTilePreviewUrl(template, coords = WMTS_PREVIEW_COORDS) {
 // ─── IMAGERY_OPTIONS ───
 export const IMAGERY_OPTIONS = Object.freeze([
     { id: 'shadow', label: 'Shadow', type: 'native-layer', layerId: 'shadow-native', previewImage: './data/icons_Xmap/shadow.png', defaultOpacity: 1.0, defaultVisible: false },
+    { id: 'daylight', label: 'Sunlight Hours', type: 'native-layer', layerId: 'daylight-native', previewImage: './data/icons_Xmap/daylight.png', defaultOpacity: 0.8, defaultVisible: false },
     {
         id: 'contours',
         label: 'Contours',
@@ -82,7 +83,7 @@ export const IMAGERY_OPTIONS = Object.freeze([
 
 // ─── LAYER_GROUPS ───
 export const LAYER_GROUPS = Object.freeze([
-    { id: 'sun-analysis', label: 'Sun Analysis', exclusive: true, members: ['shadow'] },
+    { id: 'sun-analysis', label: 'Sun Analysis', exclusive: true, members: ['shadow', 'daylight'] },
     { id: 'vector', label: 'Vector', exclusive: false, members: ['contours', 'osm-features'] },
     { id: 'wikimedia-photos', label: 'Wikimedia Photos', exclusive: true, members: ['wikimedia-photos'] },
     { id: 'heatmap', label: 'Heatmap', exclusive: true, members: ['strava-heatmap-all', 'strava-winter', 'strava-backcountry-ski', 'strava-cycling', 'strava-run', 'ign-traces-hivernales'] },
@@ -256,7 +257,7 @@ export function createImageryManager(map, deps = {}) {
         color: 'rgba(139, 90, 43, 0.2)',   // brown, 20% opacity
     };
 
-    const SHADOW_TOOLBOX_IDS = ['shadow', 'detail-shading'];
+    const SHADOW_TOOLBOX_IDS = ['shadow', 'daylight', 'detail-shading'];
     const TERRAIN_TOOLBOX_IDS = ['aspect', 'slope', 'avalanche'];
     const SNOW_TOOLBOX_IDS = ['snow', 'snow-depth'];
 
@@ -365,7 +366,7 @@ export function createImageryManager(map, deps = {}) {
         }
 
         // 2. Terrain analysis & snow layers — above basemaps
-        const terrainNativeLayers = ['normalmap', 'snow-native', 'snow-depth', 'aspect-native', 'slope-native', 'avalanche-native', 'detail-native', 'shadow-native'];
+        const terrainNativeLayers = ['normalmap', 'snow-native', 'snow-depth', 'aspect-native', 'slope-native', 'avalanche-native', 'detail-native', 'shadow-native', 'daylight-native'];
         if (topLabelId) {
             terrainNativeLayers.forEach(layerId => { if (map.getLayer(layerId)) map.moveLayer(layerId, topLabelId); });
         }
@@ -436,7 +437,7 @@ export function createImageryManager(map, deps = {}) {
         // Dynamic background for Analysis Toggles
         [
             { btnId: 'terrainToolboxToggle', layerIds: ['aspect', 'slope', 'avalanche'] },
-            { btnId: 'shadowToolboxToggle', layerIds: ['shadow', 'detail-shading'] },
+            { btnId: 'shadowToolboxToggle', layerIds: ['shadow', 'daylight', 'detail-shading'] },
             { btnId: 'snowToolboxToggle', layerIds: ['snow', 'snow-depth'] }
         ].forEach(config => {
             const btn = document.getElementById(config.btnId);

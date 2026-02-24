@@ -69,6 +69,12 @@ import terrainFrag from './terrain.fragment.glsl.g';
 import terrainVert from './terrain.vertex.glsl.g';
 import terrainVertDepth from './terrain_depth.vertex.glsl.g';
 import terrainVertCoords from './terrain_coords.vertex.glsl.g';
+import terrainElevationFrag from './terrain_elevation.fragment.glsl.g';
+import terrainElevationVert from './terrain_elevation.vertex.glsl.g';
+import shadowGlobalFrag from './shadow_global.fragment.glsl.g';
+import shadowGlobalVert from './shadow_global.vertex.glsl.g';
+import shadowBlurFrag from './shadow_blur.fragment.glsl.g';
+import shadowBlurVert from './shadow_blur.vertex.glsl.g';
 import projectionErrorMeasurementVert from './projection_error_measurement.vertex.glsl.g';
 import projectionErrorMeasurementFrag from './projection_error_measurement.fragment.glsl.g';
 import projectionMercatorVert from './_projection_mercator.vertex.glsl.g';
@@ -123,9 +129,12 @@ export const shaders = {
     terrain: prepare(terrainFrag, terrainVert),
     terrainDepth: prepare(terrainDepthFrag, terrainVertDepth),
     terrainCoords: prepare(terrainCoordsFrag, terrainVertCoords),
+    terrainElevation: prepare(terrainElevationFrag, terrainElevationVert),
+    shadowGlobal: prepare(shadowGlobalFrag, shadowGlobalVert),
     projectionErrorMeasurement: prepare(projectionErrorMeasurementFrag, projectionErrorMeasurementVert),
     atmosphere: prepare(atmosphereFrag, atmosphereVert),
     sky: prepare(skyFrag, skyVert),
+    shadowBlur: prepare(shadowBlurFrag, shadowBlurVert),
 };
 
 /** Expand #pragmas to #ifdefs, extract attributes and uniforms */

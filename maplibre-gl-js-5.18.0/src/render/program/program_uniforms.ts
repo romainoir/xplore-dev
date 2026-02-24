@@ -6,14 +6,14 @@ import { debugUniforms } from './debug_program';
 import { heatmapUniforms, heatmapTextureUniforms } from './heatmap_program';
 import { hillshadeUniforms, hillshadePrepareUniforms } from './hillshade_program';
 import { colorReliefUniforms } from './color_relief_program';
-import { shadowUniforms } from './shadow_program';
+import { shadowUniforms, shadowGlobalUniforms, shadowBlurUniforms } from './shadow_program';
 import { shadowPrepareUniforms } from './shadow_prepare_program';
 import { daylightUniforms } from './daylight_program';
 import { lineUniforms, lineGradientUniforms, linePatternUniforms, lineSDFUniforms, lineGradientSDFUniforms } from './line_program';
 import { rasterUniforms } from './raster_program';
 import { symbolIconUniforms, symbolSDFUniforms, symbolTextAndIconUniforms } from './symbol_program';
 import { backgroundUniforms, backgroundPatternUniforms } from './background_program';
-import { terrainUniforms, terrainDepthUniforms, terrainCoordsUniforms } from './terrain_program';
+import { terrainUniforms, terrainDepthUniforms, terrainElevationUniforms, terrainCoordsUniforms } from './terrain_program';
 import { projectionErrorMeasurementUniforms } from './projection_error_measurement_program';
 import { atmosphereUniforms } from './atmosphere_program';
 import { skyUniforms } from './sky_program';
@@ -39,7 +39,9 @@ export const programUniforms = {
     hillshadePrepare: hillshadePrepareUniforms,
     colorRelief: colorReliefUniforms,
     shadow: shadowUniforms,
+    shadowGlobal: shadowGlobalUniforms,
     shadowPrepare: shadowPrepareUniforms,
+    shadowBlur: shadowBlurUniforms,
     daylight: daylightUniforms,
     line: lineUniforms,
     lineGradient: lineGradientUniforms,
@@ -54,6 +56,7 @@ export const programUniforms = {
     backgroundPattern: backgroundPatternUniforms,
     terrain: terrainUniforms,
     terrainDepth: terrainDepthUniforms,
+    terrainElevation: terrainElevationUniforms,
     terrainCoords: terrainCoordsUniforms,
     projectionErrorMeasurement: projectionErrorMeasurementUniforms,
     atmosphere: atmosphereUniforms,

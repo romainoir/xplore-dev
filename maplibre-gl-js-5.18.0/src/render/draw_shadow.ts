@@ -1,10 +1,12 @@
 import { StencilMode } from '../gl/stencil_mode';
 import { DepthMode } from '../gl/depth_mode';
 import { CullFaceMode } from '../gl/cull_face_mode';
-import { type ColorMode } from '../gl/color_mode';
-import { shadowUniformValues } from './program/shadow_program';
+import { ColorMode } from '../gl/color_mode';
+import { shadowUniformValues, shadowGlobalUniformValues, shadowBlurUniforms } from './program/shadow_program';
+import { drawElevation } from './draw_terrain';
 import { shadowPrepareUniformValues } from './program/shadow_prepare_program';
 // calculateTileKey no longer needed — using canonical z/x/y index instead
+import { Color } from '@maplibre/maplibre-gl-style-spec';
 import { Texture } from './texture';
 import { Framebuffer } from '../gl/framebuffer';
 
@@ -22,7 +24,7 @@ import type { Tile } from '../tile/tile';
  *
  * Returns [lateral, longitudinal, diagonal] offsets as [dx, dy].
  */
-function getSunFacingNeighborOffsets(dirX: number, dirY: number): Array<[number, number]> {
+export function getSunFacingNeighborOffsets(dirX: number, dirY: number): Array<[number, number]> {
     // dirX > 0 means sun is to the east → rays come from east → bind east neighbor
     // dirY > 0 means sun is to the south (UV space) → rays come from south → bind south neighbor
     const dx = dirX >= 0 ? 1 : -1;  // lateral neighbor (east/west)
@@ -73,7 +75,7 @@ interface NeighborLookupContext {
     getNeighborTile: (id: any) => Tile | null;
 }
 
-function buildNeighborContext(painter: Painter, tileManager: TileManager): NeighborLookupContext {
+export function buildNeighborContext(painter: Painter, tileManager: TileManager): NeighborLookupContext {
     const tilesByCanonical = new Map<string, Tile>();
 
     // Copy 18's dual-key indexing
@@ -112,13 +114,6 @@ function buildNeighborContext(painter: Painter, tileManager: TileManager): Neigh
         }
     }
 
-    // === DIAGNOSTIC: Log tile index every 120 frames ===
-    if (!(globalThis as any).__shadowDiag) (globalThis as any).__shadowDiag = 0;
-    (globalThis as any).__shadowDiag++;
-    const shouldLog = (globalThis as any).__shadowDiag % 120 === 1;
-    if (shouldLog) {
-        console.log(`[SHADOW-INDEX] inView=${inViewCount} cache=${cacheCount} totalKeys=${tilesByCanonical.size}`);
-    }
 
     // Lazy neighbor finder (fallback)
     const getNeighborTile = (id: any) => {
@@ -138,7 +133,7 @@ interface NeighborInfo {
  * Ported EXACTLY from Copy 18's getNeighborTileWithZoom.
  * 6-path lookup per zoom level, 10-level parental fallback.
  */
-function getNeighborTileWithZoom(ctx: NeighborLookupContext, coord: OverscaledTileID, dx: number, dy: number, explicitZoomDiff: number = -1): NeighborInfo {
+export function getNeighborTileWithZoom(ctx: NeighborLookupContext, coord: OverscaledTileID, dx: number, dy: number, explicitZoomDiff: number = -1): NeighborInfo {
     const z = coord.canonical.z;
     let wrappedX = coord.canonical.x + dx;
     let vy = coord.canonical.y + dy;
@@ -340,6 +335,13 @@ function renderShadowTiles(
     const transform = painter.transform;
     const gl = context.gl;
 
+    // OPTIMIZATION: If this is the coarse shadow layer (Z12), use the Global Sweep pass.
+    // This kills the O(N^2) neighbor-sampling redundancy and tile-loop overhead.
+    if (layer.id.toLowerCase().indexOf('coarse') !== -1) {
+        drawGlobalShadow(painter, layer);
+        return;
+    }
+
     const program = painter.useProgram('shadow');
     const align = !painter.options.moving;
 
@@ -360,31 +362,37 @@ function renderShadowTiles(
             continue; // No DEM texture available yet
         }
 
-        // Bind 3 sun-facing neighbors (Lateral, Longitudinal, Diagonal) to units 4-6
-        const sunDirProperties = layer.getShadowProperties();
-        const sdirX = Math.sin(sunDirProperties.directionRadians);
-        const sdirY = -Math.cos(sunDirProperties.directionRadians);
-        const neighborOffsets = getSunFacingNeighborOffsets(sdirX, sdirY);
-
+        // Neighbors -> Units 4-11 (Clockwise from North)
         const neighborZoomInfos: Array<[number, number, number, number]> = [];
-        for (let i = 0; i < 3; i++) {
-            const offset = neighborOffsets[i];
-            const info = getNeighborTileWithZoom(ctx, coord, offset[0], offset[1]);
+        const isGPDebug = (globalThis as any)._shadowDebugMode === 2;
+        const shadowMode = (globalThis as any)._shadowMode || 0; // 0: 8-neighbors, 1: 3-neighbors
 
-            context.activeTexture.set(gl.TEXTURE4 + i);
-            const tex = info.tile ? ensureDemTexture(painter, info.tile) : null;
-            if (tex) {
-                tex.bind(gl.NEAREST, gl.CLAMP_TO_EDGE);
-                neighborZoomInfos.push(info.zoomInfo);
-            } else {
-                // Fallback to center tile if neighbor missing
-                const centerTex = ensureDemTexture(painter, tile);
-                if (centerTex) {
-                    centerTex.bind(gl.NEAREST, gl.CLAMP_TO_EDGE);
+        if (shadowMode === 0 || isGPDebug) {
+            const offsets = [[0, -1], [1, -1], [1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1]];
+            const gpJump = coord.canonical.z > 12 ? (1 << (coord.canonical.z - 12)) : 1;
+
+            for (let i = 0; i < 8; i++) {
+                context.activeTexture.set(gl.TEXTURE4 + i);
+                const off = offsets[i];
+
+                // If GP debug mode is on, we fetch Z12 neighbors instead of local ones
+                const info = isGPDebug
+                    ? getNeighborTileWithZoom(ctx, coord, off[0] * gpJump, off[1] * gpJump, 2)
+                    : getNeighborTileWithZoom(ctx, coord, off[0], off[1]);
+
+                const tex = info.tile ? ensureDemTexture(painter, info.tile) : null;
+                if (tex) {
+                    tex.bind(gl.NEAREST, gl.CLAMP_TO_EDGE);
+                    neighborZoomInfos.push(info.zoomInfo);
+                } else {
+                    // Fallback to center tile if neighbor missing
+                    const centerTex = ensureDemTexture(painter, tile);
+                    if (centerTex) centerTex.bind(gl.NEAREST, gl.CLAMP_TO_EDGE);
+                    neighborZoomInfos.push([0.0, 0.0, 0.0, 0.0]);
                 }
-                // Sentinel for shader fallback (mirroring / repeating)
-                neighborZoomInfos.push([0.0, 0.0, 0.0, 0.0]);
             }
+        } else {
+            for (let i = 0; i < 8; i++) neighborZoomInfos.push([0.0, 0.0, 0.0, 0.0]);
         }
 
         // Center Tile Raw Backup -> Unit 1
@@ -394,14 +402,41 @@ function renderShadowTiles(
         }
 
         // Grandparent -> u_grandparent_dem (unit 12)
-        context.activeTexture.set(gl.TEXTURE12);
+        const gpJump = coord.canonical.z > 12 ? (1 << (coord.canonical.z - 12)) : 1;
         const gpInfo = getNeighborTileWithZoom(ctx, coord, 0, 0, 2);
+        let gpZoomInfo: [number, number, number, number] = [0.0, 0.0, 0.0, 0.0];
+
+        context.activeTexture.set(gl.TEXTURE12);
         const gpTex = gpInfo.tile ? ensureDemTexture(painter, gpInfo.tile) : null;
         if (gpTex) {
             gpTex.bind(gl.NEAREST, gl.CLAMP_TO_EDGE);
+            gpZoomInfo = gpInfo.zoomInfo;
         } else {
             const centerTex = ensureDemTexture(painter, tile);
             if (centerTex) centerTex.bind(gl.NEAREST, gl.CLAMP_TO_EDGE);
+        }
+
+        // Bind 3 sun-facing neighbors (Lateral, Longitudinal, Diagonal) for GP
+        const sunDirProperties = layer.getShadowProperties();
+        const sdirX = Math.sin(sunDirProperties.directionRadians);
+        const sdirY = -Math.cos(sunDirProperties.directionRadians);
+
+        // GP Neighbors -> units 13-15
+        const gpNeighborZoomInfos: Array<[number, number, number, number]> = [];
+        const gpOffsets = getSunFacingNeighborOffsets(sdirX, sdirY);
+        for (let i = 0; i < 3; i++) {
+            const off = gpOffsets[i];
+            const info = getNeighborTileWithZoom(ctx, coord, off[0] * gpJump, off[1] * gpJump, 2);
+            context.activeTexture.set(gl.TEXTURE13 + i);
+            const tex = info.tile ? ensureDemTexture(painter, info.tile) : null;
+            if (tex) {
+                tex.bind(gl.NEAREST, gl.CLAMP_TO_EDGE);
+                gpNeighborZoomInfos.push(info.zoomInfo);
+            } else {
+                // Dummy fallback to GP center
+                if (gpTex) gpTex.bind(gl.NEAREST, gl.CLAMP_TO_EDGE);
+                gpNeighborZoomInfos.push([0.0, 0.0, 0.0, 0.0]);
+            }
         }
 
         const mesh = projection.getMeshFromTileID(context, coord.canonical, useBorder, true, 'raster');
@@ -411,7 +446,8 @@ function renderShadowTiles(
         const uniformValues = shadowUniformValues(
             painter, tile, layer,
             neighborZoomInfos,
-            gpInfo.zoomInfo
+            gpZoomInfo,
+            gpNeighborZoomInfos
         );
 
         if (!(globalThis as any).__shadowDiag) (globalThis as any).__shadowDiag = 0;
@@ -427,6 +463,118 @@ function renderShadowTiles(
         program.draw(context, gl.TRIANGLES, depthMode, stencilModes[coord.overscaledZ], colorMode, CullFaceMode.backCCW,
             uniformValues, terrainData, projectionData, layer.id, mesh.vertexBuffer, mesh.indexBuffer, mesh.segments);
     }
+}
+
+/**
+ * Draw Global Screen-Space Shadows (Zero Redundancy Z12 Pass)
+ */
+export function drawGlobalShadow(
+    painter: Painter,
+    layer: ShadowStyleLayer
+) {
+    const context = painter.context;
+    const gl = context.gl;
+    const transform = painter.transform;
+
+    const terrain = painter.style.map.terrain;
+    if (!terrain || !terrain._fboElevationTexture || !terrain._fboShadowTexture) {
+        console.warn('[ATLAS] drawGlobalShadow: missing FBO textures', {
+            terrain: !!terrain,
+            elevation: !!terrain?._fboElevationTexture,
+            shadow: !!terrain?._fboShadowTexture
+        });
+        return;
+    }
+
+    const colorMode = painter.colorModeForRenderPass();
+    const depthMode = DepthMode.disabled;
+    const stencilMode = StencilMode.disabled;
+
+    const program = painter.useProgram('shadowGlobal');
+
+    // 1. Calculate Atlas-space scales
+    const atlasBounds = (terrain as any)._elevationAtlasBounds; // [minX, minY, maxX, maxY] in 0..1 world
+    if (!atlasBounds) {
+        console.warn('[ATLAS] drawGlobalShadow: no _elevationAtlasBounds set');
+        return;
+    }
+
+    const worldCircumference = 40075016.7;
+    const atlasWorldWidth = atlasBounds[2] - atlasBounds[0];
+    const atlasWorldHeight = atlasBounds[3] - atlasBounds[1];
+    const atlasPixelSize = terrain._fboElevationTexture.size[0]; // Square atlas
+
+    // Per-axis meters per pixel for correct raymarching in non-square Mercator regions
+    const metersPerPixelX = (atlasWorldWidth * worldCircumference) / atlasPixelSize;
+    const metersPerPixelY = (atlasWorldHeight * worldCircumference) / atlasPixelSize;
+
+
+    const uniformValues = shadowGlobalUniformValues(painter, layer, metersPerPixelX, metersPerPixelY);
+
+    // 2. Render to Shadow FBO
+    context.bindFramebuffer.set(terrain.getFramebuffer('shadow').framebuffer);
+    context.viewport.set([0, 0, terrain._fboShadowTexture.size[0], terrain._fboShadowTexture.size[1]]);
+    context.clear({ color: Color.transparent }); // Clear to no shadow (0)
+
+    // Bind Elevation Atlas to Unit 0
+    context.activeTexture.set(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, terrain._fboElevationTexture.texture);
+
+    // Use painter's built-in quad buffers
+    program.draw(context, gl.TRIANGLES, depthMode, stencilMode, colorMode, CullFaceMode.disabled,
+        uniformValues, null, null, layer.id, painter.rasterBoundsBuffer,
+        painter.quadTriangleIndexBuffer, painter.rasterBoundsSegments);
+
+    // 3. Apply Multi-Pass Gaussian Blur to soften edges
+    drawGlobalShadowBlur(painter);
+
+    // Unbind FBO to prevent feedback loop when terrain shader samples the shadow texture
+    context.bindFramebuffer.set(null);
+    context.viewport.set([0, 0, painter.width, painter.height]);
+}
+
+/**
+ * Executes a 2-pass Gaussian blur (Horizontal + Vertical) on the Shadow Atlas.
+ * Pass 1: u_shadow_atlas -> u_shadow_blur_atlas (Horizontal)
+ * Pass 2: u_shadow_blur_atlas -> u_shadow_atlas (Vertical)
+ */
+export function drawGlobalShadowBlur(painter: Painter) {
+    const context = painter.context;
+    const gl = context.gl;
+    const terrainInstance = painter.style.map.terrain;
+    if (!terrainInstance || !terrainInstance._fboShadowTexture || !terrainInstance._fboShadowBlurTexture) return;
+
+    const atlasSize = 2048; // Terrain.ATLAS_SIZE
+    const program = painter.useProgram('shadowBlur');
+    const colorMode = ColorMode.unblended;
+    const depthMode = DepthMode.disabled;
+    const stencilMode = StencilMode.disabled;
+
+    // --- Pass 1: Horizontal Blur ---
+    // Target: shadow_blur FBO
+    context.bindFramebuffer.set(terrainInstance.getFramebuffer('shadow_blur').framebuffer);
+    context.viewport.set([0, 0, atlasSize, atlasSize]);
+
+    // Input: Original shadow texture (unit 0)
+    context.activeTexture.set(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, terrainInstance._fboShadowTexture.texture);
+
+    program.draw(context, gl.TRIANGLES, depthMode, stencilMode, colorMode, CullFaceMode.disabled,
+        { 'u_image': 0, 'u_direction': [1.0, 0.0] }, null, null, 'shadow-blur-h',
+        painter.rasterBoundsBuffer, painter.quadTriangleIndexBuffer, painter.rasterBoundsSegments);
+
+    // --- Pass 2: Vertical Blur ---
+    // Target: Original shadow FBO
+    context.bindFramebuffer.set(terrainInstance.getFramebuffer('shadow').framebuffer);
+    context.viewport.set([0, 0, atlasSize, atlasSize]);
+
+    // Input: Horizontal blurred texture (unit 0)
+    context.activeTexture.set(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, terrainInstance._fboShadowBlurTexture.texture);
+
+    program.draw(context, gl.TRIANGLES, depthMode, stencilMode, colorMode, CullFaceMode.disabled,
+        { 'u_image': 0, 'u_direction': [0.0, 1.0] }, null, null, 'shadow-blur-v',
+        painter.rasterBoundsBuffer, painter.quadTriangleIndexBuffer, painter.rasterBoundsSegments);
 }
 
 export function prepareShadow(

@@ -1,22 +1,22 @@
-import {type PreparedShader, shaders, transpileVertexShaderToWebGL1, transpileFragmentShaderToWebGL1} from '../shaders/shaders';
-import {type ProgramConfiguration} from '../data/program_configuration';
-import {VertexArrayObject} from './vertex_array_object';
-import {type Context} from '../gl/context';
-import {isWebGL2} from '../gl/webgl2';
+import { type PreparedShader, shaders, transpileVertexShaderToWebGL1, transpileFragmentShaderToWebGL1 } from '../shaders/shaders';
+import { type ProgramConfiguration } from '../data/program_configuration';
+import { VertexArrayObject } from './vertex_array_object';
+import { type Context } from '../gl/context';
+import { isWebGL2 } from '../gl/webgl2';
 
-import type {SegmentVector} from '../data/segment';
-import type {VertexBuffer} from '../gl/vertex_buffer';
-import type {IndexBuffer} from '../gl/index_buffer';
-import type {DepthMode} from '../gl/depth_mode';
-import type {StencilMode} from '../gl/stencil_mode';
-import type {ColorMode} from '../gl/color_mode';
-import type {CullFaceMode} from '../gl/cull_face_mode';
-import type {UniformBindings, UniformValues, UniformLocations} from './uniform_binding';
-import type {BinderUniform} from '../data/program_configuration';
-import {terrainPreludeUniforms, type TerrainPreludeUniformsType} from './program/terrain_program';
-import type {TerrainData} from '../render/terrain';
-import {projectionObjectToUniformMap, type ProjectionPreludeUniformsType, projectionUniforms} from './program/projection_program';
-import type {ProjectionData} from '../geo/projection/projection_data';
+import type { SegmentVector } from '../data/segment';
+import type { VertexBuffer } from '../gl/vertex_buffer';
+import type { IndexBuffer } from '../gl/index_buffer';
+import type { DepthMode } from '../gl/depth_mode';
+import type { StencilMode } from '../gl/stencil_mode';
+import type { ColorMode } from '../gl/color_mode';
+import type { CullFaceMode } from '../gl/cull_face_mode';
+import type { UniformBindings, UniformValues, UniformLocations } from './uniform_binding';
+import type { BinderUniform } from '../data/program_configuration';
+import { terrainPreludeUniforms, type TerrainPreludeUniformsType } from './program/terrain_program';
+import type { TerrainData } from '../render/terrain';
+import { projectionObjectToUniformMap, type ProjectionPreludeUniformsType, projectionUniforms } from './program/projection_program';
+import type { ProjectionData } from '../geo/projection/projection_data';
 
 export type DrawMode = WebGLRenderingContextBase['LINES'] | WebGLRenderingContextBase['TRIANGLES'] | WebGL2RenderingContext['LINE_STRIP'];
 
@@ -37,7 +37,7 @@ function getTokenizedAttributesAndUniforms(array: Array<string>): Array<string> 
  */
 export class Program<Us extends UniformBindings> {
     program: WebGLProgram;
-    attributes: {[_: string]: number};
+    attributes: { [_: string]: number };
     numAttributes: number;
     fixedUniforms: Us;
     terrainUniforms: TerrainPreludeUniformsType;
@@ -207,7 +207,9 @@ export class Program<Us extends UniformBindings> {
         if (projectionData) {
             for (const fieldName in projectionData) {
                 const uniformName = projectionObjectToUniformMap[fieldName];
-                this.projectionUniforms[uniformName].set(projectionData[fieldName]);
+                if (this.projectionUniforms[uniformName]) {
+                    this.projectionUniforms[uniformName].set(projectionData[fieldName]);
+                }
             }
         }
 
@@ -218,7 +220,7 @@ export class Program<Us extends UniformBindings> {
         }
 
         if (configuration) {
-            configuration.setUniforms(context, this.binderUniforms, currentProperties, {zoom: (zoom as any)});
+            configuration.setUniforms(context, this.binderUniforms, currentProperties, { zoom: (zoom as any) });
         }
 
         let primitiveSize = 0;

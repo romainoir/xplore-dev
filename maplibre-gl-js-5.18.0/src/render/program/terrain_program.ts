@@ -1,6 +1,8 @@
 import {
     Uniform1i,
     Uniform1f,
+    Uniform2f,
+    Uniform3f,
     Uniform4f,
     UniformMatrix4f,
     UniformColor
@@ -9,6 +11,8 @@ import type { Context } from '../../gl/context';
 import type { UniformValues, UniformLocations } from '../../render/uniform_binding';
 import { type Sky } from '../../style/sky';
 import { Color } from '@maplibre/maplibre-gl-style-spec';
+import { type Tile } from '../../tile/tile';
+import { type Painter } from '../painter';
 import { type mat4 } from 'gl-matrix';
 
 export type TerrainPreludeUniformsType = {
@@ -36,6 +40,23 @@ export type TerrainUniformsType = {
     'u_contour_multiplier': Uniform1f;
     'u_zoom': Uniform1f;
     'u_tile_zoom': Uniform1f;
+    'u_shadow_atlas': Uniform1i;
+    'u_atlas_bounds': Uniform4f;
+    'u_tile_id': Uniform3f;
+    'u_shadow_intensity': Uniform1f;
+    'u_debug_mode': Uniform1i;
+    'u_sun_altitude': Uniform1f;
+    'u_sun_direction': Uniform2f;
+    'u_dem_ao': Uniform1i;
+    'u_dem_ao_dim': Uniform1f;
+    'u_dem_ao_unpack': Uniform4f;
+    'u_dem_ao_exag': Uniform1f;
+    'u_elevation_atlas': Uniform1i;
+    'u_metersPerPixel': Uniform1f;
+};
+
+export type TerrainElevationUniformsType = {
+    'u_ele_delta': Uniform1f;
 };
 
 export type TerrainDepthUniformsType = {
@@ -73,6 +94,23 @@ const terrainUniforms = (context: Context, locations: UniformLocations): Terrain
     'u_contour_multiplier': new Uniform1f(context, locations.u_contour_multiplier),
     'u_zoom': new Uniform1f(context, locations.u_zoom),
     'u_tile_zoom': new Uniform1f(context, locations.u_tile_zoom),
+    'u_shadow_atlas': new Uniform1i(context, locations.u_shadow_atlas),
+    'u_atlas_bounds': new Uniform4f(context, locations.u_atlas_bounds),
+    'u_tile_id': new Uniform3f(context, locations.u_tile_id),
+    'u_shadow_intensity': new Uniform1f(context, locations.u_shadow_intensity),
+    'u_debug_mode': new Uniform1i(context, locations.u_debug_mode),
+    'u_sun_altitude': new Uniform1f(context, locations.u_sun_altitude),
+    'u_sun_direction': new Uniform2f(context, locations.u_sun_direction),
+    'u_dem_ao': new Uniform1i(context, locations.u_dem_ao),
+    'u_dem_ao_dim': new Uniform1f(context, locations.u_dem_ao_dim),
+    'u_dem_ao_unpack': new Uniform4f(context, locations.u_dem_ao_unpack),
+    'u_dem_ao_exag': new Uniform1f(context, locations.u_dem_ao_exag),
+    'u_elevation_atlas': new Uniform1i(context, locations.u_elevation_atlas),
+    'u_metersPerPixel': new Uniform1f(context, locations.u_metersPerPixel),
+});
+
+const terrainElevationUniforms = (context: Context, locations: UniformLocations): TerrainElevationUniformsType => ({
+    'u_ele_delta': new Uniform1f(context, locations.u_ele_delta)
 });
 
 const terrainDepthUniforms = (context: Context, locations: UniformLocations): TerrainDepthUniformsType => ({
@@ -91,7 +129,9 @@ const terrainUniformValues = (
     sky: Sky,
     pitch: number,
     isGlobeMode: boolean,
-    zoom: number): UniformValues<TerrainUniformsType> => {
+    zoom: number,
+    painter?: Painter,
+    tile?: Tile | null): UniformValues<TerrainUniformsType> => {
 
     // Contour defaults — always on unless explicitly disabled
     let contourEnabled = 1.0;
@@ -142,8 +182,35 @@ const terrainUniformValues = (
         'u_contour_color': contourColor,
         'u_zoom': zoom,
         'u_tile_zoom': 0,
+        'u_shadow_atlas': 15, // Bind shadow atlas to unit 15
+        'u_atlas_bounds': (painter.style.map.terrain as any)?._elevationAtlasBounds || [0, 0, 1, 1],
+        'u_tile_id': tile ? [tile.tileID.canonical.z, tile.tileID.canonical.x, tile.tileID.canonical.y] : [0, 0, 0],
+        'u_shadow_intensity': 1.0,
+        'u_debug_mode': (typeof window !== 'undefined' && (window as any)._shadowDebugMode) ? (window as any)._shadowDebugMode : 0,
+        'u_sun_altitude': (() => {
+            const sl = painter?.style?.getLayer('shadow-coarse') as any;
+            return sl?.getShadowProperties ? sl.getShadowProperties().altitudeRadians : 0.5;
+        })(),
+        'u_sun_direction': (() => {
+            const sl = painter?.style?.getLayer('shadow-coarse') as any;
+            if (!sl?.getShadowProperties) return [0.707, -0.707];
+            const dir = sl.getShadowProperties().directionRadians;
+            return [Math.sin(dir), -Math.cos(dir)];
+        })(),
+        'u_dem_ao': 13, // Per-tile DEM texture at unit 13 for full-res AO
+        'u_dem_ao_dim': 514.0,  // Default, overridden per-tile in drawTerrain
+        'u_dem_ao_unpack': [6553.6, 25.6, 0.1, 10000.0], // Default Mapbox DEM unpack
+        'u_dem_ao_exag': 1.3, // Default, overridden per-tile in drawTerrain
+        'u_elevation_atlas': 14, // Bind elevation atlas to unit 14
+        'u_metersPerPixel': 40075016.7 / (512 * Math.pow(2, zoom)),
     };
 };
+
+const terrainElevationUniformValues = (
+    eleDelta: number
+): UniformValues<TerrainElevationUniformsType> => ({
+    'u_ele_delta': eleDelta
+});
 
 const terrainDepthUniformValues = (
     eleDelta: number
@@ -160,4 +227,4 @@ const terrainCoordsUniformValues = (
     'u_ele_delta': eleDelta
 });
 
-export { terrainUniforms, terrainDepthUniforms, terrainCoordsUniforms, terrainPreludeUniforms, terrainUniformValues, terrainDepthUniformValues, terrainCoordsUniformValues };
+export { terrainUniforms, terrainDepthUniforms, terrainElevationUniforms, terrainCoordsUniforms, terrainPreludeUniforms, terrainUniformValues, terrainDepthUniformValues, terrainElevationUniformValues, terrainCoordsUniformValues };

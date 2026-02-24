@@ -1,27 +1,27 @@
 
-import {mat4, vec2} from 'gl-matrix';
-import {OverscaledTileID} from '../tile/tile_id';
-import {RGBAImage} from '../util/image';
-import {warnOnce} from '../util/util';
-import {Pos3dArray, TriangleIndexArray} from '../data/array_types.g';
+import { mat4, vec2 } from 'gl-matrix';
+import { OverscaledTileID } from '../tile/tile_id';
+import { RGBAImage } from '../util/image';
+import { warnOnce } from '../util/util';
+import { Pos3dArray, TriangleIndexArray } from '../data/array_types.g';
 import pos3dAttributes from '../data/pos3d_attributes';
-import {SegmentVector} from '../data/segment';
-import {Texture} from '../render/texture';
-import {MercatorCoordinate} from '../geo/mercator_coordinate';
-import {TerrainTileManager} from '../tile/terrain_tile_manager';
-import {EXTENT} from '../data/extent';
-import {type LngLat, earthRadius} from '../geo/lng_lat';
-import {Mesh} from './mesh';
-import {isInBoundsForZoomLngLat} from '../util/world_bounds';
-import {NORTH_POLE_Y, SOUTH_POLE_Y} from './subdivision';
-import {coveringTiles} from '../geo/projection/covering_tiles';
+import { SegmentVector } from '../data/segment';
+import { Texture } from '../render/texture';
+import { MercatorCoordinate } from '../geo/mercator_coordinate';
+import { TerrainTileManager } from '../tile/terrain_tile_manager';
+import { EXTENT } from '../data/extent';
+import { type LngLat, earthRadius } from '../geo/lng_lat';
+import { Mesh } from './mesh';
+import { isInBoundsForZoomLngLat } from '../util/world_bounds';
+import { NORTH_POLE_Y, SOUTH_POLE_Y } from './subdivision';
+import { coveringTiles } from '../geo/projection/covering_tiles';
 import type Point from '@mapbox/point-geometry';
-import type {Tile} from '../tile/tile';
-import type {Framebuffer} from '../gl/framebuffer';
-import type {TileManager} from '../tile/tile_manager';
-import type {TerrainSpecification} from '@maplibre/maplibre-gl-style-spec';
-import type {Painter} from './painter';
-import type {IReadonlyTransform} from '../geo/transform_interface';
+import type { Tile } from '../tile/tile';
+import type { Framebuffer } from '../gl/framebuffer';
+import type { TileManager } from '../tile/tile_manager';
+import type { TerrainSpecification } from '@maplibre/maplibre-gl-style-spec';
+import type { Painter } from './painter';
+import type { IReadonlyTransform } from '../geo/transform_interface';
 
 /**
  * @internal
@@ -106,6 +106,9 @@ export class Terrain {
     _fbo: Framebuffer;
     _fboCoordsTexture: Texture;
     _fboDepthTexture: Texture;
+    _fboElevationTexture: Texture;
+    _fboShadowTexture: Texture;
+    _fboShadowBlurTexture: Texture;
     _emptyDepthTexture: Texture;
     /**
      * GL Objects for the terrain-mesh
@@ -136,7 +139,7 @@ export class Terrain {
      * as of overzooming of raster-dem tiles in high zoomlevels, this cache contains
      * matrices to transform from vector-tile coords to raster-dem-tile coords.
      */
-    _demMatrixCache: {[_: string]: { matrix: mat4; coord: OverscaledTileID }};
+    _demMatrixCache: { [_: string]: { matrix: mat4; coord: OverscaledTileID } };
 
     constructor(painter: Painter, tileManager: TileManager, options: TerrainSpecification) {
         this.painter = painter;
@@ -192,7 +195,7 @@ export class Terrain {
      */
     getElevationForLngLatZoom(lnglat: LngLat, zoom: number) {
         if (!isInBoundsForZoomLngLat(zoom, lnglat.wrap())) return 0;
-        const {tileID, mercatorX, mercatorY} = this._getOverscaledTileIDFromLngLatZoom(lnglat, zoom);
+        const { tileID, mercatorX, mercatorY } = this._getOverscaledTileIDFromLngLatZoom(lnglat, zoom);
         return this.getElevation(tileID, mercatorX % EXTENT, mercatorY % EXTENT, EXTENT);
     }
 
@@ -203,7 +206,7 @@ export class Terrain {
      * @returns the elevation
      */
     getElevationForLngLat(lnglat: LngLat, transform: IReadonlyTransform) {
-        const terrainCoveringTiles = coveringTiles(transform, {maxzoom: this.tileManager.maxzoom, minzoom: this.tileManager.minzoom, tileSize: 512, terrain: this});
+        const terrainCoveringTiles = coveringTiles(transform, { maxzoom: this.tileManager.maxzoom, minzoom: this.tileManager.minzoom, tileSize: 512, terrain: this });
         let zoom = 0;
         for (const tile of terrainCoveringTiles) {
             if (tile.canonical.z > zoom) {
@@ -235,10 +238,10 @@ export class Terrain {
         // creates an empty depth-buffer texture which is needed, during the initialization process of the 3d mesh..
         if (!this._emptyDemTexture) {
             const context = this.painter.context;
-            const image = new RGBAImage({width: 1, height: 1}, new Uint8Array(1 * 4));
-            this._emptyDepthTexture = new Texture(context, image, context.gl.RGBA, {premultiply: false});
+            const image = new RGBAImage({ width: 1, height: 1 }, new Uint8Array(1 * 4));
+            this._emptyDepthTexture = new Texture(context, image, context.gl.RGBA, { premultiply: false });
             this._emptyDemUnpack = [0, 0, 0, 0];
-            this._emptyDemTexture = new Texture(context, new RGBAImage({width: 1, height: 1}), context.gl.RGBA, {premultiply: false});
+            this._emptyDemTexture = new Texture(context, new RGBAImage({ width: 1, height: 1 }), context.gl.RGBA, { premultiply: false });
             this._emptyDemTexture.bind(context.gl.NEAREST, context.gl.CLAMP_TO_EDGE);
             this._emptyDemMatrix = mat4.identity([] as any);
         }
@@ -247,8 +250,8 @@ export class Terrain {
         if (sourceTile && sourceTile.dem && (!sourceTile.demTexture || sourceTile.needsTerrainPrepare)) {
             const context = this.painter.context;
             sourceTile.demTexture = this.painter.getTileTexture(sourceTile.dem.stride);
-            if (sourceTile.demTexture) sourceTile.demTexture.update(sourceTile.dem.getPixels(), {premultiply: false});
-            else sourceTile.demTexture = new Texture(context, sourceTile.dem.getPixels(), context.gl.RGBA, {premultiply: false});
+            if (sourceTile.demTexture) sourceTile.demTexture.update(sourceTile.dem.getPixels(), { premultiply: false });
+            else sourceTile.demTexture = new Texture(context, sourceTile.dem.getPixels(), context.gl.RGBA, { premultiply: false });
             sourceTile.demTexture.bind(context.gl.NEAREST, context.gl.CLAMP_TO_EDGE);
             sourceTile.needsTerrainPrepare = false;
         }
@@ -258,14 +261,14 @@ export class Terrain {
             const maxzoom = this.tileManager.getSource().maxzoom;
             let dz = tileID.canonical.z - sourceTile.tileID.canonical.z;
             if (tileID.overscaledZ > tileID.canonical.z) {
-                if (tileID.canonical.z >= maxzoom) dz =  tileID.canonical.z - maxzoom;
+                if (tileID.canonical.z >= maxzoom) dz = tileID.canonical.z - maxzoom;
                 else warnOnce('cannot calculate elevation if elevation maxzoom > source.maxzoom');
             }
             const dx = tileID.canonical.x - (tileID.canonical.x >> dz << dz);
             const dy = tileID.canonical.y - (tileID.canonical.y >> dz << dz);
             const demMatrix = mat4.fromScaling(new Float64Array(16) as any, [1 / (EXTENT << dz), 1 / (EXTENT << dz), 0]);
             mat4.translate(demMatrix, demMatrix, [dx * EXTENT, dy * EXTENT, 0]);
-            this._demMatrixCache[tileID.key] = {matrix: demMatrix, coord: tileID};
+            this._demMatrixCache[tileID.key] = { matrix: demMatrix, coord: tileID };
         }
         // return uniform values & textures
         return {
@@ -286,6 +289,11 @@ export class Terrain {
      * @param texture - the texture
      * @returns the frame buffer
      */
+    _fboElevation: Framebuffer;
+    _fboShadow: Framebuffer;
+    _fboShadowBlur: Framebuffer;
+    static readonly ATLAS_SIZE = 2048;
+
     getFramebuffer(texture: string): Framebuffer {
         const painter = this.painter;
         const width = painter.width / devicePixelRatio;
@@ -294,23 +302,75 @@ export class Terrain {
             this._fbo.destroy();
             this._fboCoordsTexture.destroy();
             this._fboDepthTexture.destroy();
+            if (this._fboElevationTexture) this._fboElevationTexture.destroy();
+            if (this._fboShadowTexture) this._fboShadowTexture.destroy();
+            if (this._fboShadowBlurTexture) this._fboShadowBlurTexture.destroy();
+            if (this._fboElevation) this._fboElevation.destroy();
+            if (this._fboShadow) this._fboShadow.destroy();
+            if (this._fboShadowBlur) this._fboShadowBlur.destroy();
             delete this._fbo;
             delete this._fboDepthTexture;
+            delete this._fboElevationTexture;
+            delete this._fboShadowTexture;
+            delete this._fboShadowBlurTexture;
             delete this._fboCoordsTexture;
+            delete this._fboElevation;
+            delete this._fboShadow;
+            delete this._fboShadowBlur;
         }
         if (!this._fboCoordsTexture) {
-            this._fboCoordsTexture = new Texture(painter.context, {width, height, data: null}, painter.context.gl.RGBA, {premultiply: false});
+            this._fboCoordsTexture = new Texture(painter.context, { width, height, data: null }, painter.context.gl.RGBA, { premultiply: false });
             this._fboCoordsTexture.bind(painter.context.gl.NEAREST, painter.context.gl.CLAMP_TO_EDGE);
         }
         if (!this._fboDepthTexture) {
-            this._fboDepthTexture = new Texture(painter.context, {width, height, data: null}, painter.context.gl.RGBA, {premultiply: false});
+            this._fboDepthTexture = new Texture(painter.context, { width, height, data: null }, painter.context.gl.RGBA, { premultiply: false });
             this._fboDepthTexture.bind(painter.context.gl.NEAREST, painter.context.gl.CLAMP_TO_EDGE);
+        }
+        // Elevation and Shadow atlases use a dedicated square size for consistent quality
+        const atlasSize = Terrain.ATLAS_SIZE;
+        if (!this._fboElevationTexture) {
+            this._fboElevationTexture = new Texture(painter.context, { width: atlasSize, height: atlasSize, data: null }, painter.context.gl.RGBA, { premultiply: false });
+            this._fboElevationTexture.bind(painter.context.gl.LINEAR, painter.context.gl.CLAMP_TO_EDGE);
+        }
+        if (!this._fboShadowTexture) {
+            this._fboShadowTexture = new Texture(painter.context, { width: atlasSize, height: atlasSize, data: null }, painter.context.gl.RGBA, { premultiply: false });
+            this._fboShadowTexture.bind(painter.context.gl.LINEAR, painter.context.gl.CLAMP_TO_EDGE);
+        }
+        if (!this._fboShadowBlurTexture) {
+            this._fboShadowBlurTexture = new Texture(painter.context, { width: atlasSize, height: atlasSize, data: null }, painter.context.gl.RGBA, { premultiply: false });
+            this._fboShadowBlurTexture.bind(painter.context.gl.LINEAR, painter.context.gl.CLAMP_TO_EDGE);
         }
         if (!this._fbo) {
             this._fbo = painter.context.createFramebuffer(width, height, true, false);
             this._fbo.depthAttachment.set(painter.context.createRenderbuffer(painter.context.gl.DEPTH_COMPONENT16, width, height));
         }
-        this._fbo.colorAttachment.set(texture === 'coords' ? this._fboCoordsTexture.texture : this._fboDepthTexture.texture);
+
+        // Elevation and Shadow get their own dedicated FBOs to avoid feedback loops
+        if (texture === 'elevation') {
+            if (!this._fboElevation) {
+                this._fboElevation = painter.context.createFramebuffer(atlasSize, atlasSize, true, false);
+                this._fboElevation.depthAttachment.set(painter.context.createRenderbuffer(painter.context.gl.DEPTH_COMPONENT16, atlasSize, atlasSize));
+            }
+            this._fboElevation.colorAttachment.set(this._fboElevationTexture.texture);
+            return this._fboElevation;
+        }
+        if (texture === 'shadow') {
+            if (!this._fboShadow) {
+                this._fboShadow = painter.context.createFramebuffer(atlasSize, atlasSize, false, false);
+            }
+            this._fboShadow.colorAttachment.set(this._fboShadowTexture.texture);
+            return this._fboShadow;
+        }
+        if (texture === 'shadow_blur') {
+            if (!this._fboShadowBlur) {
+                this._fboShadowBlur = painter.context.createFramebuffer(atlasSize, atlasSize, false, false);
+            }
+            this._fboShadowBlur.colorAttachment.set(this._fboShadowBlurTexture.texture);
+            return this._fboShadowBlur;
+        }
+
+        this._fbo.colorAttachment.set(texture === 'coords' ? this._fboCoordsTexture.texture :
+            this._fboDepthTexture.texture);
         return this._fbo;
     }
 
@@ -334,8 +394,8 @@ export class Terrain {
             data[i + 2] = ((x >> 8) << 4) | (y >> 8);
             data[i + 3] = 0;
         }
-        const image = new RGBAImage({width: this._coordsTextureSize, height: this._coordsTextureSize}, new Uint8Array(data.buffer));
-        const texture = new Texture(context, image, context.gl.RGBA, {premultiply: false});
+        const image = new RGBAImage({ width: this._coordsTextureSize, height: this._coordsTextureSize }, new Uint8Array(data.buffer));
+        const texture = new Texture(context, image, context.gl.RGBA, { premultiply: false });
         texture.bind(context.gl.NEAREST, context.gl.CLAMP_TO_EDGE);
         this._coordsTexture = texture;
         return texture;
@@ -478,7 +538,7 @@ export class Terrain {
 
     getMinTileElevationForLngLatZoom(lnglat: LngLat, zoom: number) {
         if (!isInBoundsForZoomLngLat(zoom, lnglat.wrap())) return 0;
-        const {tileID} = this._getOverscaledTileIDFromLngLatZoom(lnglat, zoom);
+        const { tileID } = this._getOverscaledTileIDFromLngLatZoom(lnglat, zoom);
         return this.getMinMaxElevation(tileID).minElevation ?? 0;
     }
 
@@ -490,9 +550,9 @@ export class Terrain {
      * @returns the minimum and maximum elevation found in the tile, including the terrain's
      * exaggeration
      */
-    getMinMaxElevation(tileID: OverscaledTileID): {minElevation: number | null; maxElevation: number | null} {
+    getMinMaxElevation(tileID: OverscaledTileID): { minElevation: number | null; maxElevation: number | null } {
         const tile = this.getTerrainData(tileID).tile;
-        const minMax = {minElevation: null, maxElevation: null};
+        const minMax = { minElevation: null, maxElevation: null };
         if (tile && tile.dem) {
             minMax.minElevation = tile.dem.min * this.exaggeration;
             minMax.maxElevation = tile.dem.max * this.exaggeration;
@@ -500,7 +560,7 @@ export class Terrain {
         return minMax;
     }
 
-    _getOverscaledTileIDFromLngLatZoom(lnglat: LngLat, zoom: number): { tileID: OverscaledTileID; mercatorX: number; mercatorY: number} {
+    _getOverscaledTileIDFromLngLatZoom(lnglat: LngLat, zoom: number): { tileID: OverscaledTileID; mercatorX: number; mercatorY: number } {
         const mercatorCoordinate = MercatorCoordinate.fromLngLat(lnglat.wrap());
         const worldSize = (1 << zoom) * EXTENT;
         const mercatorX = mercatorCoordinate.x * worldSize;

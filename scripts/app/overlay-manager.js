@@ -195,6 +195,27 @@ export function applyOverlays(map, deps = {}) {
     ensureL({ id: 'detail-native', type: 'hillshade', source: 'hillshadeSource', layout: { 'visibility': 'none' }, paint: { 'hillshade-exaggeration': 1.0, 'hillshade-illumination-anchor': 'map', 'hillshade-accent-color': '#00ff00' } }, topLabelId || undefined);
     ensureL({ id: 'shadow-native', type: 'hillshade', source: 'shadowDemSource', layout: { 'visibility': 'none' }, paint: { 'hillshade-exaggeration': 1.0, 'hillshade-illumination-anchor': 'map' } }, topLabelId || undefined);
 
+    // ─── True native daylight layer (H4 Engine - Sun Duration) ───
+    ensureL({
+        id: 'daylight-native',
+        type: 'daylight',
+        source: 'shadowDemSource', // Reuses the horizon map built by the shadowDemSource
+        layout: { 'visibility': 'none' },
+        paint: {
+            'daylight-opacity': 0.8,
+            'daylight-color-ramp': [
+                'interpolate',
+                ['linear'],
+                ['line-progress'],
+                0, '#020024',
+                0.2, '#090979',
+                0.5, '#00d4ff',
+                0.8, '#f5d300',
+                1.0, '#fffff0'
+            ]
+        }
+    }, topLabelId || undefined);
+
     // ─── True native shadow layer (H4 Engine - DEM raymarching) ───
     ensureL({
         id: 'shadow-cast',

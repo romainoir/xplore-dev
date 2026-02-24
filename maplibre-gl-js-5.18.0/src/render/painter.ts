@@ -26,13 +26,14 @@ import { drawFill } from './draw_fill';
 import { drawFillExtrusion } from './draw_fill_extrusion';
 import { drawHillshade } from './draw_hillshade';
 import { drawColorRelief } from './draw_color_relief';
-import { drawShadow } from './draw_shadow';
+import { drawShadow, drawGlobalShadow } from './draw_shadow';
+import { type ShadowStyleLayer } from '../style/style_layer/shadow_style_layer';
 import { drawDaylight } from './draw_daylight';
 import { drawRaster } from './draw_raster';
 import { drawBackground } from './draw_background';
 import { drawDebug, drawDebugPadding, selectDebugSource } from './draw_debug';
 import { drawCustom } from './draw_custom';
-import { drawDepth, drawCoords } from './draw_terrain';
+import { drawDepth, drawElevation, drawCoords } from './draw_terrain';
 import { type OverscaledTileID } from '../tile/tile_id';
 import { drawSky, drawAtmosphere } from './draw_sky';
 import { Mesh } from './mesh';
@@ -660,6 +661,13 @@ export class Painter {
         this.terrainFacilitator.dirty = false;
         drawDepth(this, this.style.map.terrain);
         drawCoords(this, this.style.map.terrain);
+
+        // Elevation atlas and global shadow run AFTER the core depth/coords pipeline
+        drawElevation(this, this.style.map.terrain);
+        const shadowLayer = this.style.getLayer('shadow-coarse') as ShadowStyleLayer;
+        if (shadowLayer) {
+            drawGlobalShadow(this, shadowLayer);
+        }
     }
 
     renderLayer(painter: Painter, tileManager: TileManager, layer: StyleLayer, coords: Array<OverscaledTileID>, renderOptions: RenderOptions) {
