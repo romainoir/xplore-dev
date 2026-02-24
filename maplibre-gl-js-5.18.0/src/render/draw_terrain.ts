@@ -241,6 +241,7 @@ function drawTerrain(painter: Painter, terrain: Terrain, tiles: Array<Tile>, ren
             gl.bindTexture(gl.TEXTURE_2D, elevTex);
         }
 
+        // Native Hillshade FBO (Igor gradients): Removed to avoid LINEAR blur
         const uniformValues = terrainUniformValues(eleDelta, fogMatrix, painter.style.sky, tr.pitch, isRenderingGlobe, tr.zoom, painter, tile);
         uniformValues['u_tile_zoom'] = tile.tileID.canonical.z;
 

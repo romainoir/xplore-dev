@@ -52,16 +52,13 @@ float unpackAtlas(vec2 uv) {
     return (normalizedElev * 20000.0 - 10000.0) * u_dem_ao_exag;
 }
 
-// Sample raw DEM elevation at a coord in DEM-space
+
+// Sample raw DEM elevation with pixel-exact precision (matching MapLibre hillshade-prepare)
 float sampleDemElev(vec2 coord) {
-    vec2 f = fract(coord);
-    float d = 1.0 / u_dem_ao_dim;
-    vec2 c = (floor(coord) + 0.5) * d;
-    vec4 rgbTL = texture(u_dem_ao, c) * 255.0 * u_dem_ao_unpack; float tl = rgbTL.r + rgbTL.g + rgbTL.b - u_dem_ao_unpack.a;
-    vec4 rgbTR = texture(u_dem_ao, c + vec2(d, 0.0)) * 255.0 * u_dem_ao_unpack; float tr = rgbTR.r + rgbTR.g + rgbTR.b - u_dem_ao_unpack.a;
-    vec4 rgbBL = texture(u_dem_ao, c + vec2(0.0, d)) * 255.0 * u_dem_ao_unpack; float bl = rgbBL.r + rgbBL.g + rgbBL.b - u_dem_ao_unpack.a;
-    vec4 rgbBR = texture(u_dem_ao, c + vec2(d, d)) * 255.0 * u_dem_ao_unpack; float br = rgbBR.r + rgbBR.g + rgbBR.b - u_dem_ao_unpack.a;
-    return mix(mix(tl, tr, f.x), mix(bl, br, f.x), f.y) * u_dem_ao_exag;
+    vec2 pos = floor(coord) + 0.5;
+    vec4 data = texture(u_dem_ao, pos / u_dem_ao_dim) * 255.0;
+    // Standard Terrain-RGB unpack (dot product for speed and precision)
+    return (dot(floor(data.rgb + 0.5), u_dem_ao_unpack.rgb) - u_dem_ao_unpack.a) * u_dem_ao_exag;
 }
 
 void main() {
@@ -141,16 +138,26 @@ void main() {
         // Sobel factor is 8.0. Spatial step is u_metersPerPixel.
         vec2 grad = vec2((eC + eF + eF + eI) - (eA + eD + eD + eG), (eG + eH + eH + eI) - (eA + eB + eB + eC)) / 8.0;
         
-        // The normal math: normalize(-df/dx, -df/dy, 1/mpp_scaling) 
-        // This is equivalent to normalize(-dx, -dy, mpp)
-        vec3 normal = normalize(vec3(-grad.x, -grad.y, u_metersPerPixel));
-
-        vec3 aoLight = normalize(vec3(0.1, 0.2, 1.0)); 
-        float dotAO = clamp(dot(normal, aoLight), 0.0, 1.0);
-        float ao = dotAO * 0.35 + 0.65; // Strengthened range for high-res DEM detail
+        // ── Igor Hillshade Algorithm (GDAL-based) Port for Sharp AO ──
+        // Using u_sun_direction and raw spatial gradients for maximum punch.
+        float azimuth = atan(u_sun_direction.x, -u_sun_direction.y) + 3.14159265;
+        float aspect = (grad.x != 0.0 || grad.y != 0.0) ? atan(grad.y, -grad.x) : 1.570796;
+        
+        // Slope strength: matches native hillshade-prepare calculations
+        float slope_magnitude = length(grad / u_metersPerPixel) * u_dem_ao_exag * 2.0; 
+        float slope_strength = atan(slope_magnitude) * 0.6366197; // 2.0/PI
+        
+        // Aspect strength for directional contrast
+        float aspect_strength = 1.0 - abs(mod((aspect + azimuth) / 3.14159265 + 0.5, 2.0) - 1.0);
+        
+        float ao_shadow = slope_strength * aspect_strength;
+        float ao_highlight = slope_strength * (1.0 - aspect_strength);
+        
+        // Final AO multiplier: Amplified heavily for punchy contrast (multiplier logic needs stronger scale)
+        float ao = 1.0 - clamp(ao_shadow * 1.5, 0.0, 0.9) + ao_highlight * 0.4;
 
         // ── Combine Cast Shadow + Subtle AO ──
-        float shadowDarken = 1.0 - globalShadow * u_shadow_intensity * 0.65;
+        float shadowDarken = 1.0 - globalShadow * u_shadow_intensity * 0.85;
         fragColor.rgb *= shadowDarken * ao;
 
         // ── Debug Overlays ──
@@ -165,10 +172,9 @@ void main() {
                 } else if (u_debug_mode == 2) {
                     fragColor.rgb = mix(fragColor.rgb, vec3(globalShadow, globalShadow * 0.6, 0.0), 0.8);
                 } else if (u_debug_mode == 4) {
-                    float normalized = clamp(eE / 4000.0, 0.0, 1.0);
-                    fragColor.rgb = vec3(normalized);
+                    fragColor.rgb = vec3(1.0); // raw elev debug removed
                 } else if (u_debug_mode == 5) {
-                    fragColor.rgb = normal * 0.5 + 0.5;
+                    fragColor.rgb = vec3(0.5); // normal debug removed
                 }
             }
         }

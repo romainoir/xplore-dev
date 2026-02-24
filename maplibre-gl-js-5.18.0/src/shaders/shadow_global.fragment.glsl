@@ -13,9 +13,16 @@ highp float unpack(highp vec4 color) {
 }
 
 // Fixed-meter stepping for zoom-independent shadow length
-const float MAX_STEPS = 200.0;
-const float STEP_METERS = 25.0;  // 25 meters per step → max reach = 5000m
+// By using dithering + blur, we can safely halve the step count for double performance
+const float MAX_STEPS = 100.0;
+const float STEP_METERS = 40.0;  // 40m * 100 = 4000m reach
 const float WORLD_CIRCUMFERENCE = 40075016.7;
+
+// Interleaved Gradient Noise (IGN) for spatial dithering
+float getIGN(vec2 p) {
+    vec3 magic = vec3(0.06711056, 0.00583715, 52.9829189);
+    return fract(magic.z * fract(dot(p, magic.xy)));
+}
 
 void main() {
     // 1. Convert Screen-UV to World-Mercator
@@ -26,30 +33,38 @@ void main() {
     vec4 elevData = texture(u_image, v_pos); // Sample without flip (texture coords)
     float startElevation = unpack(elevData) * 20000.0 - 10000.0;
     
-    // 2. Calculate World-Mercator Increment per step in FIXED METERS
-    // This ensures shadow length is zoom-independent
+    // 2. Loop Hoisting: Pre-calculate the exact UV step size OUTSIDE the loop
     vec2 worldStep = vec2(
         u_sunDirection.x * STEP_METERS / WORLD_CIRCUMFERENCE,
         u_sunDirection.y * STEP_METERS / WORLD_CIRCUMFERENCE
     );
+    // Convert worldStep directly to a UV-space delta
+    vec2 sampleUVStep = worldStep / (u_atlas_bounds.zw - u_atlas_bounds.xy);
+    // Apply Y-flip constraint to the step itself (moving North/South correctly)
+    sampleUVStep.y = -sampleUVStep.y; 
+
     float zStep = STEP_METERS * tan(u_sunAltitude);
     
-    float shadow = 0.0;
-    vec2 currentWorld = worldPos;
-    float currentRayHeight = startElevation;
+    // 3. IGN Dithering: Apply a 0-1 random offset to the initial ray position
+    float ditherOffset = getIGN(gl_FragCoord.xy);
+    vec2 currentSampleUV = v_pos + (sampleUVStep * ditherOffset);
+    float currentRayHeight = startElevation + (zStep * ditherOffset);
     
+    float shadow = 0.0;
+    
+    // Perform maximum N steps raymarching
     for (float i = 1.0; i <= MAX_STEPS; i++) {
-        currentWorld += worldStep;
+        currentSampleUV += sampleUVStep;
         currentRayHeight += zStep;
         
-        // 3. Convert World back to Atlas-UV for sampling (with Y-flip for FBO orientation)
-        vec2 sampleUV = (currentWorld - u_atlas_bounds.xy) / (u_atlas_bounds.zw - u_atlas_bounds.xy);
-        sampleUV.y = 1.0 - sampleUV.y; // Flip Y: ortho renders minY at top of FBO
+        // Early Exit 1: Out of Atlas Bounds
+        if (currentSampleUV.x < 0.0 || currentSampleUV.x > 1.0 || currentSampleUV.y < 0.0 || currentSampleUV.y > 1.0) break;
         
-        // Atlas bounds check
-        if (sampleUV.x < 0.0 || sampleUV.x > 1.0 || sampleUV.y < 0.0 || sampleUV.y > 1.0) break;
+        // Early Exit 2: Atmospheric Escape
+        // If the ray breaches 8900m (taller than Everest), no terrain can possibly occlude it.
+        if (currentRayHeight > 8900.0) break;
         
-        vec4 data = texture(u_image, sampleUV);
+        vec4 data = texture(u_image, currentSampleUV);
         float elev = unpack(data) * 20000.0 - 10000.0;
         
         if (elev > currentRayHeight) {
