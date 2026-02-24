@@ -202,7 +202,7 @@ const terrainUniformValues = (
         'u_dem_ao_unpack': [6553.6, 25.6, 0.1, 10000.0], // Default Mapbox DEM unpack
         'u_dem_ao_exag': 1.3, // Default, overridden per-tile in drawTerrain
         'u_elevation_atlas': 14, // Bind elevation atlas to unit 14
-        'u_metersPerPixel': 40075016.7 / (512 * Math.pow(2, zoom)),
+        'u_metersPerPixel': 40075016.7 / (512 * Math.pow(2, tile ? tile.tileID.canonical.z : zoom)),
     };
 };
 

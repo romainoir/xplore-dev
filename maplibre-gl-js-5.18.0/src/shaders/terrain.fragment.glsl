@@ -55,7 +55,7 @@ float unpackAtlas(vec2 uv) {
 // Sample raw DEM elevation at a coord in DEM-space
 float sampleDemElev(vec2 coord) {
     vec2 f = fract(coord);
-    float d = 1.0 / (u_dem_ao_dim + 2.0);
+    float d = 1.0 / u_dem_ao_dim;
     vec2 c = (floor(coord) + 0.5) * d;
     vec4 rgbTL = texture(u_dem_ao, c) * 255.0 * u_dem_ao_unpack; float tl = rgbTL.r + rgbTL.g + rgbTL.b - u_dem_ao_unpack.a;
     vec4 rgbTR = texture(u_dem_ao, c + vec2(d, 0.0)) * 255.0 * u_dem_ao_unpack; float tr = rgbTR.r + rgbTR.g + rgbTR.b - u_dem_ao_unpack.a;
