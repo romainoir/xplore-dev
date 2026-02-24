@@ -118,24 +118,33 @@ function drawElevation(painter: Painter, terrain: Terrain) {
     if (dyRes > 0) maxY += extensionMercator;
     else minY -= extensionMercator;
 
-    // 3. Find loaded tiles (min Z11) that cover the extended area
-    const MIN_NEIGHBOR_ZOOM = 11;
+    // 3. Find loaded tiles (min Z9) that cover the extended area
+    // Lowered to Z9 so Shadow Overscan grandparent tiles are rendered into the FBO.
+    const MIN_NEIGHBOR_ZOOM = 9;
     const innerTileManager = (terrain.tileManager as any).tileManager || terrain.tileManager;
-    if (innerTileManager && innerTileManager._tiles) {
-        for (const key in innerTileManager._tiles) {
-            const tile = innerTileManager._tiles[key];
-            if (!tile || !tile.tileID) continue;
-            const id = tile.tileID.canonical;
-            if (id.z < MIN_NEIGHBOR_ZOOM) continue; // Skip coarse tiles
-            const scale = 1 << id.z;
-            const tx = id.x / scale;
-            const ty = id.y / scale;
-            const tspan = 1 / scale;
-            // Check if this tile overlaps the extended bounds
-            if (tx + tspan > minX && tx < maxX && ty + tspan > minY && ty < maxY) {
-                if (!captureSet.has(tile.tileID.key)) {
-                    captureSet.set(tile.tileID.key, tile);
-                }
+
+    // MapLibre v5+ refactored _tiles into _inViewTiles
+    let allTiles: Tile[] = [];
+    if (innerTileManager && innerTileManager._inViewTiles && typeof innerTileManager._inViewTiles.getAllTiles === 'function') {
+        allTiles = innerTileManager._inViewTiles.getAllTiles();
+    } else if (innerTileManager && innerTileManager._tiles) {
+        allTiles = Object.values(innerTileManager._tiles);
+    }
+
+    for (const tile of allTiles) {
+        if (!tile || !tile.tileID) continue;
+        const id = tile.tileID.canonical;
+        if (id.z < MIN_NEIGHBOR_ZOOM) continue; // Skip coarse tiles
+
+        const scale = 1 << id.z;
+        const tx = id.x / scale;
+        const ty = id.y / scale;
+        const tspan = 1 / scale;
+
+        // Check if this tile overlaps the extended bounds
+        if (tx + tspan > minX && tx < maxX && ty + tspan > minY && ty < maxY) {
+            if (!captureSet.has(tile.tileID.key)) {
+                captureSet.set(tile.tileID.key, tile);
             }
         }
     }

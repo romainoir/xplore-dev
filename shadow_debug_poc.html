@@ -529,6 +529,67 @@
                     oCtx.font = "bold 10px monospace";
                     oCtx.fillText(`Z${t.z}`, px + 4, py + 12);
                 });
+
+                // --- Draw Camera and Sun Vectors ---
+                const center = map.getCenter();
+                let mx = (center.lng + 180) / 360;
+                const sin = Math.sin(center.lat * Math.PI / 180);
+                let my = 0.5 - 0.25 * Math.log((1 + sin) / (1 - sin)) / Math.PI;
+                mx = mx - Math.floor(mx); // Normalize wrap
+
+                const cX = ((mx - minX) / spanX) * 400;
+                const cY = ((my - minY) / spanY) * 400;
+
+                // Camera Position (Magenta)
+                oCtx.fillStyle = '#ff00ff';
+                oCtx.beginPath();
+                oCtx.arc(cX, cY, 4, 0, Math.PI * 2);
+                oCtx.fill();
+
+                // Camera view direction
+                const bearing = map.getBearing() * Math.PI / 180;
+                const dirX = Math.sin(bearing);
+                const dirY = -Math.cos(bearing); // WebMercator -Y is North
+                oCtx.strokeStyle = '#ff00ff';
+                oCtx.lineWidth = 2;
+                oCtx.beginPath();
+                oCtx.moveTo(cX, cY);
+                oCtx.lineTo(cX + dirX * 30, cY + dirY * 30);
+                oCtx.stroke();
+
+                // Sun Direction (Yellow)
+                const dateElem = document.getElementById('date-input');
+                const timeElem = document.getElementById('time-input');
+                if (dateElem && timeElem && window.SunCalc) {
+                    const dList = dateElem.value.split('-');
+                    const timeVal = parseFloat(timeElem.value);
+                    const hours = Math.floor(timeVal);
+                    const mins = Math.floor((timeVal - hours) * 60);
+
+                    if (dList.length === 3) {
+                        const dt = new Date(dList[0], parseInt(dList[1]) - 1, dList[2], hours, mins, 0);
+                        const sunPos = SunCalc.getPosition(dt, center.lat, center.lng);
+                        const sunAzimuth = sunPos.azimuth + Math.PI; // North-relative Azimuth
+
+                        // Pointing TOWARDS the sun source
+                        const sunDirX = Math.sin(sunAzimuth);
+                        const sunDirY = -Math.cos(sunAzimuth);
+
+                        oCtx.strokeStyle = '#f1c40f'; // Yellow
+                        oCtx.lineWidth = 2;
+                        oCtx.beginPath();
+                        oCtx.moveTo(cX, cY);
+                        oCtx.lineTo(cX + sunDirX * 50, cY + sunDirY * 50);
+                        oCtx.stroke();
+
+                        // Sun Icon at the end of the line
+                        oCtx.fillStyle = '#f1c40f';
+                        oCtx.beginPath();
+                        oCtx.arc(cX + sunDirX * 50, cY + sunDirY * 50, 4, 0, Math.PI * 2);
+                        oCtx.fill();
+                    }
+                }
+
             }
         });
     </script>

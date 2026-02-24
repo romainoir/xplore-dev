@@ -49855,6 +49855,9 @@ class TileManager extends performance$1.Evented {
         // so frustum culling doesn't break raymarching boundaries.
         if (this._source.type === 'raster-dem') {
             idealTileIDs = this._addNeighborTiles(idealTileIDs);
+            // XploreMap: Inject coarse Z10 shadow grandparent tiles to guarantee
+            // distant peaks are loaded to cast shadows even when looking down into valleys.
+            idealTileIDs = this._addShadowOverscanTiles(idealTileIDs);
         }
         const noPendingDataEmissions = idealTileIDs.length === 0 && !this._updated && this._didEmitContent;
         this._updated = true;
@@ -49956,6 +49959,56 @@ class TileManager extends performance$1.Evented {
                             seen.add(neighborID.key);
                             result.push(neighborID);
                         }
+                    }
+                }
+            }
+        }
+        return result;
+    }
+    /**
+     * Add fixed Z10 grandparent tiles around the camera center to guarantee
+     * shadows from distant peaks even when looking down into a valley.
+     */
+    _addShadowOverscanTiles(idealTileIDs) {
+        const result = [...idealTileIDs];
+        const seen = new Set(idealTileIDs.map(t => t.key));
+        const center = this.transform.center;
+        // Target Z10 for coarse shadows
+        const Z = 10;
+        // Don't overscan if the source doesn't go up to Z10 (rare)
+        if (this._source.minzoom > Z || this._source.maxzoom < Z) {
+            return result;
+        }
+        const scale = 1 << Z;
+        // Compute Mercator Coordinate manually to avoid import issues
+        let x = (center.lng + 180) / 360;
+        const sin = Math.sin(center.lat * Math.PI / 180);
+        let y = 0.5 - 0.25 * Math.log((1 + sin) / (1 - sin)) / Math.PI;
+        const wrap = Math.floor(x);
+        x = x - wrap;
+        y = Math.max(0, Math.min(1, y));
+        const cx = Math.floor(x * scale);
+        const cy = Math.floor(y * scale);
+        // 5x5 Grid around the camera
+        for (let dx = -2; dx <= 2; dx++) {
+            for (let dy = -2; dy <= 2; dy++) {
+                let nx = cx + dx;
+                const ny = cy + dy;
+                let w = wrap;
+                if (ny >= 0 && ny < scale) { // y-bounds
+                    // Wrap X across worlds
+                    if (nx < 0) {
+                        nx += scale;
+                        w -= 1;
+                    }
+                    else if (nx >= scale) {
+                        nx -= scale;
+                        w += 1;
+                    }
+                    const overscanID = new performance$1.OverscaledTileID(Z, w, Z, nx, ny);
+                    if (!seen.has(overscanID.key)) {
+                        seen.add(overscanID.key);
+                        result.push(overscanID);
                     }
                 }
             }
@@ -65618,26 +65671,32 @@ function drawElevation(painter, terrain) {
         maxY += extensionMercator;
     else
         minY -= extensionMercator;
-    // 3. Find loaded tiles (min Z11) that cover the extended area
-    const MIN_NEIGHBOR_ZOOM = 11;
+    // 3. Find loaded tiles (min Z9) that cover the extended area
+    // Lowered to Z9 so Shadow Overscan grandparent tiles are rendered into the FBO.
+    const MIN_NEIGHBOR_ZOOM = 9;
     const innerTileManager = terrain.tileManager.tileManager || terrain.tileManager;
-    if (innerTileManager && innerTileManager._tiles) {
-        for (const key in innerTileManager._tiles) {
-            const tile = innerTileManager._tiles[key];
-            if (!tile || !tile.tileID)
-                continue;
-            const id = tile.tileID.canonical;
-            if (id.z < MIN_NEIGHBOR_ZOOM)
-                continue; // Skip coarse tiles
-            const scale = 1 << id.z;
-            const tx = id.x / scale;
-            const ty = id.y / scale;
-            const tspan = 1 / scale;
-            // Check if this tile overlaps the extended bounds
-            if (tx + tspan > minX && tx < maxX && ty + tspan > minY && ty < maxY) {
-                if (!captureSet.has(tile.tileID.key)) {
-                    captureSet.set(tile.tileID.key, tile);
-                }
+    // MapLibre v5+ refactored _tiles into _inViewTiles
+    let allTiles = [];
+    if (innerTileManager && innerTileManager._inViewTiles && typeof innerTileManager._inViewTiles.getAllTiles === 'function') {
+        allTiles = innerTileManager._inViewTiles.getAllTiles();
+    }
+    else if (innerTileManager && innerTileManager._tiles) {
+        allTiles = Object.values(innerTileManager._tiles);
+    }
+    for (const tile of allTiles) {
+        if (!tile || !tile.tileID)
+            continue;
+        const id = tile.tileID.canonical;
+        if (id.z < MIN_NEIGHBOR_ZOOM)
+            continue; // Skip coarse tiles
+        const scale = 1 << id.z;
+        const tx = id.x / scale;
+        const ty = id.y / scale;
+        const tspan = 1 / scale;
+        // Check if this tile overlaps the extended bounds
+        if (tx + tspan > minX && tx < maxX && ty + tspan > minY && ty < maxY) {
+            if (!captureSet.has(tile.tileID.key)) {
+                captureSet.set(tile.tileID.key, tile);
             }
         }
     }

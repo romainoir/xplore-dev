@@ -527,6 +527,10 @@ export class TileManager extends Evented {
         // so frustum culling doesn't break raymarching boundaries.
         if (this._source.type === 'raster-dem') {
             idealTileIDs = this._addNeighborTiles(idealTileIDs);
+
+            // XploreMap: Inject coarse Z10 shadow grandparent tiles to guarantee
+            // distant peaks are loaded to cast shadows even when looking down into valleys.
+            idealTileIDs = this._addShadowOverscanTiles(idealTileIDs);
         }
 
         const noPendingDataEmissions = idealTileIDs.length === 0 && !this._updated && this._didEmitContent;
@@ -649,6 +653,65 @@ export class TileManager extends Evented {
                             seen.add(neighborID.key);
                             result.push(neighborID);
                         }
+                    }
+                }
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Add fixed Z10 grandparent tiles around the camera center to guarantee
+     * shadows from distant peaks even when looking down into a valley.
+     */
+    _addShadowOverscanTiles(idealTileIDs: OverscaledTileID[]): OverscaledTileID[] {
+        const result = [...idealTileIDs];
+        const seen = new Set<string>(idealTileIDs.map(t => t.key));
+
+        const center = this.transform.center;
+
+        // Target Z10 for coarse shadows
+        const Z = 10;
+        // Don't overscan if the source doesn't go up to Z10 (rare)
+        if (this._source.minzoom > Z || this._source.maxzoom < Z) {
+            return result;
+        }
+
+        const scale = 1 << Z;
+
+        // Compute Mercator Coordinate manually to avoid import issues
+        let x = (center.lng + 180) / 360;
+        const sin = Math.sin(center.lat * Math.PI / 180);
+        let y = 0.5 - 0.25 * Math.log((1 + sin) / (1 - sin)) / Math.PI;
+
+        const wrap = Math.floor(x);
+        x = x - wrap;
+        y = Math.max(0, Math.min(1, y));
+
+        const cx = Math.floor(x * scale);
+        const cy = Math.floor(y * scale);
+
+        // 5x5 Grid around the camera
+        for (let dx = -2; dx <= 2; dx++) {
+            for (let dy = -2; dy <= 2; dy++) {
+                let nx = cx + dx;
+                const ny = cy + dy;
+                let w = wrap;
+
+                if (ny >= 0 && ny < scale) { // y-bounds
+                    // Wrap X across worlds
+                    if (nx < 0) {
+                        nx += scale;
+                        w -= 1;
+                    } else if (nx >= scale) {
+                        nx -= scale;
+                        w += 1;
+                    }
+
+                    const overscanID = new OverscaledTileID(Z, w, Z, nx, ny);
+                    if (!seen.has(overscanID.key)) {
+                        seen.add(overscanID.key);
+                        result.push(overscanID);
                     }
                 }
             }
