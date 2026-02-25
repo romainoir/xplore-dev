@@ -172,7 +172,7 @@ function drawElevation(painter: Painter, terrain: Terrain) {
     const isTimeSliding = typeof window !== 'undefined' && (window as any)._isInteractingWithTime;
     const isInteracting = isMapMoving || isTimeSliding;
 
-    console.log(`[ATLAS] drawElevation: mapMoving=${isMapMoving} timeSliding=${isTimeSliding}`);
+    // console.log(`[ATLAS] drawElevation: mapMoving=${isMapMoving} timeSliding=${isTimeSliding}`);
 
     // We removed the forced early-return here because Painter's terrainFacilitator.dirty
     // already throttles this function appropriately. If we early-return here, the FBO never
@@ -293,12 +293,12 @@ function drawTerrain(painter: Painter, terrain: Terrain, tiles: Array<Tile>, ren
         // Debug log for first tile
         if (tile === tiles[0]) {
             const td = terrainData as any;
-            console.log(`[DEM-AO] dim=${td?.['u_terrain_dim']}, exag=${td?.['u_terrain_exaggeration']}, hasTex=${!!(td?.texture)}, unpack=${td?.['u_terrain_unpack']}`);
+            // console.log(`[DEM-AO] dim=${td?.['u_terrain_dim']}, exag=${td?.['u_terrain_exaggeration']}, hasTex=${!!(td?.texture)}, unpack=${td?.['u_terrain_unpack']}`);
         }
 
         // Log once per frame
         if (tile === tiles[0]) {
-            console.log(`[ATLAS] drawTerrain: atlas_bounds=[${(uniformValues as any)['u_atlas_bounds']}], debug_mode=${(uniformValues as any)['u_debug_mode']}, tile_id=[${(uniformValues as any)['u_tile_id']}], shadowTex=${!!terrain._fboShadowTexture}`);
+            // console.log(`[ATLAS] drawTerrain: atlas_bounds=[${(uniformValues as any)['u_atlas_bounds']}], debug_mode=${(uniformValues as any)['u_debug_mode']}, tile_id=[${(uniformValues as any)['u_tile_id']}], shadowTex=${!!terrain._fboShadowTexture}`);
         }
 
         const projectionData = tr.getProjectionData({ overscaledTileID: tile.tileID, applyTerrainMatrix: false, applyGlobeMatrix: true });

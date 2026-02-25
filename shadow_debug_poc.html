@@ -112,11 +112,7 @@
     <div id="controls-bottom"
         style="position: absolute; bottom: 30px; left: 10px; z-index: 1000; width: 300px; background: rgba(0,0,0,0.8); padding: 10px; border-radius: 8px;">
         <label style="color: #fff; font-weight: bold; margin-bottom: 8px; display: block;">Layer Controls</label>
-        <div style="display: flex; align-items: center; gap: 10px;">
-            <input type="checkbox" id="hillshade-toggle" checked style="width: 20px; height: 20px; cursor: pointer;">
-            <label for="hillshade-toggle" style="margin: 0; color: #f39c12; cursor: pointer;">Show Hillshade
-                (Igor)</label>
-        </div>
+
         <div style="display: flex; align-items: center; gap: 10px;">
             <input type="checkbox" id="coarse-toggle" checked style="width: 20px; height: 20px; cursor: pointer;">
             <label for="coarse-toggle" style="margin: 0; color: #4dabf7; cursor: pointer;">Show Coarse Shadows (<=Z12)<
@@ -219,20 +215,6 @@
             // Enable 3D Terrain
             map.setTerrain({ source: 'terrainSource', exaggeration: 1.3 });
 
-            // 0. Hillshade Layer (Igor method)
-            map.addLayer({
-                id: 'hillshade',
-                type: 'hillshade',
-                source: 'terrainSource',
-                paint: {
-                    'hillshade-method': 'igor',
-                    'hillshade-exaggeration': 1.0,
-                    'hillshade-highlight-color': 'rgba(255,255,255,0.7)',
-                    'hillshade-shadow-color': 'rgba(0,0,0,0.6)',
-                    'hillshade-accent-color': 'rgba(0,0,0,0.6)'
-                }
-            });
-
 
 
             // 1. Coarse Shadow Layer: Capped at Z12 to allow upscaling
@@ -288,7 +270,7 @@
                 document.getElementById('azimuth-val').innerText = azimuth.toFixed(1);
                 document.getElementById('altitude-val').innerText = altitude.toFixed(1);
 
-                console.log(`[SHADOW-UPDATE] Time: ${timeStr} | Azimuth: ${azimuth.toFixed(1)}° | Altitude: ${altitude.toFixed(1)}°`);
+                // console.log(`[SHADOW-UPDATE] Time: ${timeStr} | Azimuth: ${azimuth.toFixed(1)}° | Altitude: ${altitude.toFixed(1)}°`);
 
                 // Update Coarse Layer
                 if (map.getLayer('shadow-coarse')) {
@@ -325,10 +307,6 @@
             });
 
             // Independent Toggles
-            const hillshadeToggle = document.getElementById('hillshade-toggle');
-            hillshadeToggle.addEventListener('change', (e) => {
-                map.setLayoutProperty('hillshade', 'visibility', e.target.checked ? 'visible' : 'none');
-            });
 
             const coarseToggle = document.getElementById('coarse-toggle');
             coarseToggle.addEventListener('change', (e) => {

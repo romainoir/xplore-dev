@@ -296,8 +296,8 @@ const shadowGlobalUniformValues = (
     let stepMeters = 20.0;
 
     if (isInteracting) {
-        maxSteps = 8.0;          // Obvious degradation
-        stepMeters = 640.0;      // Massively wide steps
+        maxSteps = 128.0;         // Much higher quality thanks to linear acceleration
+        stepMeters = 30.0;        // Tight starting step for good contact shadows
     }
 
     return {

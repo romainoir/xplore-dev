@@ -79,10 +79,10 @@ float sampleElevation(sampler2D dem, vec2 uv) {
     return mix(mix(h00, h10, f.x), mix(h01, h11, f.x), f.y);
 }
 
-// Helper for neighbor decoding with zoom transform
+// Helper for neighbor decoding with zoom transform using safe bilinear fetch
 float decodeNeighbor(sampler2D tex, vec2 uv, vec4 z) {
-    if (z.x < 0.01) return decodeElevation(u_image_raw, uv);
-    return decodeElevation(tex, transformUV(uv, z));
+    if (z.x < 0.01) return sampleElevation(u_image_raw, uv);
+    return sampleElevation(tex, transformUV(uv, z));
 }
 
 // Fast Nearest-Neighbor decoded altitude
@@ -219,12 +219,16 @@ float run_raymarch(vec3 lightDir, float altitude, vec2 uvStep, float zStep, floa
              if (h < -50000.0) break; 
         } else {
              if (currentUV.x < boundMinX || currentUV.x > boundMaxX || currentUV.y < boundMinY || currentUV.y > boundMaxY) break;
-             h = sampleGlobalElevationNearest(currentUV);
+             h = sampleGlobalElevation(currentUV);
         }
         float distanceKm = accumulatedDistance / 1000.0;
         if (distanceKm > 200.0) break; 
         float effectiveHeight = h - (distanceKm * distanceKm * CURVATURE_CONST * 1000.0);
-        if (currentZ < effectiveHeight) { softShadow = 0.0; break; }
+        if (currentZ < effectiveHeight) { 
+            float penetration = effectiveHeight - currentZ;
+            softShadow = 1.0 - clamp(penetration / 50.0, 0.3, 1.0);
+            break; 
+        }
         float curAccel = 1.0 + (i * accelerationRate);
         currentUV += uvStep * curAccel;
         currentZ += zStep * curAccel;

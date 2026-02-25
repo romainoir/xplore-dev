@@ -186,7 +186,7 @@ export function getNeighborTileWithZoom(ctx: NeighborLookupContext, coord: Overs
             ctx.getNeighborTile({ key: key3 } as any);
 
         if (shouldDetailLog && (dx === 1 && (dy === -1 || dy === 0))) {
-            console.log(`[SHADOW-LOOKUP] dx=${dx} dy=${dy} z=${z} scanZ=${scanZ} nx=${nx} ny=${ny} key1=${key1} found=${!!tile}`);
+            // console.log(`[SHADOW-LOOKUP] dx=${dx} dy=${dy} z=${z} scanZ=${scanZ} nx=${nx} ny=${ny} key1=${key1} found=${!!tile}`);
         }
 
         if (tile) break;
@@ -522,7 +522,7 @@ export function drawGlobalShadow(
 
     if (!(globalThis as any)._shadowLogThrottle) (globalThis as any)._shadowLogThrottle = 0;
     if ((globalThis as any)._shadowLogThrottle++ % 60 === 0 || !((painter as any)._wasInteracting)) {
-        console.log(`[SHADOW] drawGlobalShadow triggered. maxSteps=${uniformValues['u_max_steps']}, stepMeters=${uniformValues['u_step_meters']}`);
+        // console.log(`[SHADOW] drawGlobalShadow triggered. maxSteps=${uniformValues['u_max_steps']}, stepMeters=${uniformValues['u_step_meters']}`);
     }
 
     // Use painter's built-in quad buffers
@@ -541,9 +541,9 @@ export function drawGlobalShadow(
     const isMapMoving = painter.options.moving;
     const isTimeSliding = typeof window !== 'undefined' && (window as any)._isInteractingWithTime;
 
-    // PROGRESSIVE RENDER: Soft Gaussian blur ONLY during map panning. 
-    // Time sliding uses higher steps and skips blur to avoid frame lag.
-    if (isMapMoving) {
+    // PROGRESSIVE RENDER: Soft Gaussian blur applied when Idle or Panning.
+    // Time sliding skips blur to avoid frame lag.
+    if (!isTimeSliding) {
         drawGlobalShadowBlur(painter);
     }
 
@@ -563,7 +563,8 @@ export function drawGlobalShadowBlur(painter: Painter) {
     const terrainInstance = painter.style.map.terrain;
     if (!terrainInstance || !terrainInstance._fboShadowTexture || !terrainInstance._fboShadowBlurTexture) return;
 
-    const atlasSize = 2048; // Terrain.ATLAS_SIZE
+    const fboWidth = terrainInstance._fboShadowTexture.size[0];
+    const fboHeight = terrainInstance._fboShadowTexture.size[1];
     const program = painter.useProgram('shadowBlur');
     const colorMode = ColorMode.unblended;
     const depthMode = DepthMode.disabled;
@@ -572,7 +573,7 @@ export function drawGlobalShadowBlur(painter: Painter) {
     // --- Pass 1: Horizontal Blur ---
     // Target: shadow_blur FBO
     context.bindFramebuffer.set(terrainInstance.getFramebuffer('shadow_blur').framebuffer);
-    context.viewport.set([0, 0, atlasSize, atlasSize]);
+    context.viewport.set([0, 0, fboWidth, fboHeight]);
 
     // Input: Original shadow texture (unit 0)
     context.activeTexture.set(gl.TEXTURE0);
@@ -585,7 +586,7 @@ export function drawGlobalShadowBlur(painter: Painter) {
     // --- Pass 2: Vertical Blur ---
     // Target: Original shadow FBO
     context.bindFramebuffer.set(terrainInstance.getFramebuffer('shadow').framebuffer);
-    context.viewport.set([0, 0, atlasSize, atlasSize]);
+    context.viewport.set([0, 0, fboWidth, fboHeight]);
 
     // Input: Horizontal blurred texture (unit 0)
     context.activeTexture.set(gl.TEXTURE0);

@@ -159,11 +159,11 @@ void main() {
         float ao_shadow = slope_strength * aspect_strength;
         float ao_highlight = slope_strength * (1.0 - aspect_strength);
         
-        // Final AO multiplier: Amplified heavily for punchy contrast (multiplier logic needs stronger scale)
-        float ao = 1.0 - clamp(ao_shadow * 1.5, 0.0, 0.9) + ao_highlight * 0.4;
+        // Final AO multiplier: Reduced for subtle, natural relief
+        float ao = 1.0 - clamp(ao_shadow * 0.6, 0.0, 0.6) + ao_highlight * 0.15;
 
         // ── Combine Cast Shadow + Subtle AO ──
-        float shadowDarken = 1.0 - globalShadow * u_shadow_intensity * 0.85;
+        float shadowDarken = 1.0 - globalShadow * u_shadow_intensity * 0.98;
         fragColor.rgb *= shadowDarken * ao;
 
         // ── Debug Overlays ──
