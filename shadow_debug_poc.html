@@ -104,8 +104,8 @@
             <input type="range" id="stepsize" min="0.5" max="10.0" step="0.5" value="3.0">
         </div>
         <div class="row">
-            <label>Max Raymarch Steps: <span class="val" id="maxsteps-val">64</span></label>
-            <input type="range" id="maxsteps" min="8" max="256" step="8" value="64">
+            <label>Max Raymarch Steps: <span class="val" id="maxsteps-val">256</span></label>
+            <input type="range" id="maxsteps" min="8" max="256" step="8" value="256">
         </div> <label>Sun Azimuth: <span class="val" id="azimuth-val">...</span>°</label>
         <label>Sun Altitude: <span class="val" id="altitude-val">...</span>°</label>
     </div>
@@ -359,23 +359,21 @@
                 map.triggerRepaint();
             });
 
-            dateInput.addEventListener('input', () => {
+            let _interactionTimeout;
+            function triggerInteraction() {
                 window._isInteractingWithTime = true;
                 updateSun();
-            });
-            dateInput.addEventListener('change', () => {
-                window._isInteractingWithTime = false;
-                map.triggerRepaint();
-            });
+                clearTimeout(_interactionTimeout);
+                _interactionTimeout = setTimeout(() => {
+                    window._isInteractingWithTime = false;
+                    map.triggerRepaint();
+                }, 150);
+            }
 
-            timeInput.addEventListener('input', () => {
-                window._isInteractingWithTime = true;
-                updateSun();
-            });
-            timeInput.addEventListener('change', () => {
-                window._isInteractingWithTime = false;
-                map.triggerRepaint();
-            });
+            dateInput.addEventListener('input', triggerInteraction);
+            dateInput.addEventListener('change', triggerInteraction);
+            timeInput.addEventListener('input', triggerInteraction);
+            timeInput.addEventListener('change', triggerInteraction);
 
             map.on('move', updateSun);
             updateSun();

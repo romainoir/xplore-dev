@@ -4,6 +4,9 @@ uniform float u_sunAltitude;
 uniform vec2 u_metersPerPixel; // [mppX, mppY] per-axis for correct aspect ratio
 uniform vec4 u_atlas_bounds; // [minX, minY, maxX, maxY] in 0..1 Mercator
 
+uniform float u_max_steps;
+uniform float u_step_meters;
+
 in vec2 v_pos; // Viewport UV (0..1)
 
 // Unpack logic
@@ -13,9 +16,9 @@ highp float unpack(highp vec4 color) {
 }
 
 // Fixed-meter stepping for zoom-independent shadow length
-// By using dithering + blur, we can safely halve the step count for double performance
-const float MAX_STEPS = 100.0;
-const float STEP_METERS = 40.0;  // 40m * 100 = 4000m reach
+// The loop must have a constant upper bound, but we break early based on the generic uniform.
+#define hardMaxSteps 512.0
+
 const float WORLD_CIRCUMFERENCE = 40075016.7;
 
 // Interleaved Gradient Noise (IGN) for spatial dithering
@@ -35,15 +38,15 @@ void main() {
     
     // 2. Loop Hoisting: Pre-calculate the exact UV step size OUTSIDE the loop
     vec2 worldStep = vec2(
-        u_sunDirection.x * STEP_METERS / WORLD_CIRCUMFERENCE,
-        u_sunDirection.y * STEP_METERS / WORLD_CIRCUMFERENCE
+        u_sunDirection.x * u_step_meters / WORLD_CIRCUMFERENCE,
+        u_sunDirection.y * u_step_meters / WORLD_CIRCUMFERENCE
     );
     // Convert worldStep directly to a UV-space delta
     vec2 sampleUVStep = worldStep / (u_atlas_bounds.zw - u_atlas_bounds.xy);
     // Apply Y-flip constraint to the step itself (moving North/South correctly)
     sampleUVStep.y = -sampleUVStep.y; 
 
-    float zStep = STEP_METERS * tan(u_sunAltitude);
+    float zStep = u_step_meters * tan(u_sunAltitude);
     
     // 3. IGN Dithering: Apply a 0-1 random offset to the initial ray position
     float ditherOffset = getIGN(gl_FragCoord.xy);
@@ -53,7 +56,9 @@ void main() {
     float shadow = 0.0;
     
     // Perform maximum N steps raymarching
-    for (float i = 1.0; i <= MAX_STEPS; i++) {
+    for (float i = 1.0; i <= hardMaxSteps; i++) {
+        if (i > u_max_steps) break;
+        
         currentSampleUV += sampleUVStep;
         currentRayHeight += zStep;
         

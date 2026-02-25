@@ -61460,6 +61460,8 @@ const shadowGlobalUniforms = (context, locations) => ({
     'u_dimension': new performance$1.Uniform2f(context, locations.u_dimension),
     'u_atlas_bounds': new performance$1.Uniform4f(context, locations.u_atlas_bounds),
     'u_inv_proj_matrix': new performance$1.Uniform2f(context, locations.u_inv_proj_matrix),
+    'u_max_steps': new performance$1.Uniform1f(context, locations.u_max_steps),
+    'u_step_meters': new performance$1.Uniform1f(context, locations.u_step_meters),
 });
 const shadowUniforms = (context, locations) => ({
     'u_image': new performance$1.Uniform1i(context, locations.u_image),
@@ -61522,41 +61524,41 @@ const shadowUniformValues = (painter, tile, layer, neighborZoomInfos, grandparen
     const penumbra = layer.paint.get('shadow-penumbra');
     const shadowColor = layer.paint.get('shadow-shadow-color');
     const highlightColor = layer.paint.get('shadow-highlight-color');
-    // Copy 18 Interpolation logic for Zoom Levels
-    let stepSizePixels = 2.0;
-    let maxSteps = 128.0;
+    // Crisp Raymarching Interpolation logic for Zoom Levels
+    let stepSizePixels = 1.0;
+    let maxSteps = 256.0;
     let acceleration = 0.0;
     let maxDistC = 1500.0;
     if (zoom <= 12) {
-        stepSizePixels = 2.0;
-        maxSteps = 128.0;
+        stepSizePixels = 1.0;
+        maxSteps = 256.0;
         acceleration = 0.0;
         maxDistC = 1500.0;
     }
     else if (zoom >= 18) {
-        stepSizePixels = 0.25;
-        maxSteps = 128.0;
+        stepSizePixels = 0.125;
+        maxSteps = 256.0;
         acceleration = 0.0;
         maxDistC = 400.0;
     }
     else if (zoom < 14) {
         const t = (zoom - 12) / 2.0; // 12 to 14
-        stepSizePixels = 2.0 * (1 - t) + 1.0 * t;
-        maxSteps = 128.0;
+        stepSizePixels = 1.0 * (1 - t) + 0.5 * t;
+        maxSteps = 256.0;
         acceleration = 0.0;
         maxDistC = 1500.0 * (1 - t) + 1200.0 * t;
     }
     else if (zoom < 16) {
         const t = (zoom - 14) / 2.0; // 14 to 16
-        stepSizePixels = 1.0 * (1 - t) + 0.5 * t;
-        maxSteps = 128.0;
+        stepSizePixels = 0.5 * (1 - t) + 0.25 * t;
+        maxSteps = 256.0;
         acceleration = 0.0;
         maxDistC = 1200.0 * (1 - t) + 800.0 * t;
     }
     else {
         const t = (zoom - 16) / 2.0; // 16 to 18
-        stepSizePixels = 0.5 * (1 - t) + 0.25 * t;
-        maxSteps = 128.0;
+        stepSizePixels = 0.25 * (1 - t) + 0.125 * t;
+        maxSteps = 256.0;
         acceleration = 0.0;
         maxDistC = 800.0 * (1 - t) + 400.0 * t;
     }
@@ -61577,10 +61579,10 @@ const shadowUniformValues = (painter, tile, layer, neighborZoomInfos, grandparen
     if (isInteracting) {
         // We MUST increase the step size dramatically, otherwise the ray terminates inches away from the pixel
         // and fails to hit distant mountains entirely!
-        const targetSteps = 16.0; // 8x performance boost during interaction
+        const targetSteps = 8.0; // Extremely low steps for obvious interaction diff
         const scaleFactor = maxSteps / targetSteps;
         maxSteps = targetSteps;
-        stepSizePixels = Math.max(stepSizePixels * scaleFactor, 8.0);
+        stepSizePixels = Math.max(stepSizePixels * scaleFactor, 16.0); // Large step
     }
     // Shadow Mode Optimization: 0 = Cast (Standard), 1 = Fast (Local only, no neighbors)
     // For the POC, we look for 'fast' or 'detail' in the layer ID
@@ -61633,6 +61635,15 @@ const shadowGlobalUniformValues = (painter, layer, metersPerPixelX, metersPerPix
     const altRad = shadowProps.altitudeRadians;
     const dirX = Math.sin(dirRad);
     const dirY = -Math.cos(dirRad);
+    const isMapMoving = painter.options.moving;
+    const isTimeSliding = typeof window !== 'undefined' && window._isInteractingWithTime;
+    const isInteracting = isMapMoving || isTimeSliding;
+    let maxSteps = 256.0;
+    let stepMeters = 20.0;
+    if (isInteracting) {
+        maxSteps = 8.0; // Obvious degradation
+        stepMeters = 640.0; // Massively wide steps
+    }
     return {
         'u_image': 0,
         'u_sunDirection': [dirX, dirY],
@@ -61641,6 +61652,8 @@ const shadowGlobalUniformValues = (painter, layer, metersPerPixelX, metersPerPix
         'u_dimension': [Terrain.ATLAS_SIZE, Terrain.ATLAS_SIZE],
         'u_atlas_bounds': atlasBounds,
         'u_inv_proj_matrix': [0, 0], // Map to atlas using bounds instead
+        'u_max_steps': maxSteps,
+        'u_step_meters': stepMeters,
     };
 };
 
@@ -64642,10 +64655,27 @@ function drawGlobalShadow(painter, layer) {
     // Bind Elevation Atlas to Unit 0
     context.activeTexture.set(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, terrain._fboElevationTexture.texture);
+    if (!globalThis._shadowLogThrottle)
+        globalThis._shadowLogThrottle = 0;
+    if (globalThis._shadowLogThrottle++ % 60 === 0 || !(painter._wasInteracting)) {
+        console.log(`[SHADOW] drawGlobalShadow triggered. maxSteps=${uniformValues['u_max_steps']}, stepMeters=${uniformValues['u_step_meters']}`);
+    }
     // Use painter's built-in quad buffers
     program.draw(context, gl.TRIANGLES, depthMode, stencilMode, colorMode, CullFaceMode.disabled, uniformValues, null, null, layer.id, painter.rasterBoundsBuffer, painter.quadTriangleIndexBuffer, painter.rasterBoundsSegments);
     // 3. Apply Multi-Pass Gaussian Blur to soften edges
-    drawGlobalShadowBlur(painter);
+    // CRISP RAYMARCHING OVERRIDE: 
+    // The user requested mathematically precise, razor-sharp aliased shadows rather than smoothed ones.
+    // By skipping the intense 2-pass 2048x2048 blur entirely, we save massive GPU cycles,
+    // which were re-invested into bumping the raymarch steps from 128 to 256 for sub-pixel precision.
+    // However, during interaction, we drop the steps to a proxy 8 (fast but blocky).
+    // So we apply the fast blur ONLY during interaction to mask the blockiness!
+    const isMapMoving = painter.options.moving;
+    const isTimeSliding = typeof window !== 'undefined' && window._isInteractingWithTime;
+    // PROGRESSIVE RENDER: Soft Gaussian blur ONLY during map panning. 
+    // Time sliding uses higher steps and skips blur to avoid frame lag.
+    if (isMapMoving) {
+        drawGlobalShadowBlur(painter);
+    }
     // Unbind FBO to prevent feedback loop when terrain shader samples the shadow texture
     context.bindFramebuffer.set(null);
     context.viewport.set([0, 0, painter.width, painter.height]);
@@ -65733,7 +65763,14 @@ function drawElevation(painter, terrain) {
         console.warn('[ATLAS] drawElevation: captureSet is EMPTY, skipping elevation atlas render');
         return;
     }
-    console.log(`[ATLAS] drawElevation: captureSet=${captureSet.size} tiles, bounds=[${minX.toFixed(6)}, ${minY.toFixed(6)}, ${maxX.toFixed(6)}, ${maxY.toFixed(6)}]`);
+    const isMapMoving = painter.options.moving;
+    const isTimeSliding = typeof window !== 'undefined' && window._isInteractingWithTime;
+    const isInteracting = isMapMoving || isTimeSliding;
+    console.log(`[ATLAS] drawElevation: mapMoving=${isMapMoving} timeSliding=${isTimeSliding}`);
+    // We removed the forced early-return here because Painter's terrainFacilitator.dirty
+    // already throttles this function appropriately. If we early-return here, the FBO never
+    // updates at all on the final frame when interaction ceases!
+    // console.log(`[ATLAS] drawElevation: captureSet=${captureSet.size} tiles, bounds=[${minX.toFixed(6)}, ${minY.toFixed(6)}, ${maxX.toFixed(6)}, ${maxY.toFixed(6)}]`);
     // 2. Setup Orthographic Projection for the Elevation Atlas
     const program = painter.useProgram('terrainElevation');
     const atlasSize = Terrain.ATLAS_SIZE;
@@ -66367,6 +66404,24 @@ class Painter {
         let doUpdate = this.terrainFacilitator.dirty;
         doUpdate || (doUpdate = requireExact ? !performance$1.exactEquals(prevMatrix, currMatrix) : !performance$1.equals(prevMatrix, currMatrix));
         doUpdate || (doUpdate = this.style.map.terrain.tileManager.anyTilesAfterTime(this.terrainFacilitator.renderTime));
+        // --- XploreMap Dynamic Shadow Quality & Interaction Sync ---
+        const isMapMoving = this.options.moving;
+        const isTimeSliding = typeof window !== 'undefined' && window._isInteractingWithTime;
+        const isInteracting = isMapMoving || isTimeSliding;
+        // Force an update frame the moment the user stops interacting, to guarantee the Blur Shader triggers!
+        if (this._wasInteracting && !isInteracting) {
+            doUpdate = true;
+        }
+        this._wasInteracting = isInteracting;
+        // Force an update frame if the Sun Direction moved (Time Slider), otherwise shadows stay falsely frozen!
+        const shadowLayer = this.style.getLayer('shadow-coarse');
+        if (shadowLayer) {
+            const sunDir = shadowLayer.getShadowProperties().directionRadians;
+            if (this._prevSunDir !== sunDir) {
+                doUpdate = true;
+                this._prevSunDir = sunDir;
+            }
+        }
         if (!doUpdate) {
             return;
         }
@@ -66377,9 +66432,9 @@ class Painter {
         drawCoords(this, this.style.map.terrain);
         // Elevation atlas and global shadow run AFTER the core depth/coords pipeline
         drawElevation(this, this.style.map.terrain);
-        const shadowLayer = this.style.getLayer('shadow-coarse');
-        if (shadowLayer) {
-            drawGlobalShadow(this, shadowLayer);
+        const shadowStyleLayer = this.style.getLayer('shadow-coarse');
+        if (shadowStyleLayer) {
+            drawGlobalShadow(this, shadowStyleLayer);
         }
     }
     renderLayer(painter, tileManager, layer, coords, renderOptions) {

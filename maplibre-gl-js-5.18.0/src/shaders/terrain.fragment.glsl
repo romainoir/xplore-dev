@@ -119,7 +119,13 @@ void main() {
     // ── Global Shadow + Full-Res AO Hillshade + Time-of-Day Coloring ──
     vec2 atlasUV = v_atlas_uv;
     if (atlasUV.x >= -0.001 && atlasUV.x <= 1.001 && atlasUV.y >= -0.001 && atlasUV.y <= 1.001) {
-        float globalShadow = texture(u_shadow_atlas, clamp(atlasUV, 0.0, 1.0)).r;
+        // High-frequency interleaved gradient noise (IGN) directly on the look-up
+        // Breaks up the bilinear interpolation gradient into sub-pixel sharpened noise!
+        vec3 magic = vec3(0.06711056, 0.00583715, 52.9829189);
+        float ign = fract(magic.z * fract(dot(gl_FragCoord.xy, magic.xy))) - 0.5;
+        
+        vec2 jitteredUV = atlasUV + (ign * 1.5 / 2048.0); // 1.5 pixel scatter
+        float globalShadow = texture(u_shadow_atlas, clamp(jitteredUV, 0.0, 1.0)).r;
 
         // ── Raw DEM-Based Subtle AO (high-resolution relief) ──
         // Using v_dem_coord ensures we sample the raw DEM texture directly, 

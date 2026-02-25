@@ -186,7 +186,16 @@ vec2 computeSobelGradient(vec2 uv) {
 
 float run_raymarch(vec3 lightDir, float altitude, vec2 uvStep, float zStep, float stepDistMeters, float stepSizePixels, float maxSteps, float k_penumbra, float accelerationRate, float lift, bool useGrandparent, bool allowNeighbors, float startElevation, vec2 startUV) {
     float jitter = fract(52.9829189 * fract(0.06711056 * gl_FragCoord.x + 0.00583715 * gl_FragCoord.y));
-    vec2 currentUV = startUV + uvStep * (0.5 + jitter);
+    
+    // 2D Spatial Jitter (Origin Scatter)
+    // Breaks up hard geometric DEM staircases into perceptually sharp high-frequency dither
+    vec2 noiseUV = vec2(
+        fract(43.1231 * fract(0.1234 * gl_FragCoord.x + 0.4567 * gl_FragCoord.y)) - 0.5,
+        fract(57.4562 * fract(0.3456 * gl_FragCoord.x + 0.6789 * gl_FragCoord.y)) - 0.5
+    );
+    vec2 scatter = noiseUV * (1.5 / u_dimension.x); // 1.5 pixel scatter
+    
+    vec2 currentUV = startUV + scatter + uvStep * (0.5 + jitter);
     float currentZ = startElevation + lift + zStep * (0.5 + jitter);
     float softShadow = 1.0;
     float accumulatedDistance = stepDistMeters * (0.5 + jitter);

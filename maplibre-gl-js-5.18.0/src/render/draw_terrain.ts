@@ -168,7 +168,17 @@ function drawElevation(painter: Painter, terrain: Terrain) {
         return;
     }
 
-    console.log(`[ATLAS] drawElevation: captureSet=${captureSet.size} tiles, bounds=[${minX.toFixed(6)}, ${minY.toFixed(6)}, ${maxX.toFixed(6)}, ${maxY.toFixed(6)}]`);
+    const isMapMoving = painter.options.moving;
+    const isTimeSliding = typeof window !== 'undefined' && (window as any)._isInteractingWithTime;
+    const isInteracting = isMapMoving || isTimeSliding;
+
+    console.log(`[ATLAS] drawElevation: mapMoving=${isMapMoving} timeSliding=${isTimeSliding}`);
+
+    // We removed the forced early-return here because Painter's terrainFacilitator.dirty
+    // already throttles this function appropriately. If we early-return here, the FBO never
+    // updates at all on the final frame when interaction ceases!
+
+    // console.log(`[ATLAS] drawElevation: captureSet=${captureSet.size} tiles, bounds=[${minX.toFixed(6)}, ${minY.toFixed(6)}, ${maxX.toFixed(6)}, ${maxY.toFixed(6)}]`);
 
     // 2. Setup Orthographic Projection for the Elevation Atlas
     const program = painter.useProgram('terrainElevation');

@@ -21,6 +21,8 @@ export type ShadowGlobalUniformsType = {
     'u_dimension': Uniform2f;
     'u_atlas_bounds': Uniform4f;
     'u_inv_proj_matrix': Uniform2f; // Dummy or specific inverse projection if needed
+    'u_max_steps': Uniform1f;
+    'u_step_meters': Uniform1f;
 };
 
 export type ShadowUniformsType = {
@@ -80,6 +82,8 @@ const shadowGlobalUniforms = (context: Context, locations: UniformLocations): Sh
     'u_dimension': new Uniform2f(context, locations.u_dimension),
     'u_atlas_bounds': new Uniform4f(context, locations.u_atlas_bounds),
     'u_inv_proj_matrix': new Uniform2f(context, locations.u_inv_proj_matrix),
+    'u_max_steps': new Uniform1f(context, locations.u_max_steps),
+    'u_step_meters': new Uniform1f(context, locations.u_step_meters),
 });
 
 const shadowUniforms = (context: Context, locations: UniformLocations): ShadowUniformsType => ({
@@ -159,38 +163,38 @@ const shadowUniformValues = (
     const shadowColor = layer.paint.get('shadow-shadow-color');
     const highlightColor = layer.paint.get('shadow-highlight-color');
 
-    // Copy 18 Interpolation logic for Zoom Levels
-    let stepSizePixels = 2.0;
-    let maxSteps = 128.0;
+    // Crisp Raymarching Interpolation logic for Zoom Levels
+    let stepSizePixels = 1.0;
+    let maxSteps = 256.0;
     let acceleration = 0.0;
     let maxDistC = 1500.0;
 
     if (zoom <= 12) {
-        stepSizePixels = 2.0;
-        maxSteps = 128.0;
+        stepSizePixels = 1.0;
+        maxSteps = 256.0;
         acceleration = 0.0;
         maxDistC = 1500.0;
     } else if (zoom >= 18) {
-        stepSizePixels = 0.25;
-        maxSteps = 128.0;
+        stepSizePixels = 0.125;
+        maxSteps = 256.0;
         acceleration = 0.0;
         maxDistC = 400.0;
     } else if (zoom < 14) {
         const t = (zoom - 12) / 2.0; // 12 to 14
-        stepSizePixels = 2.0 * (1 - t) + 1.0 * t;
-        maxSteps = 128.0;
+        stepSizePixels = 1.0 * (1 - t) + 0.5 * t;
+        maxSteps = 256.0;
         acceleration = 0.0;
         maxDistC = 1500.0 * (1 - t) + 1200.0 * t;
     } else if (zoom < 16) {
         const t = (zoom - 14) / 2.0; // 14 to 16
-        stepSizePixels = 1.0 * (1 - t) + 0.5 * t;
-        maxSteps = 128.0;
+        stepSizePixels = 0.5 * (1 - t) + 0.25 * t;
+        maxSteps = 256.0;
         acceleration = 0.0;
         maxDistC = 1200.0 * (1 - t) + 800.0 * t;
     } else {
         const t = (zoom - 16) / 2.0; // 16 to 18
-        stepSizePixels = 0.5 * (1 - t) + 0.25 * t;
-        maxSteps = 128.0;
+        stepSizePixels = 0.25 * (1 - t) + 0.125 * t;
+        maxSteps = 256.0;
         acceleration = 0.0;
         maxDistC = 800.0 * (1 - t) + 400.0 * t;
     }
@@ -214,11 +218,10 @@ const shadowUniformValues = (
     if (isInteracting) {
         // We MUST increase the step size dramatically, otherwise the ray terminates inches away from the pixel
         // and fails to hit distant mountains entirely!
-        const targetSteps = 16.0; // 8x performance boost during interaction
+        const targetSteps = 8.0; // Extremely low steps for obvious interaction diff
         const scaleFactor = maxSteps / targetSteps;
-
         maxSteps = targetSteps;
-        stepSizePixels = Math.max(stepSizePixels * scaleFactor, 8.0);
+        stepSizePixels = Math.max(stepSizePixels * scaleFactor, 16.0); // Large step
     }
 
     // Shadow Mode Optimization: 0 = Cast (Standard), 1 = Fast (Local only, no neighbors)
@@ -285,6 +288,18 @@ const shadowGlobalUniformValues = (
     const dirX = Math.sin(dirRad);
     const dirY = -Math.cos(dirRad);
 
+    const isMapMoving = painter.options.moving;
+    const isTimeSliding = typeof window !== 'undefined' && (window as any)._isInteractingWithTime;
+    const isInteracting = isMapMoving || isTimeSliding;
+
+    let maxSteps = 256.0;
+    let stepMeters = 20.0;
+
+    if (isInteracting) {
+        maxSteps = 8.0;          // Obvious degradation
+        stepMeters = 640.0;      // Massively wide steps
+    }
+
     return {
         'u_image': 0,
         'u_sunDirection': [dirX, dirY],
@@ -293,6 +308,8 @@ const shadowGlobalUniformValues = (
         'u_dimension': [Terrain.ATLAS_SIZE, Terrain.ATLAS_SIZE],
         'u_atlas_bounds': atlasBounds,
         'u_inv_proj_matrix': [0, 0], // Map to atlas using bounds instead
+        'u_max_steps': maxSteps,
+        'u_step_meters': stepMeters,
     };
 };
 

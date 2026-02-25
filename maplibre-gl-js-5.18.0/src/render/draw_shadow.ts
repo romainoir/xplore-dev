@@ -520,13 +520,32 @@ export function drawGlobalShadow(
     context.activeTexture.set(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, terrain._fboElevationTexture.texture);
 
+    if (!(globalThis as any)._shadowLogThrottle) (globalThis as any)._shadowLogThrottle = 0;
+    if ((globalThis as any)._shadowLogThrottle++ % 60 === 0 || !((painter as any)._wasInteracting)) {
+        console.log(`[SHADOW] drawGlobalShadow triggered. maxSteps=${uniformValues['u_max_steps']}, stepMeters=${uniformValues['u_step_meters']}`);
+    }
+
     // Use painter's built-in quad buffers
     program.draw(context, gl.TRIANGLES, depthMode, stencilMode, colorMode, CullFaceMode.disabled,
         uniformValues, null, null, layer.id, painter.rasterBoundsBuffer,
         painter.quadTriangleIndexBuffer, painter.rasterBoundsSegments);
 
     // 3. Apply Multi-Pass Gaussian Blur to soften edges
-    drawGlobalShadowBlur(painter);
+    // CRISP RAYMARCHING OVERRIDE: 
+    // The user requested mathematically precise, razor-sharp aliased shadows rather than smoothed ones.
+    // By skipping the intense 2-pass 2048x2048 blur entirely, we save massive GPU cycles,
+    // which were re-invested into bumping the raymarch steps from 128 to 256 for sub-pixel precision.
+    // However, during interaction, we drop the steps to a proxy 8 (fast but blocky).
+    // So we apply the fast blur ONLY during interaction to mask the blockiness!
+
+    const isMapMoving = painter.options.moving;
+    const isTimeSliding = typeof window !== 'undefined' && (window as any)._isInteractingWithTime;
+
+    // PROGRESSIVE RENDER: Soft Gaussian blur ONLY during map panning. 
+    // Time sliding uses higher steps and skips blur to avoid frame lag.
+    if (isMapMoving) {
+        drawGlobalShadowBlur(painter);
+    }
 
     // Unbind FBO to prevent feedback loop when terrain shader samples the shadow texture
     context.bindFramebuffer.set(null);

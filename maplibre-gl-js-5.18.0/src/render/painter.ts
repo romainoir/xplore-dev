@@ -652,6 +652,27 @@ export class Painter {
         doUpdate ||= requireExact ? !mat4.exactEquals(prevMatrix, currMatrix) : !mat4.equals(prevMatrix, currMatrix);
         doUpdate ||= this.style.map.terrain.tileManager.anyTilesAfterTime(this.terrainFacilitator.renderTime);
 
+        // --- XploreMap Dynamic Shadow Quality & Interaction Sync ---
+        const isMapMoving = this.options.moving;
+        const isTimeSliding = typeof window !== 'undefined' && (window as any)._isInteractingWithTime;
+        const isInteracting = isMapMoving || isTimeSliding;
+
+        // Force an update frame the moment the user stops interacting, to guarantee the Blur Shader triggers!
+        if ((this as any)._wasInteracting && !isInteracting) {
+            doUpdate = true;
+        }
+        (this as any)._wasInteracting = isInteracting;
+
+        // Force an update frame if the Sun Direction moved (Time Slider), otherwise shadows stay falsely frozen!
+        const shadowLayer = this.style.getLayer('shadow-coarse') as ShadowStyleLayer;
+        if (shadowLayer) {
+            const sunDir = shadowLayer.getShadowProperties().directionRadians;
+            if ((this as any)._prevSunDir !== sunDir) {
+                doUpdate = true;
+                (this as any)._prevSunDir = sunDir;
+            }
+        }
+
         if (!doUpdate) {
             return;
         }
@@ -664,9 +685,9 @@ export class Painter {
 
         // Elevation atlas and global shadow run AFTER the core depth/coords pipeline
         drawElevation(this, this.style.map.terrain);
-        const shadowLayer = this.style.getLayer('shadow-coarse') as ShadowStyleLayer;
-        if (shadowLayer) {
-            drawGlobalShadow(this, shadowLayer);
+        const shadowStyleLayer = this.style.getLayer('shadow-coarse') as ShadowStyleLayer;
+        if (shadowStyleLayer) {
+            drawGlobalShadow(this, shadowStyleLayer);
         }
     }
 
