@@ -685,10 +685,10 @@ export class Painter {
 
         // Elevation atlas and global shadow run AFTER the core depth/coords pipeline
         drawElevation(this, this.style.map.terrain);
-        const shadowStyleLayer = this.style.getLayer('shadow-coarse') as ShadowStyleLayer;
-        if (shadowStyleLayer) {
-            drawGlobalShadow(this, shadowStyleLayer);
-        }
+        // const shadowStyleLayer = this.style.getLayer('shadow-coarse') as ShadowStyleLayer;
+        // if (shadowStyleLayer) {
+        //     drawGlobalShadow(this, shadowStyleLayer);
+        // }
     }
 
     renderLayer(painter: Painter, tileManager: TileManager, layer: StyleLayer, coords: Array<OverscaledTileID>, renderOptions: RenderOptions) {

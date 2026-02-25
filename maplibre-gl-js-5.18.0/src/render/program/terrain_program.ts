@@ -53,6 +53,8 @@ export type TerrainUniformsType = {
     'u_dem_ao_exag': Uniform1f;
     'u_elevation_atlas': Uniform1i;
     'u_metersPerPixel': Uniform1f;
+    'u_max_steps': Uniform1f;
+    'u_step_meters': Uniform1f;
 };
 
 export type TerrainElevationUniformsType = {
@@ -107,6 +109,8 @@ const terrainUniforms = (context: Context, locations: UniformLocations): Terrain
     'u_dem_ao_exag': new Uniform1f(context, locations.u_dem_ao_exag),
     'u_elevation_atlas': new Uniform1i(context, locations.u_elevation_atlas),
     'u_metersPerPixel': new Uniform1f(context, locations.u_metersPerPixel),
+    'u_max_steps': new Uniform1f(context, locations.u_max_steps),
+    'u_step_meters': new Uniform1f(context, locations.u_step_meters),
 });
 
 const terrainElevationUniforms = (context: Context, locations: UniformLocations): TerrainElevationUniformsType => ({
@@ -203,6 +207,16 @@ const terrainUniformValues = (
         'u_dem_ao_exag': 1.3, // Default, overridden per-tile in drawTerrain
         'u_elevation_atlas': 14, // Bind elevation atlas to unit 14
         'u_metersPerPixel': 40075016.7 / (512 * Math.pow(2, tile ? tile.tileID.canonical.z : zoom)),
+        'u_max_steps': (() => {
+            const isMapMoving = painter?.options?.moving;
+            const isTimeSliding = typeof window !== 'undefined' && (window as any)._isInteractingWithTime;
+            return (isMapMoving || isTimeSliding) ? 128.0 : 256.0;
+        })(),
+        'u_step_meters': (() => {
+            const isMapMoving = painter?.options?.moving;
+            const isTimeSliding = typeof window !== 'undefined' && (window as any)._isInteractingWithTime;
+            return (isMapMoving || isTimeSliding) ? 30.0 : 20.0;
+        })(),
     };
 };
 

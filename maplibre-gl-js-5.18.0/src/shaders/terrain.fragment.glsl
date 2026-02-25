@@ -13,7 +13,7 @@ uniform float u_zoom;
 uniform float u_tile_zoom;
 
 uniform sampler2D u_shadow_atlas;
-uniform vec4 u_atlas_bounds; // [minX, minY, maxX, maxY]
+uniform highp vec4 u_atlas_bounds; // [minX, minY, maxX, maxY]
 uniform float u_shadow_intensity;
 uniform int u_debug_mode;
 uniform float u_sun_altitude;  // Sun altitude in radians (0 = horizon, PI/2 = zenith)
@@ -26,6 +26,8 @@ uniform highp float u_dem_ao_dim;        // DEM dimension
 uniform highp float u_dem_ao_exag;       // terrain exaggeration
 uniform sampler2D u_elevation_atlas;     // seamless global elevation atlas (packed float)
 uniform float u_metersPerPixel;          // geographic scale for normal calculation
+uniform float u_max_steps;
+uniform float u_step_meters;
 
 in vec2 v_texture_pos;
 in vec2 v_atlas_uv;
@@ -120,12 +122,66 @@ void main() {
     vec2 atlasUV = v_atlas_uv;
     if (atlasUV.x >= -0.001 && atlasUV.x <= 1.001 && atlasUV.y >= -0.001 && atlasUV.y <= 1.001) {
         // High-frequency interleaved gradient noise (IGN) directly on the look-up
-        // Breaks up the bilinear interpolation gradient into sub-pixel sharpened noise!
         vec3 magic = vec3(0.06711056, 0.00583715, 52.9829189);
         float ign = fract(magic.z * fract(dot(gl_FragCoord.xy, magic.xy))) - 0.5;
         
-        vec2 jitteredUV = atlasUV + (ign * 1.5 / 2048.0); // 1.5 pixel scatter
-        float globalShadow = texture(u_shadow_atlas, clamp(jitteredUV, 0.0, 1.0)).r;
+        // ── True Screen-Space Raymarching (Bypass MapLibre FBO Bottleneck) ──
+        float globalShadow = 0.0;
+        float startElevation = unpackAtlas(atlasUV);
+        
+        const float WORLD_CIRCUMFERENCE = 40075016.7;
+        vec2 worldStep = vec2(
+            u_sun_direction.x * u_step_meters / WORLD_CIRCUMFERENCE,
+            u_sun_direction.y * u_step_meters / WORLD_CIRCUMFERENCE
+        );
+        vec2 sampleUVStep = worldStep / (u_atlas_bounds.zw - u_atlas_bounds.xy);
+        sampleUVStep.y = -sampleUVStep.y; 
+
+        float zStep = u_step_meters * tan(u_sun_altitude);
+        
+        float ditherOffset = ign + 0.5; // 0..1
+        vec2 currentSampleUV = atlasUV + (sampleUVStep * ditherOffset);
+        float currentRayHeight = startElevation + (zStep * ditherOffset);
+        
+        const float hardMaxSteps = 512.0;
+        
+        for (float i = 1.0; i <= hardMaxSteps; i++) {
+            if (i > u_max_steps) break;
+            
+            float curAccel = 1.0 + (i * 0.01);
+            float elev = unpackAtlas(currentSampleUV);
+            
+            float clearance = currentRayHeight - elev;
+            float altitudeStride = clamp(clearance / 100.0, 1.0, 10.0);
+            float finalAccel = curAccel * altitudeStride;
+            
+            currentSampleUV += sampleUVStep * finalAccel;
+            currentRayHeight += zStep * finalAccel;
+            
+            if (currentSampleUV.x < 0.0 || currentSampleUV.x > 1.0 || currentSampleUV.y < 0.0 || currentSampleUV.y > 1.0) break;
+            if (currentRayHeight > 8900.0) break;
+            
+            elev = unpackAtlas(currentSampleUV);
+            
+            if (elev > currentRayHeight) {
+                float stepScale = 0.5;
+                for (int j = 0; j < 3; j++) {
+                    currentSampleUV -= (sampleUVStep * finalAccel) * stepScale;
+                    currentRayHeight -= (zStep * finalAccel) * stepScale;
+                    elev = unpackAtlas(currentSampleUV);
+                    
+                    if (currentRayHeight > elev) {
+                        stepScale = -abs(stepScale) * 0.5;
+                    } else {
+                        stepScale = abs(stepScale) * 0.5;
+                    }
+                }
+                
+                float penetration = elev - currentRayHeight;
+                globalShadow = clamp(penetration / 50.0, 0.3, 1.0);
+                break;
+            }
+        }
 
         // ── Raw DEM-Based Subtle AO (high-resolution relief) ──
         // Using v_dem_coord ensures we sample the raw DEM texture directly, 
