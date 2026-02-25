@@ -359,12 +359,26 @@
                 map.triggerRepaint();
             });
 
-            dateInput.addEventListener('input', updateSun);
-            timeInput.addEventListener('input', updateSun);
+            dateInput.addEventListener('input', () => {
+                window._isInteractingWithTime = true;
+                updateSun();
+            });
+            dateInput.addEventListener('change', () => {
+                window._isInteractingWithTime = false;
+                map.triggerRepaint();
+            });
+
+            timeInput.addEventListener('input', () => {
+                window._isInteractingWithTime = true;
+                updateSun();
+            });
+            timeInput.addEventListener('change', () => {
+                window._isInteractingWithTime = false;
+                map.triggerRepaint();
+            });
 
             map.on('move', updateSun);
             updateSun();
-            // FPS Counter
             const fpsDiv = document.createElement('div');
             fpsDiv.style.cssText = 'position:fixed;top:10px;right:10px;z-index:99999;background:rgba(0,0,0,0.85);color:#2ecc71;padding:8px 14px;font:bold 24px monospace;border-radius:8px;pointer-events:none';
             document.body.appendChild(fpsDiv);

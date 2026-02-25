@@ -195,7 +195,7 @@ const shadowUniformValues = (
         maxDistC = 800.0 * (1 - t) + 400.0 * t;
     }
 
-    // POC Tuning Overrides
+    // POC Tuning Overrides (applied first)
     if (typeof window !== 'undefined') {
         if ((window as any)._shadowStepSize !== undefined) {
             stepSizePixels = (window as any)._shadowStepSize;
@@ -203,6 +203,22 @@ const shadowUniformValues = (
         if ((window as any)._shadowMaxSteps !== undefined) {
             maxSteps = (window as any)._shadowMaxSteps;
         }
+    }
+
+    // Dynamic Shadow Quality (overrides POC to guarantee FPS)
+    // Drop raymarch steps significantly while panning or scrubbing time to maintain 60 FPS
+    const isMapMoving = painter.options.moving;
+    const isTimeSliding = typeof window !== 'undefined' && (window as any)._isInteractingWithTime;
+    const isInteracting = isMapMoving || isTimeSliding;
+
+    if (isInteracting) {
+        // We MUST increase the step size dramatically, otherwise the ray terminates inches away from the pixel
+        // and fails to hit distant mountains entirely!
+        const targetSteps = 16.0; // 8x performance boost during interaction
+        const scaleFactor = maxSteps / targetSteps;
+
+        maxSteps = targetSteps;
+        stepSizePixels = Math.max(stepSizePixels * scaleFactor, 8.0);
     }
 
     // Shadow Mode Optimization: 0 = Cast (Standard), 1 = Fast (Local only, no neighbors)
