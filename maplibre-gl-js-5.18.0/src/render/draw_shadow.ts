@@ -478,11 +478,7 @@ export function drawGlobalShadow(
 
     const terrain = painter.style.map.terrain;
     if (!terrain || !terrain._fboElevationTexture || !terrain._fboShadowTexture) {
-        console.warn('[ATLAS] drawGlobalShadow: missing FBO textures', {
-            terrain: !!terrain,
-            elevation: !!terrain?._fboElevationTexture,
-            shadow: !!terrain?._fboShadowTexture
-        });
+        console.warn(`[ATLAS] drawGlobalShadow: missing FBO textures. Terrain: ${!!terrain}, ElevationTex: ${!!terrain?._fboElevationTexture}, ShadowTex: ${!!terrain?._fboShadowTexture}`);
         return;
     }
 
