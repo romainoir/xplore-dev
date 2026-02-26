@@ -606,6 +606,8 @@ async function init() {
     terrain: { toggle: document.getElementById('terrainToolboxToggle'), box: document.getElementById('terrainToolbox') },
     snow: { toggle: document.getElementById('snowToolboxToggle'), box: document.getElementById('snowToolbox') },
     basemap: { toggle: document.getElementById('basemapToolboxToggle'), box: document.getElementById('basemapToolbox') },
+    pathway: { toggle: document.getElementById('pathwayToolboxToggle'), box: document.getElementById('pathwayToolbox') },
+    photos: { toggle: document.getElementById('photosToolboxToggle'), box: null },
   };
 
   // ── Generic toolbox open/close helper ──
