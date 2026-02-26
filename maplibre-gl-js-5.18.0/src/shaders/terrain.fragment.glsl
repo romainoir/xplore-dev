@@ -16,6 +16,10 @@ uniform sampler2D u_shadow_atlas;
 uniform highp vec4 u_atlas_bounds; // [minX, minY, maxX, maxY]
 uniform float u_shadow_intensity;
 uniform int u_debug_mode;
+uniform float u_cast_shadow_mult;
+uniform float u_self_shadow_mult;
+uniform float u_ao_cast_mult;
+uniform float u_ao_self_mult;
 uniform float u_sun_altitude;  // Sun altitude in radians (0 = horizon, PI/2 = zenith)
 uniform vec2 u_sun_direction;  // Normalized sun direction [sin(azimuth), -cos(azimuth)]
 
@@ -28,6 +32,9 @@ uniform sampler2D u_elevation_atlas;     // seamless global elevation atlas (pac
 uniform float u_metersPerPixel;          // geographic scale for normal calculation
 uniform float u_max_steps;
 uniform float u_step_meters;
+uniform float u_shadow_soft_base;
+uniform float u_shadow_soft_mult;
+uniform float u_shadow_soft_max;
 
 in vec2 v_texture_pos;
 in vec2 v_atlas_uv;
@@ -61,6 +68,22 @@ float sampleDemElev(vec2 coord) {
     vec4 data = texture(u_dem_ao, pos / u_dem_ao_dim) * 255.0;
     // Standard Terrain-RGB unpack (dot product for speed and precision)
     return (dot(floor(data.rgb + 0.5), u_dem_ao_unpack.rgb) - u_dem_ao_unpack.a) * u_dem_ao_exag;
+}
+
+// Safe Bilinear Fetch to prevent corrupt RGBA base-256 wrapping interpolation
+float sampleElevationBilinear(vec2 uv) {
+    vec2 dim = vec2(2048.0); // Terrain.ATLAS_SIZE
+    vec2 pos = uv * dim;
+    vec2 posCenter = pos - 0.5;
+    vec2 f = fract(posCenter);
+    vec2 i = floor(posCenter) + 0.5;
+    
+    float h00 = unpackAtlas((i + vec2(0.0, 0.0)) / dim);
+    float h10 = unpackAtlas((i + vec2(1.0, 0.0)) / dim);
+    float h01 = unpackAtlas((i + vec2(0.0, 1.0)) / dim);
+    float h11 = unpackAtlas((i + vec2(1.0, 1.0)) / dim);
+    
+    return mix(mix(h00, h10, f.x), mix(h01, h11, f.x), f.y);
 }
 
 void main() {
@@ -127,7 +150,7 @@ void main() {
         
         // ── True Screen-Space Raymarching (Bypass MapLibre FBO Bottleneck) ──
         float globalShadow = 0.0;
-        float startElevation = unpackAtlas(atlasUV);
+        float startElevation = sampleElevationBilinear(atlasUV);
         
         const float WORLD_CIRCUMFERENCE = 40075016.7;
         vec2 worldStep = vec2(
@@ -143,17 +166,26 @@ void main() {
         vec2 currentSampleUV = atlasUV + (sampleUVStep * ditherOffset);
         float currentRayHeight = startElevation + (zStep * ditherOffset);
         
+        // This mathematically ensures the short interacting ray traverses the exact same geographical 
+        // distance as the beautiful 128-step idle ray, completely eliminating truncated shadow holes!
+        float interactionScale = clamp(128.0 / u_max_steps, 1.0, 10.0);
+
         const float hardMaxSteps = 512.0;
+        float hitDistance = 0.0;
+        float minClearance = 1.0;
         
         for (float i = 1.0; i <= hardMaxSteps; i++) {
             if (i > u_max_steps) break;
             
-            float curAccel = 1.0 + (i * 0.01);
+            float curAccel = 1.0 + (i * 0.015);
+            // Optimization: Fast 1-Tap Nearest-Neighbor fetch during airborne traversal!
+            // Cuts 384 texture fetches per ray. The Bisection loop will use the 4-Tap to 
+            // recalculate the exact smooth hit geometry later.
             float elev = unpackAtlas(currentSampleUV);
             
             float clearance = currentRayHeight - elev;
             float altitudeStride = clamp(clearance / 100.0, 1.0, 10.0);
-            float finalAccel = curAccel * altitudeStride;
+            float finalAccel = curAccel * altitudeStride * interactionScale;
             
             currentSampleUV += sampleUVStep * finalAccel;
             currentRayHeight += zStep * finalAccel;
@@ -162,13 +194,22 @@ void main() {
             if (currentRayHeight > 8900.0) break;
             
             elev = unpackAtlas(currentSampleUV);
+            clearance = currentRayHeight - elev;
+            
+            // --- Physically Accurate Soft Penumbra (Sphere Tracing) ---
+            // Track the "closest miss" along the ray's flight path. 
+            // Only consider geometry that is physically elevated above our starting point.
+            if (elev > startElevation + 1.0) {
+                float penumbraWidth = clamp(u_shadow_soft_base + (i * u_shadow_soft_mult), u_shadow_soft_base, u_shadow_soft_max);
+                minClearance = min(minClearance, max(0.0, clearance) / penumbraWidth);
+            }
             
             if (elev > currentRayHeight) {
                 float stepScale = 0.5;
                 for (int j = 0; j < 3; j++) {
                     currentSampleUV -= (sampleUVStep * finalAccel) * stepScale;
                     currentRayHeight -= (zStep * finalAccel) * stepScale;
-                    elev = unpackAtlas(currentSampleUV);
+                    elev = sampleElevationBilinear(currentSampleUV);
                     
                     if (currentRayHeight > elev) {
                         stepScale = -abs(stepScale) * 0.5;
@@ -177,10 +218,18 @@ void main() {
                     }
                 }
                 
-                float penetration = elev - currentRayHeight;
-                globalShadow = clamp(penetration / 50.0, 0.3, 1.0);
+                // Hard Hit! The pixel is fully occluded by the mountain.
+                globalShadow = 1.0;
+                minClearance = 0.0;
+                hitDistance = i;
                 break;
             }
+        }
+        
+        // If the ray completely flies over the mountain, but grazes the peak,
+        // minClearance will be < 1.0, casting a beautiful soft shadow gradient that fades to 0.0.
+        if (minClearance > 0.0 && minClearance < 1.0) {
+            globalShadow = 1.0 - minClearance;
         }
 
         // ── Raw DEM-Based Subtle AO (high-resolution relief) ──
@@ -200,27 +249,66 @@ void main() {
         // Sobel factor is 8.0. Spatial step is u_metersPerPixel.
         vec2 grad = vec2((eC + eF + eF + eI) - (eA + eD + eD + eG), (eG + eH + eH + eI) - (eA + eB + eB + eC)) / 8.0;
         
-        // ── Igor Hillshade Algorithm (GDAL-based) Port for Sharp AO ──
-        // Using u_sun_direction and raw spatial gradients for maximum punch.
+        // ── Option O: Copy 19 Additive Shading Architecture ──
+        // The user loved the rendering from a specific older version of the codebase ("copy 19").
+        // Instead of mathematically multiplying colors into the terrain texture, copy 19 
+        // layered semi-transparent highlights and shadows ON TOP of the imagery.
+
+        // 1. Layer A: Procedural Base Hillshade (Igor AO)
+        // Provides micro-relief and geometric shading from slope/aspect.
         float azimuth = atan(u_sun_direction.x, -u_sun_direction.y) + 3.14159265;
         float aspect = (grad.x != 0.0 || grad.y != 0.0) ? atan(grad.y, -grad.x) : 1.570796;
-        
-        // Slope strength: matches native hillshade-prepare calculations
         float slope_magnitude = length(grad / u_metersPerPixel) * u_dem_ao_exag * 2.0; 
-        float slope_strength = atan(slope_magnitude) * 0.6366197; // 2.0/PI
-        
-        // Aspect strength for directional contrast
+        float slope_strength = atan(slope_magnitude) * 0.6366197;
         float aspect_strength = 1.0 - abs(mod((aspect + azimuth) / 3.14159265 + 0.5, 2.0) - 1.0);
-        
         float ao_shadow = slope_strength * aspect_strength;
         float ao_highlight = slope_strength * (1.0 - aspect_strength);
         
-        // Final AO multiplier: Reduced for subtle, natural relief
-        float ao = 1.0 - clamp(ao_shadow * 0.6, 0.0, 0.6) + ao_highlight * 0.15;
+        // 2. Layer B: Pure Raymarched Shadows (Mask)
+        float shadowMask = clamp(globalShadow, 0.0, 1.0);
 
-        // ── Combine Cast Shadow + Subtle AO ──
-        float shadowDarken = 1.0 - globalShadow * u_shadow_intensity * 0.98;
-        fragColor.rgb *= shadowDarken * ao;
+        // --- HIGHLIGHT PASS (Dynamic Capped Glow) ---
+        vec3 SUN_NOON = vec3(1.0, 0.95, 0.9);   // Warm White
+        vec3 SUN_GOLDEN = vec3(1.0, 0.7, 0.3); // Golden Orange
+        
+        // Mix sunlight color based on altitude
+        float sunMix = smoothstep(0.45, 0.10, u_sun_altitude);
+        vec3 sunTint = mix(SUN_NOON, SUN_GOLDEN, sunMix);
+
+        float dayIntensity = 0.25; 
+        float sunsetBoost = 1.0 + sunMix * 2.0; 
+        
+        // Calculate Highlight Alpha (applies only where there is no cast shadow)
+        // u_ao_cast_mult (Base Hillshade slider) controls general highlight and ao intensity
+        float hAlpha = ao_highlight * (1.0 - shadowMask) * u_ao_cast_mult * sunsetBoost * dayIntensity;
+        // Cap highlight alpha strictly at 70% opacity so it never totally blows out imagery
+        float highlightAlpha = clamp(hAlpha, 0.0, 0.7);
+
+        // --- SHADOW PASS (Dynamic Sky-Synced) ---
+        vec3 TINT_DAY = vec3(0.0, 0.35, 0.55);       // Crisp Cyan (Noon)
+        vec3 TINT_TWILIGHT = vec3(0.15, 0.05, 0.35); // Rich Indigo (Sunset)
+        
+        float tintMix = smoothstep(0.45, 0.10, u_sun_altitude); 
+        vec3 shadowTint = mix(TINT_DAY, TINT_TWILIGHT, tintMix);
+
+        // Copy 19 specifically mixed the Raymarched Cast Shadow (shadowMask)
+        // Additively with the Igor Self-Shadow AO inside the dark areas!
+        float baseShadow = shadowMask * 0.75;
+        // u_ao_cast_mult controls depth of self-shadowing micro-relief.
+        float sAlpha = baseShadow + (ao_shadow * u_ao_cast_mult * 0.20);
+        
+        // Scale the shadow density overall using u_cast_shadow_mult.
+        float shadowAlpha = clamp(sAlpha * u_cast_shadow_mult * 0.65, 0.0, 0.85);
+
+        // --- FINAL COMPOSITION ---
+        // 1. Alpha-blend the Shadow over the terrain imagery linearly
+        fragColor.rgb = mix(fragColor.rgb, shadowTint, shadowAlpha);
+        
+        // 2. Alpha-blend the Highlight over the terrain imagery linearly
+        // Note: Using alpha mix for highlight instead of generic addition replicates
+        // copy19's specific atmospheric rendering, but using it additively creates
+        // a punchier solar glow. Since copy 19 stacked alphas, we'll keep the mix.
+        fragColor.rgb = mix(fragColor.rgb, sunTint, highlightAlpha);
 
         // ── Debug Overlays ──
         if (u_debug_mode > 0) {

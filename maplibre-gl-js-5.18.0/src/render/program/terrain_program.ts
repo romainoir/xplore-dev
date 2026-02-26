@@ -45,6 +45,10 @@ export type TerrainUniformsType = {
     'u_tile_id': Uniform3f;
     'u_shadow_intensity': Uniform1f;
     'u_debug_mode': Uniform1i;
+    'u_cast_shadow_mult': Uniform1f;
+    'u_self_shadow_mult': Uniform1f;
+    'u_ao_cast_mult': Uniform1f;
+    'u_ao_self_mult': Uniform1f;
     'u_sun_altitude': Uniform1f;
     'u_sun_direction': Uniform2f;
     'u_dem_ao': Uniform1i;
@@ -55,6 +59,9 @@ export type TerrainUniformsType = {
     'u_metersPerPixel': Uniform1f;
     'u_max_steps': Uniform1f;
     'u_step_meters': Uniform1f;
+    'u_shadow_soft_base': Uniform1f;
+    'u_shadow_soft_mult': Uniform1f;
+    'u_shadow_soft_max': Uniform1f;
 };
 
 export type TerrainElevationUniformsType = {
@@ -101,6 +108,10 @@ const terrainUniforms = (context: Context, locations: UniformLocations): Terrain
     'u_tile_id': new Uniform3f(context, locations.u_tile_id),
     'u_shadow_intensity': new Uniform1f(context, locations.u_shadow_intensity),
     'u_debug_mode': new Uniform1i(context, locations.u_debug_mode),
+    'u_cast_shadow_mult': new Uniform1f(context, locations.u_cast_shadow_mult),
+    'u_self_shadow_mult': new Uniform1f(context, locations.u_self_shadow_mult),
+    'u_ao_cast_mult': new Uniform1f(context, locations.u_ao_cast_mult),
+    'u_ao_self_mult': new Uniform1f(context, locations.u_ao_self_mult),
     'u_sun_altitude': new Uniform1f(context, locations.u_sun_altitude),
     'u_sun_direction': new Uniform2f(context, locations.u_sun_direction),
     'u_dem_ao': new Uniform1i(context, locations.u_dem_ao),
@@ -111,6 +122,9 @@ const terrainUniforms = (context: Context, locations: UniformLocations): Terrain
     'u_metersPerPixel': new Uniform1f(context, locations.u_metersPerPixel),
     'u_max_steps': new Uniform1f(context, locations.u_max_steps),
     'u_step_meters': new Uniform1f(context, locations.u_step_meters),
+    'u_shadow_soft_base': new Uniform1f(context, locations.u_shadow_soft_base),
+    'u_shadow_soft_mult': new Uniform1f(context, locations.u_shadow_soft_mult),
+    'u_shadow_soft_max': new Uniform1f(context, locations.u_shadow_soft_max),
 });
 
 const terrainElevationUniforms = (context: Context, locations: UniformLocations): TerrainElevationUniformsType => ({
@@ -191,6 +205,10 @@ const terrainUniformValues = (
         'u_tile_id': tile ? [tile.tileID.canonical.z, tile.tileID.canonical.x, tile.tileID.canonical.y] : [0, 0, 0],
         'u_shadow_intensity': 1.0,
         'u_debug_mode': (typeof window !== 'undefined' && (window as any)._shadowDebugMode) ? (window as any)._shadowDebugMode : 0,
+        'u_cast_shadow_mult': (typeof window !== 'undefined' && (window as any)._castShadowMult !== undefined) ? (window as any)._castShadowMult : 3.0,
+        'u_self_shadow_mult': 1.0,
+        'u_ao_cast_mult': (typeof window !== 'undefined' && (window as any)._aoCastMult !== undefined) ? (window as any)._aoCastMult : 1.0,
+        'u_ao_self_mult': (typeof window !== 'undefined' && (window as any)._aoSelfMult !== undefined) ? (window as any)._aoSelfMult : 1.6,
         'u_sun_altitude': (() => {
             const sl = painter?.style?.getLayer('shadow-coarse') as any;
             return sl?.getShadowProperties ? sl.getShadowProperties().altitudeRadians : 0.5;
@@ -208,15 +226,20 @@ const terrainUniformValues = (
         'u_elevation_atlas': 14, // Bind elevation atlas to unit 14
         'u_metersPerPixel': 40075016.7 / (512 * Math.pow(2, tile ? tile.tileID.canonical.z : zoom)),
         'u_max_steps': (() => {
-            const isMapMoving = painter?.options?.moving;
-            const isTimeSliding = typeof window !== 'undefined' && (window as any)._isInteractingWithTime;
-            return (isMapMoving || isTimeSliding) ? 128.0 : 256.0;
+            // Option D (Aggressive Interaction Degradation) caused fatal banding and "white holes" 
+            // due to massive 5x stride jumps mathematically missing thin mountain ridges.
+            // We now use a high-quality constant step count, linked to the UI Debug Slider.
+            // Never degrade step count during panning or time-scrubbing to prevent artifacts.
+            return (typeof window !== 'undefined' && (window as any)._shadowMaxSteps) ? (window as any)._shadowMaxSteps : 80.0;
         })(),
         'u_step_meters': (() => {
-            const isMapMoving = painter?.options?.moving;
-            const isTimeSliding = typeof window !== 'undefined' && (window as any)._isInteractingWithTime;
-            return (isMapMoving || isTimeSliding) ? 30.0 : 20.0;
+            // Keep base stride constant. The shader's interactionScale magically multiplies 
+            // the distance based on u_max_steps.
+            return (typeof window !== 'undefined' && (window as any)._shadowStepSize) ? (window as any)._shadowStepSize * 10.0 : 40.0;
         })(),
+        'u_shadow_soft_base': (typeof window !== 'undefined' && (window as any)._shadowSoftBase !== undefined) ? (window as any)._shadowSoftBase : 10.0,
+        'u_shadow_soft_mult': (typeof window !== 'undefined' && (window as any)._shadowSoftMult !== undefined) ? (window as any)._shadowSoftMult : 10.0,
+        'u_shadow_soft_max': (typeof window !== 'undefined' && (window as any)._shadowSoftMax !== undefined) ? (window as any)._shadowSoftMax : 100.0,
     };
 };
 
