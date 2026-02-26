@@ -30,10 +30,30 @@ export function createShadowController(map, deps = {}) {
             window.sunConfig = { azimuth: sunAzi, altitude: sunAlt };
 
             // Shadow and detail layers get single-direction illumination
+            const hScale = Math.max(0, sunAlt / 90);
+            const shadowColor = `rgba(0,0,0, ${0.4 - hScale * 0.2})`; // Darker near sunrise/sunset
+
+            let hlColor = '#ffffff';
+            if (sunAlt < 5) {
+                hlColor = '#ff8c42'; // Sunset orange
+            } else if (sunAlt < 15) {
+                hlColor = '#ffcf9e'; // Golden hour
+            }
+
             ['shadow-native', 'detail-native'].forEach(l => {
                 if (map.getLayer(l)) {
                     map.setPaintProperty(l, 'hillshade-illumination-direction', sunAzi);
                     map.setPaintProperty(l, 'hillshade-illumination-altitude', [sunAlt, sunAlt, sunAlt, sunAlt]);
+                    map.setPaintProperty(l, 'hillshade-shadow-color', shadowColor);
+                    map.setPaintProperty(l, 'hillshade-highlight-color', hlColor);
+                }
+            });
+
+            // Modern Raymarched Shadow Cascade
+            ['shadow-coarse', 'shadow-detail'].forEach(l => {
+                if (map.getLayer(l)) {
+                    map.setPaintProperty(l, 'shadow-direction', sunAzi);
+                    map.setPaintProperty(l, 'shadow-altitude', Math.max(sunAlt, 2));
                 }
             });
 

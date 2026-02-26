@@ -232,83 +232,30 @@ void main() {
             globalShadow = 1.0 - minClearance;
         }
 
-        // ── Raw DEM-Based Subtle AO (high-resolution relief) ──
-        // Using v_dem_coord ensures we sample the raw DEM texture directly, 
-        // avoiding the faceting artifacts of the mesh-based elevation atlas.
-        float eA = sampleDemElev(v_dem_coord + vec2(-1.0, -1.0));
-        float eB = sampleDemElev(v_dem_coord + vec2( 0.0, -1.0));
-        float eC = sampleDemElev(v_dem_coord + vec2( 1.0, -1.0));
-        float eD = sampleDemElev(v_dem_coord + vec2(-1.0,  0.0));
-        float eE = sampleDemElev(v_dem_coord);
-        float eF = sampleDemElev(v_dem_coord + vec2( 1.0,  0.0));
-        float eG = sampleDemElev(v_dem_coord + vec2(-1.0,  1.0));
-        float eH = sampleDemElev(v_dem_coord + vec2( 0.0,  1.0));
-        float eI = sampleDemElev(v_dem_coord + vec2( 1.0,  1.0));
-
-        // Sobel gradient geographically scaled (meters/meter)
-        // Sobel factor is 8.0. Spatial step is u_metersPerPixel.
-        vec2 grad = vec2((eC + eF + eF + eI) - (eA + eD + eD + eG), (eG + eH + eH + eI) - (eA + eB + eB + eC)) / 8.0;
+        // ── Option O: Cartographic Layer Compositing (Multiply Blend) ──
+        // The raymarched globalShadow provides the exact areas blocked by the mountain peaks.
+        // We tint this geometry to look like scattered atmospheric sky-blue.
         
-        // ── Option O: Copy 19 Additive Shading Architecture ──
-        // The user loved the rendering from a specific older version of the codebase ("copy 19").
-        // Instead of mathematically multiplying colors into the terrain texture, copy 19 
-        // layered semi-transparent highlights and shadows ON TOP of the imagery.
-
-        // 1. Layer A: Procedural Base Hillshade (Igor AO)
-        // Provides micro-relief and geometric shading from slope/aspect.
-        float azimuth = atan(u_sun_direction.x, -u_sun_direction.y) + 3.14159265;
-        float aspect = (grad.x != 0.0 || grad.y != 0.0) ? atan(grad.y, -grad.x) : 1.570796;
-        float slope_magnitude = length(grad / u_metersPerPixel) * u_dem_ao_exag * 2.0; 
-        float slope_strength = atan(slope_magnitude) * 0.6366197;
-        float aspect_strength = 1.0 - abs(mod((aspect + azimuth) / 3.14159265 + 0.5, 2.0) - 1.0);
-        float ao_shadow = slope_strength * aspect_strength;
-        float ao_highlight = slope_strength * (1.0 - aspect_strength);
-        
-        // 2. Layer B: Pure Raymarched Shadows (Mask)
+        // 1. Raw Shadow Mask
         float shadowMask = clamp(globalShadow, 0.0, 1.0);
 
-        // --- HIGHLIGHT PASS (Dynamic Capped Glow) ---
-        vec3 SUN_NOON = vec3(1.0, 0.95, 0.9);   // Warm White
-        vec3 SUN_GOLDEN = vec3(1.0, 0.7, 0.3); // Golden Orange
-        
-        // Mix sunlight color based on altitude
-        float sunMix = smoothstep(0.45, 0.10, u_sun_altitude);
-        vec3 sunTint = mix(SUN_NOON, SUN_GOLDEN, sunMix);
-
-        float dayIntensity = 0.25; 
-        float sunsetBoost = 1.0 + sunMix * 2.0; 
-        
-        // Calculate Highlight Alpha (applies only where there is no cast shadow)
-        // u_ao_cast_mult (Base Hillshade slider) controls general highlight and ao intensity
-        float hAlpha = ao_highlight * (1.0 - shadowMask) * u_ao_cast_mult * sunsetBoost * dayIntensity;
-        // Cap highlight alpha strictly at 70% opacity so it never totally blows out imagery
-        float highlightAlpha = clamp(hAlpha, 0.0, 0.7);
-
-        // --- SHADOW PASS (Dynamic Sky-Synced) ---
+        // 2. Dynamic Sky-Synced Shadow Tint
         vec3 TINT_DAY = vec3(0.0, 0.35, 0.55);       // Crisp Cyan (Noon)
         vec3 TINT_TWILIGHT = vec3(0.15, 0.05, 0.35); // Rich Indigo (Sunset)
         
         float tintMix = smoothstep(0.45, 0.10, u_sun_altitude); 
         vec3 shadowTint = mix(TINT_DAY, TINT_TWILIGHT, tintMix);
 
-        // Copy 19 specifically mixed the Raymarched Cast Shadow (shadowMask)
-        // Additively with the Igor Self-Shadow AO inside the dark areas!
+        // 3. Composite Shadow Base
         float baseShadow = shadowMask * 0.75;
-        // u_ao_cast_mult controls depth of self-shadowing micro-relief.
-        float sAlpha = baseShadow + (ao_shadow * u_ao_cast_mult * 0.20);
         
         // Scale the shadow density overall using u_cast_shadow_mult.
-        float shadowAlpha = clamp(sAlpha * u_cast_shadow_mult * 0.65, 0.0, 0.85);
+        float shadowAlpha = clamp(baseShadow * u_shadow_intensity * u_cast_shadow_mult * 0.65, 0.0, 0.85);
 
         // --- FINAL COMPOSITION ---
-        // 1. Alpha-blend the Shadow over the terrain imagery linearly
+        // Alpha-blend the Shadow over the terrain imagery linearly
+        // Note: The brilliant sunlit sides of the mountain are handled entirely by the separate MapLibre hillshade raster layer.
         fragColor.rgb = mix(fragColor.rgb, shadowTint, shadowAlpha);
-        
-        // 2. Alpha-blend the Highlight over the terrain imagery linearly
-        // Note: Using alpha mix for highlight instead of generic addition replicates
-        // copy19's specific atmospheric rendering, but using it additively creates
-        // a punchier solar glow. Since copy 19 stacked alphas, we'll keep the mix.
-        fragColor.rgb = mix(fragColor.rgb, sunTint, highlightAlpha);
 
         // ── Debug Overlays ──
         if (u_debug_mode > 0) {

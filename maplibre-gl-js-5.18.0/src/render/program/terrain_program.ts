@@ -46,9 +46,6 @@ export type TerrainUniformsType = {
     'u_shadow_intensity': Uniform1f;
     'u_debug_mode': Uniform1i;
     'u_cast_shadow_mult': Uniform1f;
-    'u_self_shadow_mult': Uniform1f;
-    'u_ao_cast_mult': Uniform1f;
-    'u_ao_self_mult': Uniform1f;
     'u_sun_altitude': Uniform1f;
     'u_sun_direction': Uniform2f;
     'u_dem_ao': Uniform1i;
@@ -109,9 +106,6 @@ const terrainUniforms = (context: Context, locations: UniformLocations): Terrain
     'u_shadow_intensity': new Uniform1f(context, locations.u_shadow_intensity),
     'u_debug_mode': new Uniform1i(context, locations.u_debug_mode),
     'u_cast_shadow_mult': new Uniform1f(context, locations.u_cast_shadow_mult),
-    'u_self_shadow_mult': new Uniform1f(context, locations.u_self_shadow_mult),
-    'u_ao_cast_mult': new Uniform1f(context, locations.u_ao_cast_mult),
-    'u_ao_self_mult': new Uniform1f(context, locations.u_ao_self_mult),
     'u_sun_altitude': new Uniform1f(context, locations.u_sun_altitude),
     'u_sun_direction': new Uniform2f(context, locations.u_sun_direction),
     'u_dem_ao': new Uniform1i(context, locations.u_dem_ao),
@@ -203,12 +197,14 @@ const terrainUniformValues = (
         'u_shadow_atlas': 15, // Bind shadow atlas to unit 15
         'u_atlas_bounds': (painter.style.map.terrain as any)?._elevationAtlasBounds || [0, 0, 1, 1],
         'u_tile_id': tile ? [tile.tileID.canonical.z, tile.tileID.canonical.x, tile.tileID.canonical.y] : [0, 0, 0],
-        'u_shadow_intensity': 1.0,
+        'u_shadow_intensity': (() => {
+            const sl = painter?.style?.getLayer('shadow-coarse') as any;
+            if (!sl || sl.isHidden(zoom)) return 0.0;
+            const opacity = sl.getPaintProperty('shadow-opacity');
+            return typeof opacity === 'number' ? opacity : 1.0;
+        })(),
         'u_debug_mode': (typeof window !== 'undefined' && (window as any)._shadowDebugMode) ? (window as any)._shadowDebugMode : 0,
         'u_cast_shadow_mult': (typeof window !== 'undefined' && (window as any)._castShadowMult !== undefined) ? (window as any)._castShadowMult : 3.0,
-        'u_self_shadow_mult': 1.0,
-        'u_ao_cast_mult': (typeof window !== 'undefined' && (window as any)._aoCastMult !== undefined) ? (window as any)._aoCastMult : 1.0,
-        'u_ao_self_mult': (typeof window !== 'undefined' && (window as any)._aoSelfMult !== undefined) ? (window as any)._aoSelfMult : 1.6,
         'u_sun_altitude': (() => {
             const sl = painter?.style?.getLayer('shadow-coarse') as any;
             return sl?.getShadowProperties ? sl.getShadowProperties().altitudeRadians : 0.5;

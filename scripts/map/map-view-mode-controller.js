@@ -348,6 +348,11 @@ export function createViewModeController(map, options = {}) {
     applySky(is3D);
     applyHdMode();
 
+    // Re-evaluate terrain-dependent analysis layers (like shadows) purely by their imageryState
+    if (map.getStyle() && typeof window.imageryManager?.applyImageryState === 'function') {
+      window.imageryManager.applyImageryState();
+    }
+
     // Show/hide FOV controls based on 3D mode (only if debug is enabled)
     const fovControls = document.getElementById('fovControls');
     if (fovControls) {

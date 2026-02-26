@@ -135,11 +135,6 @@
             <input type="range" id="castmult" min="0.0" max="3.0" step="0.1" value="3.0">
         </div>
 
-        <div class="row">
-            <label>Base Hillshade (Igor) Strength: <span class="val" id="aocast-val">1.0x</span></label>
-            <input type="range" id="aocast" min="0.0" max="3.0" step="0.1" value="1.0">
-        </div>
-
         <div class="row" style="margin-top: 15px; border-top: 1px solid #444; padding-top: 10px;">
             <label>Sun Azimuth: <span class="val" id="azimuth-val">...</span>°</label>
             <label>Sun Altitude: <span class="val" id="altitude-val">...</span>°</label>
@@ -158,13 +153,6 @@
             <input type="checkbox" id="detail-toggle" checked style="width: 20px; height: 20px; cursor: pointer;">
             <label for="detail-toggle" style="margin: 0; color: #ff6b6b; cursor: pointer;">Show Detail Shadows
                 (>=Z12)</label>
-        </div>
-        <div
-            style="display: flex; align-items: center; gap: 10px; margin-top: 10px; padding-top: 10px; border-top: 1px solid #444;">
-            <input type="checkbox" id="native-hillshade-toggle" style="width: 20px; height: 20px; cursor: pointer;">
-            <label for="native-hillshade-toggle" style="margin: 0; color: #f39c12; cursor: pointer;">Compare Native Igor
-                Hillshade
-                <br /><span style="font-size: 10px; color: #aaa">(Disables 3D Raymarch Base)</span></label>
         </div>
         <button id="debug-toggle"
             style="width:100%;background:#ff6b6b;color:white;border:none;padding:10px;border-radius:4px;cursor:pointer;font-weight:bold;margin-top:5px;">
@@ -240,7 +228,7 @@
                         tiles: [MAPTERHORN_TILE_URL],
                         encoding: 'terrarium',
                         tileSize: 256,
-                        maxzoom: 12
+                        maxzoom: 16
                     }
                 },
                 layers: [
@@ -345,13 +333,6 @@
                 const highlightColor = `rgb(${rH}, ${gH}, ${bH})`;
                 const shadowColor = `rgb(${rS}, ${gS}, ${bS})`;
 
-                // Update Native Hillshade Layer (if active)
-                if (map.getLayer('native-hillshade')) {
-                    map.setPaintProperty('native-hillshade', 'hillshade-illumination-direction', azimuth);
-                    map.setPaintProperty('native-hillshade', 'hillshade-highlight-color', highlightColor);
-                    map.setPaintProperty('native-hillshade', 'hillshade-shadow-color', shadowColor);
-                }
-
                 map.triggerRepaint();
             }
 
@@ -412,15 +393,7 @@
                 map.triggerRepaint();
             });
 
-            // AO Tuning Controls
-            const aoCastInput = document.getElementById('aocast');
-            window._aoCastMult = parseFloat(aoCastInput.value);
-            aoCastInput.addEventListener('input', (e) => {
-                const val = parseFloat(e.target.value);
-                document.getElementById('aocast-val').innerText = val.toFixed(1) + 'x';
-                window._aoCastMult = val;
-                map.triggerRepaint();
-            });
+
 
             // Independent Toggles
 
@@ -434,46 +407,7 @@
                 map.setLayoutProperty('shadow-detail', 'visibility', e.target.checked ? 'visible' : 'none');
             });
 
-            const nativeHillshadeToggle = document.getElementById('native-hillshade-toggle');
-            nativeHillshadeToggle.addEventListener('change', (e) => {
-                const isNative = e.target.checked;
 
-                // Toggle our custom procedural raymarch layers
-                map.setLayoutProperty('shadow-coarse', 'visibility', isNative ? 'none' : 'visible');
-                map.setLayoutProperty('shadow-detail', 'visibility', isNative ? 'none' : 'visible');
-
-                // Update checkboxes visually
-                document.getElementById('coarse-toggle').checked = !isNative;
-                document.getElementById('detail-toggle').checked = !isNative;
-
-                if (isNative) {
-                    // Disable local Igor AO in the 3D pass
-                    window._aoCastMult = 0.0;
-                    if (!map.getLayer('native-hillshade')) {
-                        map.addLayer({
-                            id: 'native-hillshade',
-                            type: 'hillshade',
-                            source: 'terrainSource', // Reuse the same DEM!
-                            paint: {
-                                'hillshade-exaggeration': 1.0,
-                                'hillshade-method': 'igor',
-                                'hillshade-illumination-anchor': 'map',
-                                'hillshade-shadow-color': '#002244',     // matches copy19 cyan/indigo baseline
-                                'hillshade-highlight-color': '#ffeebd'   // matches copy19 warm sunlight baseline
-                            }
-                        }, 'shadow-coarse');
-                    }
-                    map.setLayoutProperty('native-hillshade', 'visibility', 'visible');
-                } else {
-                    // Restore local Igor AO
-                    window._aoCastMult = parseFloat(document.getElementById('aocast').value);
-                    if (map.getLayer('native-hillshade')) {
-                        map.setLayoutProperty('native-hillshade', 'visibility', 'none');
-                    }
-                }
-                updateSun();
-                map.triggerRepaint();
-            });
 
             // Debug mode toggle (Cycling 0, 1, 2)
             const debugToggle = document.getElementById('debug-toggle');

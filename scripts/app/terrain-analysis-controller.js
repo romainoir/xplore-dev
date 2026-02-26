@@ -64,7 +64,7 @@ export function updateAnalyticalLegends(map, imageryState, updateShadowTime) {
     if (imageryState.get('avalanche')?.enabled) activeAnalyzers.push('avalanche');
     if (imageryState.get('snow')?.enabled) activeAnalyzers.push('snow');
     if (imageryState.get('snow-depth')?.enabled) activeAnalyzers.push('snow-depth');
-    if (imageryState.get('shadow')?.enabled) activeAnalyzers.push('shadow');
+    if (imageryState.get('shadow')?.enabled || imageryState.get('daylight')?.enabled) activeAnalyzers.push('shadow');
 
     if (activeAnalyzers.length === 0) {
         container.style.opacity = '0';

@@ -64,6 +64,8 @@ async function init() {
     hdSources: ['terrainSource', 'hillshadeSource', 'reliefDem'],
   });
 
+  window.viewModeController = viewModeController;
+
   const shadowCtrl = createShadowController(map, { viewModeController });
 
   // ── 5. Imagery manager ──
@@ -601,11 +603,9 @@ async function init() {
   // ── Toolbox DOM references ──
   const toolboxes = {
     shadow: { toggle: document.getElementById('shadowToolboxToggle'), box: document.getElementById('shadowToolbox') },
-    snow: { toggle: document.getElementById('snowToolboxToggle'), box: document.getElementById('snowToolbox') },
     terrain: { toggle: document.getElementById('terrainToolboxToggle'), box: document.getElementById('terrainToolbox') },
-    pathway: { toggle: document.getElementById('pathwayToolboxToggle'), box: document.getElementById('pathwayToolbox') },
+    snow: { toggle: document.getElementById('snowToolboxToggle'), box: document.getElementById('snowToolbox') },
     basemap: { toggle: document.getElementById('basemapToolboxToggle'), box: document.getElementById('basemapToolbox') },
-    photos: { toggle: document.getElementById('photosToolboxToggle'), box: document.getElementById('photosToolbox') },
   };
 
   // ── Generic toolbox open/close helper ──
@@ -624,24 +624,42 @@ async function init() {
   };
 
   // Wire click + outside-click for each toolbox
-  Object.entries(toolboxes).forEach(([name, tb]) => {
-    if (!tb.toggle || !tb.box) return;
-    tb.toggle.addEventListener('click', (e) => {
+  if (toolboxes.shadow.toggle && toolboxes.shadow.box) {
+    toolboxes.shadow.toggle.addEventListener('click', (e) => {
       e.stopPropagation();
-      setToolboxOpen(name, !tb.box.classList.contains('visible'));
+      setToolboxOpen('shadow', toolboxes.shadow.box.getAttribute('aria-hidden') === 'true');
+    });
+  }
+  if (toolboxes.terrain.toggle && toolboxes.terrain.box) {
+    toolboxes.terrain.toggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      setToolboxOpen('terrain', toolboxes.terrain.box.getAttribute('aria-hidden') === 'true');
+    });
+  }
+  if (toolboxes.snow.toggle && toolboxes.snow.box) {
+    toolboxes.snow.toggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      setToolboxOpen('snow', toolboxes.snow.box.getAttribute('aria-hidden') === 'true');
+    });
+  }
+  // Wire click + outside-click for basemap toolbox
+  if (toolboxes.basemap.toggle && toolboxes.basemap.box) {
+    toolboxes.basemap.toggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      setToolboxOpen('basemap', !toolboxes.basemap.box.classList.contains('visible'));
     });
     document.addEventListener('click', (e) => {
-      if (!tb.box.classList.contains('visible')) return;
-      if (tb.toggle.contains(e.target) || tb.box.contains(e.target)) return;
-      setToolboxOpen(name, false);
+      if (!toolboxes.basemap.box.classList.contains('visible')) return;
+      if (toolboxes.basemap.toggle.contains(e.target) || toolboxes.basemap.box.contains(e.target)) return;
+      setToolboxOpen('basemap', false);
     });
-  });
+  }
 
   // Wire toolbox handlers into imagery manager (shadow/terrain/snow still use this)
   imagery.setToolboxHandlers({
+    setShadowToolboxOpen: (open) => setToolboxOpen('shadow', open),
     setTerrainToolboxOpen: (open) => setToolboxOpen('terrain', open),
     setSnowToolboxOpen: (open) => setToolboxOpen('snow', open),
-    setShadowToolboxOpen: (open) => setToolboxOpen('shadow', open),
   });
 
   // ── Directions sidebar bar ──
@@ -671,9 +689,9 @@ async function init() {
 
   {
     const { SHADOW_TOOLBOX_IDS, TERRAIN_TOOLBOX_IDS, SNOW_TOOLBOX_IDS } = imagery;
+    if (toolboxes.shadow.box) toolboxes.shadow.box.textContent = '';
     if (toolboxes.terrain.box) toolboxes.terrain.box.textContent = '';
     if (toolboxes.snow.box) toolboxes.snow.box.textContent = '';
-    if (toolboxes.shadow.box) toolboxes.shadow.box.textContent = '';
 
     IMAGERY_OPTIONS.forEach((option) => {
       if (option.hiddenControl) return;
@@ -735,161 +753,17 @@ async function init() {
 
     imagery.updateImageryControlStates();
 
-    // ─── Native Cast Shadow panel with time slider (H4 Engine) ───
-    if (toolboxes.shadow.box) {
-      const shadowPanel = document.createElement('div');
-      shadowPanel.className = 'shadow-cast-panel';
-      shadowPanel.innerHTML = `
-        <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid rgba(255,255,255,0.1)">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0">
-            <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/>
-            <line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
-            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/>
-            <line x1="21" y1="12" x2="23" y2="12"/>
-          </svg>
-          <span style="font-size:12px;font-weight:600;color:#e0e0e0;flex:1">Shadow Physics Tuner</span>
-        </div>
-        <div id="shadowTimeControls" style="padding:8px 12px;opacity:1.0;pointer-events:auto;transition:opacity .2s">
-          <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
-            <span style="font-size:11px;color:#aaa;min-width:36px" id="shadowTimeLabel">12:00</span>
-            <input type="range" id="shadowTimeSlider" min="0" max="1440" step="10" value="720"
-              style="flex:1;accent-color:#fab005;height:4px">
-            <span style="font-size:11px;color:#666" id="shadowSunInfo">—</span>
-          </div>
-          <div style="display:flex;align-items:center;gap:6px">
-            <span style="font-size:11px;color:#aaa;min-width:36px">Opacity</span>
-            <input type="range" id="shadowOpacitySlider" min="0" max="100" step="5" value="60"
-              style="flex:1;accent-color:#fab005;height:4px">
-            <span style="font-size:11px;color:#aaa;min-width:24px" id="shadowOpacityLabel">60%</span>
-          </div>
-          <div style="display:flex;align-items:center;gap:6px;margin-top:4px">
-            <label style="font-size:11px;color:#aaa;display:flex;align-items:center;gap:4px;cursor:pointer">
-              <input type="checkbox" id="shadowNeighborToggle" checked
-                style="accent-color:#fab005;width:14px;height:14px">
-              Cross-tile continuity
-            </label>
-          </div>
-        </div>
-      `;
+    // ─── Shadow Physics (always-on, tied to 3D mode) ───
+    // Initialize neighbor flag (always enabled by default for correct geometry)
+    window.__shadowUseNeighbors = true;
 
-      // Inject mini-CSS for the toggle switch
-      if (!document.getElementById('shadowPanelStyles')) {
-        const style = document.createElement('style');
-        style.id = 'shadowPanelStyles';
-        style.textContent = `
-          .shadow-cast-panel { background:rgba(30,30,40,0.95); border-radius:8px; min-width:220px; overflow:hidden; }
-          .shadow-panel__switch { position:relative; width:36px; height:20px; flex-shrink:0 }
-          .shadow-panel__switch input { opacity:0; width:0; height:0 }
-          .shadow-panel__slider { position:absolute; inset:0; background:#444; border-radius:10px; cursor:pointer; transition:.2s }
-          .shadow-panel__slider:before { content:''; position:absolute; height:16px; width:16px; left:2px; bottom:2px; background:#fff; border-radius:50%; transition:.2s }
-          .shadow-panel__switch input:checked + .shadow-panel__slider { background:#fab005 }
-          .shadow-panel__switch input:checked + .shadow-panel__slider:before { transform:translateX(16px) }
-        `;
-        document.head.appendChild(style);
+    // Connect the time slider directly to the modern shadow controller instance
+    window.addEventListener('sunTimeChanged', (e) => {
+      if (e.detail && e.detail.date) {
+        shadowCtrl.updateShadowTime(e.detail.date);
       }
-
-      toolboxes.shadow.box.appendChild(shadowPanel);
-
-      // Initialize neighbor flag
-      window.__shadowUseNeighbors = true;
-      const neighborToggle = document.getElementById('shadowNeighborToggle');
-      neighborToggle.addEventListener('change', () => {
-        window.__shadowUseNeighbors = neighborToggle.checked;
-        console.log(`[Shadow] Cross-tile neighbors: ${neighborToggle.checked ? 'ON' : 'OFF'}`);
-      });
-
-      const timeSlider = document.getElementById('shadowTimeSlider');
-      const timeLabel = document.getElementById('shadowTimeLabel');
-      const sunInfo = document.getElementById('shadowSunInfo');
-      const timeControls = document.getElementById('shadowTimeControls');
-      const opacitySlider = document.getElementById('shadowOpacitySlider');
-      const opacityLabel = document.getElementById('shadowOpacityLabel');
-
-
-      function getZoomAdaptiveMaxDistance() {
-        const z = map.getZoom();
-        // With 3-cascade adaptive stepping, we can cover 1344 pixels total
-        // At z10: ~76m/pixel × 1344 = ~102km — needs maxDist to match
-        // At z14: ~4.8m/pixel × 1344 = ~6.4km — needs maxDist to match
-        return Math.max(2000, 100000 / Math.pow(2, Math.max(0, z - 10)));
-      }
-
-      function updateShadowFromSlider() {
-        if (!map.getLayer('shadow-coarse') || !map.getLayer('shadow-detail')) return;
-
-        const minutesSinceMidnight = parseInt(timeSlider.value);
-        const hours = Math.floor(minutesSinceMidnight / 60);
-        const mins = minutesSinceMidnight % 60;
-        timeLabel.textContent = `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
-
-        const center = map.getCenter();
-        const simDate = new Date();
-        simDate.setHours(hours, mins, 0, 0);
-        const sunPos = SunCalc.getPosition(simDate, center.lat, center.lng);
-
-        const azDeg = ((sunPos.azimuth * 180 / Math.PI) + 180) % 360;
-        const altDeg = sunPos.altitude * 180 / Math.PI;
-
-        if (altDeg < 0) {
-          sunInfo.textContent = '🌙 night';
-          sunInfo.style.color = '#666';
-        } else {
-          sunInfo.textContent = `☀️ ${altDeg.toFixed(0)}°`;
-          sunInfo.style.color = altDeg < 10 ? '#ff6b6b' : '#fab005';
-        }
-
-        const effectiveAlt = Math.max(altDeg, 2);
-
-        ['shadow-coarse', 'shadow-detail'].forEach(layerId => {
-          map.setPaintProperty(layerId, 'shadow-direction', azDeg);
-          map.setPaintProperty(layerId, 'shadow-altitude', effectiveAlt);
-        });
-
-        console.log(`[Shadow] t=${timeLabel.textContent} az=${azDeg.toFixed(1)}° alt=${altDeg.toFixed(1)}°`);
-      }
-
-      function updateShadowOpacity() {
-        if (!map.getLayer('shadow-coarse') || !map.getLayer('shadow-detail')) return;
-        const val = parseInt(opacitySlider.value) / 100;
-        opacityLabel.textContent = `${opacitySlider.value}%`;
-        ['shadow-coarse', 'shadow-detail'].forEach(layerId => {
-          map.setPaintProperty(layerId, 'shadow-opacity', val);
-        });
-      }
-
-      // Set slider to current time
-      const now = new Date();
-      timeSlider.value = now.getHours() * 60 + now.getMinutes();
-
-      // Shadow is always active now, so ensure layers are visible and properties are set
-      timeControls.style.opacity = '1';
-      timeControls.style.pointerEvents = 'auto';
-
-      if (map.getLayer('shadow-coarse') && map.getLayer('shadow-detail')) {
-        ['shadow-coarse', 'shadow-detail'].forEach(layerId => {
-          map.setLayoutProperty(layerId, 'visibility', 'visible');
-        });
-
-        map.moveLayer('shadow-coarse');
-        map.moveLayer('shadow-detail');
-        const opVal = parseInt(opacitySlider.value) / 100;
-        ['shadow-coarse', 'shadow-detail'].forEach(layerId => {
-          map.setPaintProperty(layerId, 'shadow-opacity', opVal);
-        });
-        updateShadowFromSlider();
-      }
-
-      timeSlider.addEventListener('input', updateShadowFromSlider);
-      opacitySlider.addEventListener('input', updateShadowOpacity);
-
-      // Deprecated zoomend handler (dynamic distance now handled purely in shader mathematically with 2-cascades)
-      map.on('zoomend', () => {
-        // No-op
-      });
-
-      // Initialize display
-      updateShadowFromSlider();
-    }
+    });
+    window._shadowUpdateHook = shadowCtrl.updateShadowTime;
   }
 
   // ═════════════════════════════════════════════════════════════════════

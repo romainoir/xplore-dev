@@ -36,7 +36,7 @@ function createTilePreviewUrl(template, coords = WMTS_PREVIEW_COORDS) {
 
 // ─── IMAGERY_OPTIONS ───
 export const IMAGERY_OPTIONS = Object.freeze([
-    { id: 'shadow', label: 'Shadow', type: 'shadow-layer', linkedLayerIds: ['shadow-coarse', 'shadow-detail'], previewImage: './data/icons_Xmap/shadow.png', defaultOpacity: 0.6, defaultVisible: false },
+    { id: 'shadow', label: 'Shadows', type: 'shadow-layer', linkedLayerIds: ['shadow-coarse', 'shadow-detail', 'detail-native'], previewImage: './data/icons_Xmap/shadow.png', defaultOpacity: 0.8, defaultVisible: false },
     { id: 'daylight', label: 'Sunlight Hours', type: 'native-layer', layerId: 'daylight-native', previewImage: './data/icons_Xmap/daylight.png', defaultOpacity: 0.8, defaultVisible: false },
     {
         id: 'contours',
@@ -63,7 +63,6 @@ export const IMAGERY_OPTIONS = Object.freeze([
     { id: 'strava-cycling', label: 'Strava Cycling', sourceId: 'strava-cycling', layerId: 'strava-cycling', tileTemplate: 'https://atlas.hartakji.com/strava-cycling/{z}/{x}/{y}', tileSize: 256, minZoom: 0, maxZoom: 15, attribution: '<a href="https://www.strava.com">© Strava</a>', defaultVisible: false, defaultOpacity: 1 },
     { id: 'strava-run', label: 'Strava Run', sourceId: 'strava-run', layerId: 'strava-run', tileTemplate: 'https://atlas.hartakji.com/strava-run/{z}/{x}/{y}', tileSize: 256, minZoom: 0, maxZoom: 15, attribution: '<a href="https://www.strava.com">© Strava</a>', defaultVisible: false, defaultOpacity: 1 },
     { id: 'ign-traces-hivernales', label: 'Traces Rando Hivernales', sourceId: 'ign-traces-hivernales', layerId: 'ign-traces-hivernales', tileTemplate: 'https://data.geopf.fr/wmts?layer=TRACES.RANDO.HIVERNALE&style=normal&tilematrixset=PM&Service=WMTS&Request=GetTile&Version=1.0.0&Format=image%2Fpng&TileMatrix={z}&TileCol={x}&TileRow={y}', tileSize: 256, minZoom: 0, maxZoom: 15, attribution: IGN_ATTRIBUTION, defaultVisible: false, defaultOpacity: 1 },
-    { id: 'detail-shading', label: 'Detail Shading', type: 'native-layer', layerId: 'detail-native', previewImage: './data/icons_Xmap/normal.png', defaultOpacity: 1.0, defaultVisible: false },
     { id: 'aspect', label: 'Aspect (Orientation)', type: 'native-layer', layerId: 'aspect-native', previewImage: './data/icons_Xmap/aspect.png', defaultOpacity: 1.0, defaultVisible: false },
     { id: 'slope', label: 'Slope', type: 'native-layer', layerId: 'slope-native', previewImage: './data/icons_Xmap/slope.png', defaultOpacity: 1.0, defaultVisible: false },
     { id: 'avalanche', label: 'Avalanche Zones', type: 'native-layer', layerId: 'avalanche-native', previewImage: './data/icons_Xmap/avalanche.png', defaultOpacity: 1.0, defaultVisible: false },
@@ -257,7 +256,7 @@ export function createImageryManager(map, deps = {}) {
         color: 'rgba(139, 90, 43, 0.2)',   // brown, 20% opacity
     };
 
-    const SHADOW_TOOLBOX_IDS = ['shadow', 'daylight', 'detail-shading'];
+    const SHADOW_TOOLBOX_IDS = ['shadow', 'daylight'];
     const TERRAIN_TOOLBOX_IDS = ['aspect', 'slope', 'avalanche'];
     const SNOW_TOOLBOX_IDS = ['snow', 'snow-depth'];
 
@@ -437,7 +436,7 @@ export function createImageryManager(map, deps = {}) {
         // Dynamic background for Analysis Toggles
         [
             { btnId: 'terrainToolboxToggle', layerIds: ['aspect', 'slope', 'avalanche'] },
-            { btnId: 'shadowToolboxToggle', layerIds: ['shadow', 'daylight', 'detail-shading'] },
+            { btnId: 'shadowToolboxToggle', layerIds: ['shadow', 'daylight'] },
             { btnId: 'snowToolboxToggle', layerIds: ['snow', 'snow-depth'] }
         ].forEach(config => {
             const btn = document.getElementById(config.btnId);
@@ -475,11 +474,13 @@ export function createImageryManager(map, deps = {}) {
             }
             if (option.type === 'shadow-layer') {
                 const layerIds = option.linkedLayerIds || [];
+                const actuallyVisible = visible;
+
                 layerIds.forEach(l => {
                     if (map.getLayer(l)) {
                         try {
-                            map.setLayoutProperty(l, 'visibility', visible ? 'visible' : 'none');
-                            map.setPaintProperty(l, 'shadow-opacity', visible ? Math.min(opacity, 1.0) : 0);
+                            map.setLayoutProperty(l, 'visibility', actuallyVisible ? 'visible' : 'none');
+                            map.setPaintProperty(l, 'shadow-opacity', actuallyVisible ? Math.min(opacity, 1.0) : 0);
                         } catch (_) { }
                     }
                 });

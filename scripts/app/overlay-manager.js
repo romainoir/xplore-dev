@@ -40,14 +40,18 @@ const HILLSHADE_METHOD_STYLES = Object.freeze({
  */
 export function applyHillshadeAppearance(map) {
     if (!map.getLayer('hillshade')) return;
+
     const style = HILLSHADE_METHOD_STYLES.igor;
     map.setPaintProperty('hillshade', 'hillshade-illumination-anchor', 'map');
     map.setPaintProperty('hillshade', 'hillshade-method', 'igor');
+
     map.setPaintProperty('hillshade', 'hillshade-highlight-color', style.highlightColor);
     map.setPaintProperty('hillshade', 'hillshade-shadow-color', style.shadowColor);
     map.setPaintProperty('hillshade', 'hillshade-accent-color', style.accentColor || style.shadowColor);
     map.setPaintProperty('hillshade', 'hillshade-exaggeration', style.exaggeration);
     map.setLayoutProperty('hillshade', 'visibility', 'visible');
+
+
 }
 
 /**
