@@ -59,7 +59,8 @@ export function getOverlayDefinitions() {
     const sources = {
         terrainSource: { ...demConfig, maxzoom: DEM_SOURCE_MAX_ZOOM },
         hillshadeSource: { ...demConfig, maxzoom: DEM_SOURCE_MAX_ZOOM },
-        shadowDemSource: { ...demConfig, maxzoom: SHADOW_DEM_MAX_ZOOM },
+        shadowDemSource: { ...demConfig, maxzoom: 15 },
+        coarseShadowDemSource: { ...demConfig, maxzoom: 12 },
         reliefDem: { ...demConfig, maxzoom: DEM_SOURCE_MAX_ZOOM },
     };
 
@@ -153,7 +154,8 @@ export function applyOverlays(map, deps = {}) {
     const demConfig = { type: 'raster-dem', tiles: [MAPTERHORN_TILE_URL], encoding: 'terrarium', tileSize: 512, attribution: MAPTERHORN_ATTRIBUTION };
     ensureS('terrainSource', { ...demConfig, maxzoom: DEM_SOURCE_MAX_ZOOM });
     ensureS('hillshadeSource', { ...demConfig, maxzoom: DEM_SOURCE_MAX_ZOOM });
-    ensureS('shadowDemSource', { ...demConfig, maxzoom: SHADOW_DEM_MAX_ZOOM, tileZoomOffset: 0 });
+    ensureS('shadowDemSource', { ...demConfig, maxzoom: 15, tileZoomOffset: 0 });
+    ensureS('coarseShadowDemSource', { ...demConfig, maxzoom: 12, tileZoomOffset: 0 });
     ensureS('reliefDem', { ...demConfig, maxzoom: DEM_SOURCE_MAX_ZOOM });
 
     // Background (covers hillshade tile gaps)
@@ -220,7 +222,7 @@ export function applyOverlays(map, deps = {}) {
     ensureL({
         id: 'shadow-coarse',
         type: 'shadow',
-        source: 'shadowDemSource',
+        source: 'coarseShadowDemSource',
         layout: { 'visibility': 'none' },
         paint: {
             'shadow-opacity': 0.6,
@@ -234,6 +236,7 @@ export function applyOverlays(map, deps = {}) {
         id: 'shadow-detail',
         type: 'shadow',
         source: 'hillshadeSource',
+        minzoom: 12,
         layout: { 'visibility': 'none' },
         paint: {
             'shadow-opacity': 0.6,
