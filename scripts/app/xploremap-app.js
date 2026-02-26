@@ -821,7 +821,7 @@ async function init() {
       }
 
       function updateShadowFromSlider() {
-        if (!map.getLayer('shadow-cast')) return;
+        if (!map.getLayer('shadow-coarse') || !map.getLayer('shadow-detail')) return;
 
         const minutesSinceMidnight = parseInt(timeSlider.value);
         const hours = Math.floor(minutesSinceMidnight / 60);
@@ -846,20 +846,24 @@ async function init() {
 
         if (nativeShadowActive) {
           const effectiveAlt = Math.max(altDeg, 2);
-          const maxDist = getZoomAdaptiveMaxDistance();
-          map.setPaintProperty('shadow-cast', 'shadow-direction', azDeg);
-          map.setPaintProperty('shadow-cast', 'shadow-altitude', effectiveAlt);
-          map.setPaintProperty('shadow-cast', 'shadow-max-distance', maxDist);
-          console.log(`[Shadow] t=${timeLabel.textContent} az=${azDeg.toFixed(1)}° alt=${altDeg.toFixed(1)}° maxD=${maxDist.toFixed(0)}m`);
+
+          ['shadow-coarse', 'shadow-detail'].forEach(layerId => {
+            map.setPaintProperty(layerId, 'shadow-direction', azDeg);
+            map.setPaintProperty(layerId, 'shadow-altitude', effectiveAlt);
+          });
+
+          console.log(`[Shadow] t=${timeLabel.textContent} az=${azDeg.toFixed(1)}° alt=${altDeg.toFixed(1)}°`);
         }
       }
 
       function updateShadowOpacity() {
-        if (!map.getLayer('shadow-cast')) return;
+        if (!map.getLayer('shadow-coarse') || !map.getLayer('shadow-detail')) return;
         const val = parseInt(opacitySlider.value) / 100;
         opacityLabel.textContent = `${opacitySlider.value}%`;
         if (nativeShadowActive) {
-          map.setPaintProperty('shadow-cast', 'shadow-opacity', val);
+          ['shadow-coarse', 'shadow-detail'].forEach(layerId => {
+            map.setPaintProperty(layerId, 'shadow-opacity', val);
+          });
         }
       }
 
@@ -872,12 +876,18 @@ async function init() {
         timeControls.style.opacity = nativeShadowActive ? '1' : '0.4';
         timeControls.style.pointerEvents = nativeShadowActive ? 'auto' : 'none';
 
-        if (map.getLayer('shadow-cast')) {
-          map.setLayoutProperty('shadow-cast', 'visibility', nativeShadowActive ? 'visible' : 'none');
+        if (map.getLayer('shadow-coarse') && map.getLayer('shadow-detail')) {
+          ['shadow-coarse', 'shadow-detail'].forEach(layerId => {
+            map.setLayoutProperty(layerId, 'visibility', nativeShadowActive ? 'visible' : 'none');
+          });
+
           if (nativeShadowActive) {
-            map.moveLayer('shadow-cast');
+            map.moveLayer('shadow-coarse');
+            map.moveLayer('shadow-detail');
             const opVal = parseInt(opacitySlider.value) / 100;
-            map.setPaintProperty('shadow-cast', 'shadow-opacity', opVal);
+            ['shadow-coarse', 'shadow-detail'].forEach(layerId => {
+              map.setPaintProperty(layerId, 'shadow-opacity', opVal);
+            });
             updateShadowFromSlider();
           }
         }
@@ -886,12 +896,9 @@ async function init() {
       timeSlider.addEventListener('input', updateShadowFromSlider);
       opacitySlider.addEventListener('input', updateShadowOpacity);
 
-      // Update maxDistance when zoom changes
+      // Deprecated zoomend handler (dynamic distance now handled purely in shader mathematically with 2-cascades)
       map.on('zoomend', () => {
-        if (nativeShadowActive) {
-          const maxDist = getZoomAdaptiveMaxDistance();
-          map.setPaintProperty('shadow-cast', 'shadow-max-distance', maxDist);
-        }
+        // No-op
       });
 
       // Initialize display

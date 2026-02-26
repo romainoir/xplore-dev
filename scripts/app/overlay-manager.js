@@ -216,20 +216,32 @@ export function applyOverlays(map, deps = {}) {
         }
     }, topLabelId || undefined);
 
-    // ─── True native shadow layer (H4 Engine - DEM raymarching) ───
+    // ─── Dual-Cascade Raymarched Shadow Engine ───
     ensureL({
-        id: 'shadow-cast',
+        id: 'shadow-coarse',
+        type: 'shadow',
+        source: 'shadowDemSource',
+        layout: { 'visibility': 'none' },
+        paint: {
+            'shadow-opacity': 0.6,
+            'shadow-color': '#000000',
+            'shadow-direction': 315,
+            'shadow-altitude': 45
+        }
+    });
+
+    ensureL({
+        id: 'shadow-detail',
         type: 'shadow',
         source: 'hillshadeSource',
         layout: { 'visibility': 'none' },
         paint: {
-            'shadow-opacity': 0.5,
+            'shadow-opacity': 0.6,
             'shadow-color': '#000000',
             'shadow-direction': 315,
-            'shadow-altitude': 45,
-            'shadow-max-distance': 5000
+            'shadow-altitude': 45
         }
-    }); // No 'before' — place at top of stack
+    });
 
     console.log('[App] Overlays applied');
 

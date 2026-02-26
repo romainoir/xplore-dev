@@ -5,7 +5,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Shadow Debug POC - v20260223-2013</title>
-    <script src="./scripts/map/maplibre-gl-dev.js?v=20260223-2013"></script>
+    <!-- Custom MapLibre GL JS build with experimental custom shaders! -->
+    <script src="maplibre-gl-js-5.18.0/dist/maplibre-gl-dev.js?v=20260226-1813"></script>
     <link href="https://unpkg.com/maplibre-gl@latest/dist/maplibre-gl.css" rel="stylesheet" />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.9.0/suncalc.min.js"></script>
     <style>
@@ -34,6 +35,8 @@
             border-radius: 8px;
             z-index: 1000;
             width: 300px;
+            max-height: calc(100vh - 280px);
+            overflow-y: auto;
         }
 
         .row {
@@ -94,7 +97,7 @@
             <label>Date & Time</label>
             <input type="date" id="date-input">
             <label style="margin-top: 5px;">Time: <span class="val" id="time-val">12:00</span></label>
-            <input type="range" id="time-input" min="0" max="23.9" step="0.1" value="8.5">
+            <input type="range" id="time-input" min="0" max="23.9" step="0.08333333333333333" value="8.5">
         </div>
         <div class="row" style="margin-top: 15px; border-top: 1px solid #444; padding-top: 10px;">
             <label style="color: #4dabf7; font-weight: bold;">Performance Tuning</label>
@@ -106,29 +109,70 @@
         <div class="row">
             <label>Max Raymarch Steps: <span class="val" id="maxsteps-val">256</span></label>
             <input type="range" id="maxsteps" min="8" max="256" step="8" value="256">
-        </div> <label>Sun Azimuth: <span class="val" id="azimuth-val">...</span>°</label>
-        <label>Sun Altitude: <span class="val" id="altitude-val">...</span>°</label>
+        </div>
+
+        <div class="row" style="margin-top: 15px; border-top: 1px solid #444; padding-top: 10px;">
+            <label style="color: #9b59b6; font-weight: bold;">Soft Penumbra Physics (Blur)</label>
+        </div>
+        <div class="row">
+            <label>Contact Hardness (Base radius): <span class="val" id="softbase-val">50</span>m</label>
+            <input type="range" id="softbase" min="10" max="200" step="10" value="50">
+        </div>
+        <div class="row">
+            <label>Distance Accumulation Multiplier: <span class="val" id="softmult-val">2.5</span>x</label>
+            <input type="range" id="softmult" min="0.1" max="10.0" step="0.1" value="2.5">
+        </div>
+        <div class="row">
+            <label>Max Blur Radius (Clamp): <span class="val" id="softmax-val">300</span>m</label>
+            <input type="range" id="softmax" min="100" max="1500" step="50" value="300">
+        </div>
+
+        <div class="row" style="margin-top: 15px; border-top: 1px solid #444; padding-top: 10px;">
+            <label style="color: #f39c12; font-weight: bold;">Cartographic Layers (Additive Alpha)</label>
+        </div>
+        <div class="row">
+            <label>Shadow Layer Darkness: <span class="val" id="castmult-val">3.0x</span></label>
+            <input type="range" id="castmult" min="0.0" max="3.0" step="0.1" value="3.0">
+        </div>
+
+        <div class="row">
+            <label>Base Hillshade (Igor) Strength: <span class="val" id="aocast-val">1.0x</span></label>
+            <input type="range" id="aocast" min="0.0" max="3.0" step="0.1" value="1.0">
+        </div>
+
+        <div class="row" style="margin-top: 15px; border-top: 1px solid #444; padding-top: 10px;">
+            <label>Sun Azimuth: <span class="val" id="azimuth-val">...</span>°</label>
+            <label>Sun Altitude: <span class="val" id="altitude-val">...</span>°</label>
+        </div>
     </div>
     <div id="controls-bottom"
-        style="position: absolute; bottom: 30px; left: 10px; z-index: 1000; width: 300px; background: rgba(0,0,0,0.8); padding: 10px; border-radius: 8px;">
+        style="position: absolute; bottom: 30px; right: 10px; z-index: 1000; width: 300px; background: rgba(0,0,0,0.8); padding: 10px; border-radius: 8px;">
         <label style="color: #fff; font-weight: bold; margin-bottom: 8px; display: block;">Layer Controls</label>
 
         <div style="display: flex; align-items: center; gap: 10px;">
             <input type="checkbox" id="coarse-toggle" checked style="width: 20px; height: 20px; cursor: pointer;">
-            <label for="coarse-toggle" style="margin: 0; color: #4dabf7; cursor: pointer;">Show Coarse Shadows (<=Z12)<
-                    /label>
+            <label for="coarse-toggle" style="margin: 0; color: #4dabf7; cursor: pointer;">Show Coarse Shadows (
+                <=Z12)< /label>
         </div>
         <div style="display: flex; align-items: center; gap: 10px;">
             <input type="checkbox" id="detail-toggle" checked style="width: 20px; height: 20px; cursor: pointer;">
             <label for="detail-toggle" style="margin: 0; color: #ff6b6b; cursor: pointer;">Show Detail Shadows
                 (>=Z12)</label>
         </div>
+        <div
+            style="display: flex; align-items: center; gap: 10px; margin-top: 10px; padding-top: 10px; border-top: 1px solid #444;">
+            <input type="checkbox" id="native-hillshade-toggle" style="width: 20px; height: 20px; cursor: pointer;">
+            <label for="native-hillshade-toggle" style="margin: 0; color: #f39c12; cursor: pointer;">Compare Native Igor
+                Hillshade
+                <br /><span style="font-size: 10px; color: #aaa">(Disables 3D Raymarch Base)</span></label>
+        </div>
         <button id="debug-toggle"
             style="width:100%;background:#ff6b6b;color:white;border:none;padding:10px;border-radius:4px;cursor:pointer;font-weight:bold;margin-top:5px;">
             Cycle Debug Mode (Off/Detail/Atlas/Diag)
         </button>
         <div id="debug-status"
-            style="font-size:12px;color:#fff;margin-top:4px;text-align:center;font-family:monospace;">Mode: OFF</div>
+            style="font-size:12px;color:#fff;margin-top:4px;text-align:center;font-family:monospace;">Mode: OFF
+        </div>
 
         <div
             style="font-size:11px;color:#aaa;background:rgba(0,0,0,0.3);padding:8px;border-radius:4px;margin-top:10px;">
@@ -155,7 +199,8 @@
     <div id="atlas-debug-overlay"
         style="display:none; position:absolute; top:10px; right:10px; background:rgba(0,0,0,0.9); padding:15px; border-radius:8px; z-index:2000; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
         <h3 style="margin-top:0; color:#f1c40f;">Elevation Atlas (2048x2048)</h3>
-        <p style="font-size:12px; color:#aaa; margin-top:-10px;">This is the exact texture the shadow raymarcher sees.
+        <p style="font-size:12px; color:#aaa; margin-top:-10px;">This is the exact texture the shadow raymarcher
+            sees.
             The boxes show the currently packed tiles.</p>
         <div
             style="position:relative; width:400px; height:400px; background:#222; border:1px solid #444; overflow:hidden;">
@@ -284,6 +329,29 @@
                     map.setPaintProperty('shadow-detail', 'shadow-altitude', altitude);
                 }
 
+                // Calculate Dynamic Colors (Mirroring our GLSL Shader Math)
+                const sunMix = Math.max(0, Math.min(1, (0.45 - altitude * Math.PI / 180) / (0.45 - 0.10)));
+
+                // Highlight: Warm White -> Golden Orange
+                const rH = Math.round((1.0) * 255);
+                const gH = Math.round((0.95 * (1 - sunMix) + 0.7 * sunMix) * 255);
+                const bH = Math.round((0.9 - 0.6 * sunMix) * 255); // 0.9 -> 0.3
+
+                // Shadow: Crisp Cyan -> Rich Indigo
+                const rS = Math.round((0.0 * (1 - sunMix) + 0.15 * sunMix) * 255);
+                const gS = Math.round((0.35 * (1 - sunMix) + 0.05 * sunMix) * 255);
+                const bS = Math.round((0.55 * (1 - sunMix) + 0.35 * sunMix) * 255);
+
+                const highlightColor = `rgb(${rH}, ${gH}, ${bH})`;
+                const shadowColor = `rgb(${rS}, ${gS}, ${bS})`;
+
+                // Update Native Hillshade Layer (if active)
+                if (map.getLayer('native-hillshade')) {
+                    map.setPaintProperty('native-hillshade', 'hillshade-illumination-direction', azimuth);
+                    map.setPaintProperty('native-hillshade', 'hillshade-highlight-color', highlightColor);
+                    map.setPaintProperty('native-hillshade', 'hillshade-shadow-color', shadowColor);
+                }
+
                 map.triggerRepaint();
             }
 
@@ -306,6 +374,54 @@
                 map.triggerRepaint();
             });
 
+            // Soft Penumbra (Blur) Controls
+            const softBaseInput = document.getElementById('softbase');
+            window._shadowSoftBase = parseFloat(softBaseInput.value);
+            softBaseInput.addEventListener('input', (e) => {
+                const val = parseFloat(e.target.value);
+                document.getElementById('softbase-val').innerText = val;
+                window._shadowSoftBase = val;
+                map.triggerRepaint();
+            });
+
+            const softMultInput = document.getElementById('softmult');
+            window._shadowSoftMult = parseFloat(softMultInput.value);
+            softMultInput.addEventListener('input', (e) => {
+                const val = parseFloat(e.target.value);
+                document.getElementById('softmult-val').innerText = val.toFixed(1);
+                window._shadowSoftMult = val;
+                map.triggerRepaint();
+            });
+
+            const softMaxInput = document.getElementById('softmax');
+            window._shadowSoftMax = parseFloat(softMaxInput.value);
+            softMaxInput.addEventListener('input', (e) => {
+                const val = parseFloat(e.target.value);
+                document.getElementById('softmax-val').innerText = val;
+                window._shadowSoftMax = val;
+                map.triggerRepaint();
+            });
+
+            // Intensity Controls
+            const castMultInput = document.getElementById('castmult');
+            window._castShadowMult = parseFloat(castMultInput.value);
+            castMultInput.addEventListener('input', (e) => {
+                const val = parseFloat(e.target.value);
+                document.getElementById('castmult-val').innerText = val.toFixed(1) + 'x';
+                window._castShadowMult = val;
+                map.triggerRepaint();
+            });
+
+            // AO Tuning Controls
+            const aoCastInput = document.getElementById('aocast');
+            window._aoCastMult = parseFloat(aoCastInput.value);
+            aoCastInput.addEventListener('input', (e) => {
+                const val = parseFloat(e.target.value);
+                document.getElementById('aocast-val').innerText = val.toFixed(1) + 'x';
+                window._aoCastMult = val;
+                map.triggerRepaint();
+            });
+
             // Independent Toggles
 
             const coarseToggle = document.getElementById('coarse-toggle');
@@ -316,6 +432,47 @@
             const detailToggle = document.getElementById('detail-toggle');
             detailToggle.addEventListener('change', (e) => {
                 map.setLayoutProperty('shadow-detail', 'visibility', e.target.checked ? 'visible' : 'none');
+            });
+
+            const nativeHillshadeToggle = document.getElementById('native-hillshade-toggle');
+            nativeHillshadeToggle.addEventListener('change', (e) => {
+                const isNative = e.target.checked;
+
+                // Toggle our custom procedural raymarch layers
+                map.setLayoutProperty('shadow-coarse', 'visibility', isNative ? 'none' : 'visible');
+                map.setLayoutProperty('shadow-detail', 'visibility', isNative ? 'none' : 'visible');
+
+                // Update checkboxes visually
+                document.getElementById('coarse-toggle').checked = !isNative;
+                document.getElementById('detail-toggle').checked = !isNative;
+
+                if (isNative) {
+                    // Disable local Igor AO in the 3D pass
+                    window._aoCastMult = 0.0;
+                    if (!map.getLayer('native-hillshade')) {
+                        map.addLayer({
+                            id: 'native-hillshade',
+                            type: 'hillshade',
+                            source: 'terrainSource', // Reuse the same DEM!
+                            paint: {
+                                'hillshade-exaggeration': 1.0,
+                                'hillshade-method': 'igor',
+                                'hillshade-illumination-anchor': 'map',
+                                'hillshade-shadow-color': '#002244',     // matches copy19 cyan/indigo baseline
+                                'hillshade-highlight-color': '#ffeebd'   // matches copy19 warm sunlight baseline
+                            }
+                        }, 'shadow-coarse');
+                    }
+                    map.setLayoutProperty('native-hillshade', 'visibility', 'visible');
+                } else {
+                    // Restore local Igor AO
+                    window._aoCastMult = parseFloat(document.getElementById('aocast').value);
+                    if (map.getLayer('native-hillshade')) {
+                        map.setLayoutProperty('native-hillshade', 'visibility', 'none');
+                    }
+                }
+                updateSun();
+                map.triggerRepaint();
             });
 
             // Debug mode toggle (Cycling 0, 1, 2)
@@ -338,14 +495,33 @@
             });
 
             let _interactionTimeout;
+            let _throttleTimeout;
+            let _isThrottled = false;
+
             function triggerInteraction() {
                 window._isInteractingWithTime = true;
-                updateSun();
+
+                // Always update the text label instantly at 60Hz for UI responsiveness
+                const timeVal = parseFloat(timeInput.value);
+                const hours = Math.floor(timeVal);
+                const mins = Math.floor((timeVal - hours) * 60);
+                document.getElementById('time-val').innerText = `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`;
+
+                // Throttle the extremely heavy GPU WebGL Repaint to 4 FPS (250ms) 
+                if (!_isThrottled) {
+                    updateSun();
+                    _isThrottled = true;
+                    _throttleTimeout = setTimeout(() => {
+                        _isThrottled = false;
+                    }, 250);
+                }
+
+                // When the user stops dragging for 250ms, render the final 96-step pristine shadow
                 clearTimeout(_interactionTimeout);
                 _interactionTimeout = setTimeout(() => {
                     window._isInteractingWithTime = false;
-                    map.triggerRepaint();
-                }, 150);
+                    updateSun();
+                }, 250);
             }
 
             dateInput.addEventListener('input', triggerInteraction);
