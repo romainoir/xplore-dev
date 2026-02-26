@@ -747,13 +747,9 @@ async function init() {
             <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/>
             <line x1="21" y1="12" x2="23" y2="12"/>
           </svg>
-          <span style="font-size:12px;font-weight:600;color:#e0e0e0;flex:1">Cast Shadows</span>
-          <label class="shadow-panel__switch">
-            <input type="checkbox" id="shadowCastToggle">
-            <span class="shadow-panel__slider"></span>
-          </label>
+          <span style="font-size:12px;font-weight:600;color:#e0e0e0;flex:1">Shadow Physics Tuner</span>
         </div>
-        <div id="shadowTimeControls" style="padding:8px 12px;opacity:0.4;pointer-events:none;transition:opacity .2s">
+        <div id="shadowTimeControls" style="padding:8px 12px;opacity:1.0;pointer-events:auto;transition:opacity .2s">
           <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
             <span style="font-size:11px;color:#aaa;min-width:36px" id="shadowTimeLabel">12:00</span>
             <input type="range" id="shadowTimeSlider" min="0" max="1440" step="10" value="720"
@@ -802,7 +798,6 @@ async function init() {
         console.log(`[Shadow] Cross-tile neighbors: ${neighborToggle.checked ? 'ON' : 'OFF'}`);
       });
 
-      const shadowToggle = document.getElementById('shadowCastToggle');
       const timeSlider = document.getElementById('shadowTimeSlider');
       const timeLabel = document.getElementById('shadowTimeLabel');
       const sunInfo = document.getElementById('shadowSunInfo');
@@ -810,7 +805,6 @@ async function init() {
       const opacitySlider = document.getElementById('shadowOpacitySlider');
       const opacityLabel = document.getElementById('shadowOpacityLabel');
 
-      let nativeShadowActive = false;
 
       function getZoomAdaptiveMaxDistance() {
         const z = map.getZoom();
@@ -844,54 +838,46 @@ async function init() {
           sunInfo.style.color = altDeg < 10 ? '#ff6b6b' : '#fab005';
         }
 
-        if (nativeShadowActive) {
-          const effectiveAlt = Math.max(altDeg, 2);
+        const effectiveAlt = Math.max(altDeg, 2);
 
-          ['shadow-coarse', 'shadow-detail'].forEach(layerId => {
-            map.setPaintProperty(layerId, 'shadow-direction', azDeg);
-            map.setPaintProperty(layerId, 'shadow-altitude', effectiveAlt);
-          });
+        ['shadow-coarse', 'shadow-detail'].forEach(layerId => {
+          map.setPaintProperty(layerId, 'shadow-direction', azDeg);
+          map.setPaintProperty(layerId, 'shadow-altitude', effectiveAlt);
+        });
 
-          console.log(`[Shadow] t=${timeLabel.textContent} az=${azDeg.toFixed(1)}° alt=${altDeg.toFixed(1)}°`);
-        }
+        console.log(`[Shadow] t=${timeLabel.textContent} az=${azDeg.toFixed(1)}° alt=${altDeg.toFixed(1)}°`);
       }
 
       function updateShadowOpacity() {
         if (!map.getLayer('shadow-coarse') || !map.getLayer('shadow-detail')) return;
         const val = parseInt(opacitySlider.value) / 100;
         opacityLabel.textContent = `${opacitySlider.value}%`;
-        if (nativeShadowActive) {
-          ['shadow-coarse', 'shadow-detail'].forEach(layerId => {
-            map.setPaintProperty(layerId, 'shadow-opacity', val);
-          });
-        }
+        ['shadow-coarse', 'shadow-detail'].forEach(layerId => {
+          map.setPaintProperty(layerId, 'shadow-opacity', val);
+        });
       }
 
       // Set slider to current time
       const now = new Date();
       timeSlider.value = now.getHours() * 60 + now.getMinutes();
 
-      shadowToggle.addEventListener('change', () => {
-        nativeShadowActive = shadowToggle.checked;
-        timeControls.style.opacity = nativeShadowActive ? '1' : '0.4';
-        timeControls.style.pointerEvents = nativeShadowActive ? 'auto' : 'none';
+      // Shadow is always active now, so ensure layers are visible and properties are set
+      timeControls.style.opacity = '1';
+      timeControls.style.pointerEvents = 'auto';
 
-        if (map.getLayer('shadow-coarse') && map.getLayer('shadow-detail')) {
-          ['shadow-coarse', 'shadow-detail'].forEach(layerId => {
-            map.setLayoutProperty(layerId, 'visibility', nativeShadowActive ? 'visible' : 'none');
-          });
+      if (map.getLayer('shadow-coarse') && map.getLayer('shadow-detail')) {
+        ['shadow-coarse', 'shadow-detail'].forEach(layerId => {
+          map.setLayoutProperty(layerId, 'visibility', 'visible');
+        });
 
-          if (nativeShadowActive) {
-            map.moveLayer('shadow-coarse');
-            map.moveLayer('shadow-detail');
-            const opVal = parseInt(opacitySlider.value) / 100;
-            ['shadow-coarse', 'shadow-detail'].forEach(layerId => {
-              map.setPaintProperty(layerId, 'shadow-opacity', opVal);
-            });
-            updateShadowFromSlider();
-          }
-        }
-      });
+        map.moveLayer('shadow-coarse');
+        map.moveLayer('shadow-detail');
+        const opVal = parseInt(opacitySlider.value) / 100;
+        ['shadow-coarse', 'shadow-detail'].forEach(layerId => {
+          map.setPaintProperty(layerId, 'shadow-opacity', opVal);
+        });
+        updateShadowFromSlider();
+      }
 
       timeSlider.addEventListener('input', updateShadowFromSlider);
       opacitySlider.addEventListener('input', updateShadowOpacity);

@@ -36,7 +36,7 @@ function createTilePreviewUrl(template, coords = WMTS_PREVIEW_COORDS) {
 
 // ─── IMAGERY_OPTIONS ───
 export const IMAGERY_OPTIONS = Object.freeze([
-    { id: 'shadow', label: 'Shadow', type: 'native-layer', layerId: 'shadow-native', previewImage: './data/icons_Xmap/shadow.png', defaultOpacity: 1.0, defaultVisible: false },
+    { id: 'shadow', label: 'Shadow', type: 'shadow-layer', linkedLayerIds: ['shadow-coarse', 'shadow-detail'], previewImage: './data/icons_Xmap/shadow.png', defaultOpacity: 0.6, defaultVisible: false },
     { id: 'daylight', label: 'Sunlight Hours', type: 'native-layer', layerId: 'daylight-native', previewImage: './data/icons_Xmap/daylight.png', defaultOpacity: 0.8, defaultVisible: false },
     {
         id: 'contours',
@@ -471,6 +471,18 @@ export function createImageryManager(map, deps = {}) {
                         map.setPaintProperty(option.layerId, 'hillshade-exaggeration', visible ? Math.min(opacity, 1.0) : 0);
                     } catch (_) { }
                 }
+                return;
+            }
+            if (option.type === 'shadow-layer') {
+                const layerIds = option.linkedLayerIds || [];
+                layerIds.forEach(l => {
+                    if (map.getLayer(l)) {
+                        try {
+                            map.setLayoutProperty(l, 'visibility', visible ? 'visible' : 'none');
+                            map.setPaintProperty(l, 'shadow-opacity', visible ? Math.min(opacity, 1.0) : 0);
+                        } catch (_) { }
+                    }
+                });
                 return;
             }
             if (!option.layerId || !map.getLayer(option.layerId)) return;
