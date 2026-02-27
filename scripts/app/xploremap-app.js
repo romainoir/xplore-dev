@@ -656,6 +656,18 @@ async function init() {
       setToolboxOpen('basemap', false);
     });
   }
+  // Wire click + outside-click for pathway toolbox
+  if (toolboxes.pathway.toggle && toolboxes.pathway.box) {
+    toolboxes.pathway.toggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      setToolboxOpen('pathway', !toolboxes.pathway.box.classList.contains('visible'));
+    });
+    document.addEventListener('click', (e) => {
+      if (!toolboxes.pathway.box.classList.contains('visible')) return;
+      if (toolboxes.pathway.toggle.contains(e.target) || toolboxes.pathway.box.contains(e.target)) return;
+      setToolboxOpen('pathway', false);
+    });
+  }
 
   // Wire toolbox handlers into imagery manager (shadow/terrain/snow still use this)
   imagery.setToolboxHandlers({

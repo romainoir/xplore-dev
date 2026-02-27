@@ -56,7 +56,7 @@ export const IMAGERY_OPTIONS = Object.freeze([
         }
     },
     { id: 'osm-features', label: 'OSM Features', type: 'osm-overlay', previewImage: './data/OSM_vector.png', defaultOpacity: 1, defaultVisible: true },
-    { id: 'wikimedia-photos', label: 'Wikimedia Photos', type: 'wikimedia', previewImage: './data/icons_Xmap/camera.png', defaultVisible: false, defaultOpacity: 1, linkedLayerIds: ['wikimedia-photos-layer', 'wikimedia-photos-clusters', 'wikimedia-photos-cluster-count', 'wikimedia-photos-large-clusters', 'wikimedia-thumbnails-cluster', 'wikimedia-thumbnails-single'] },
+    { id: 'wikimedia-photos', label: 'Wikimedia Photos', type: 'wikimedia', previewImage: './data/icons_Xmap/camera.png', defaultVisible: false, defaultOpacity: 1, linkedLayerIds: ['wikimedia-photos-base', 'wikimedia-thumbnails-small', 'wikimedia-thumbnails-large'] },
     { id: 'strava-heatmap-all', label: 'Strava Heatmap (All)', sourceId: 'strava-heatmap-all', layerId: 'strava-heatmap-all', tileTemplate: 'https://atlas.hartakji.com/strava-heatmap-all/{z}/{x}/{y}', tileSize: 256, minZoom: 0, maxZoom: 15, attribution: '<a href="https://www.strava.com">© Strava</a>', defaultVisible: false, defaultOpacity: 1 },
     { id: 'strava-winter', label: 'Strava Winter', sourceId: 'strava-winter', layerId: 'strava-winter', tileTemplate: 'https://atlas.hartakji.com/strava-winter/{z}/{x}/{y}', tileSize: 256, minZoom: 0, maxZoom: 15, attribution: '<a href="https://www.strava.com">© Strava</a>', defaultVisible: false, defaultOpacity: 1 },
     { id: 'strava-backcountry-ski', label: 'Strava Backcountry Ski', sourceId: 'strava-backcountry-ski', layerId: 'strava-backcountry-ski', tileTemplate: 'https://atlas.hartakji.com/strava-backcountry-ski/{z}/{x}/{y}', tileSize: 256, minZoom: 0, maxZoom: 15, attribution: '<a href="https://www.strava.com">© Strava</a>', defaultVisible: false, defaultOpacity: 1 },
@@ -393,8 +393,7 @@ export function createImageryManager(map, deps = {}) {
         // Move base map symbol layers (OSM labels etc.) to top — but NOT contour or wikimedia layers
         const contourAndPhotoLayers = new Set([
             'contour-line-minor', 'contour-line-major', 'contour-label',
-            'wikimedia-photos-cluster', 'wikimedia-photos', 'wikimedia-cluster-count',
-            'wikimedia-thumbnails-cluster', 'wikimedia-thumbnails-single'
+            'wikimedia-photos-base', 'wikimedia-thumbnails-small', 'wikimedia-thumbnails-large'
         ]);
         (map.getStyle().layers || []).filter(l => l.type === 'symbol' && !contourAndPhotoLayers.has(l.id)).forEach(l => {
             if (map.getLayer(l.id)) map.moveLayer(l.id);
@@ -406,10 +405,9 @@ export function createImageryManager(map, deps = {}) {
         });
 
         // Wikimedia photos: always on top of everything
-        ['wikimedia-photos-cluster', 'wikimedia-photos', 'wikimedia-cluster-count',
-            'wikimedia-thumbnails-cluster', 'wikimedia-thumbnails-single'].forEach(id => {
-                if (map.getLayer(id)) map.moveLayer(id);
-            });
+        ['wikimedia-photos-base', 'wikimedia-thumbnails-small', 'wikimedia-thumbnails-large'].forEach(id => {
+            if (map.getLayer(id)) map.moveLayer(id);
+        });
     }
 
     // ─── Toolbox open/close ───
