@@ -147,12 +147,18 @@
         <div style="display: flex; align-items: center; gap: 10px;">
             <input type="checkbox" id="coarse-toggle" checked style="width: 20px; height: 20px; cursor: pointer;">
             <label for="coarse-toggle" style="margin: 0; color: #4dabf7; cursor: pointer;">Show Coarse Shadows (
-                <=Z12)< /label>
+                <label for="coarse-toggle" style="margin: 0; color: #4dabf7; cursor: pointer;">Show Coarse Shadows (
+                    <=Z12)< /label>
         </div>
         <div style="display: flex; align-items: center; gap: 10px;">
             <input type="checkbox" id="detail-toggle" checked style="width: 20px; height: 20px; cursor: pointer;">
             <label for="detail-toggle" style="margin: 0; color: #ff6b6b; cursor: pointer;">Show Detail Shadows
                 (>=Z12)</label>
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px;">
+            <input type="checkbox" id="hillshade-toggle" checked style="width: 20px; height: 20px; cursor: pointer;">
+            <label for="hillshade-toggle" style="margin: 0; color: #4dabf7; cursor: pointer;">Show Igor
+                Hillshade</label>
         </div>
         <button id="debug-toggle"
             style="width:100%;background:#ff6b6b;color:white;border:none;padding:10px;border-radius:4px;cursor:pointer;font-weight:bold;margin-top:5px;">
@@ -250,6 +256,19 @@
 
 
 
+            // 0. Igor Hillshade Layer (structure/ambient)
+            map.addLayer({
+                id: 'detail-native',
+                type: 'hillshade',
+                source: 'terrainSource',
+                paint: {
+                    'hillshade-illumination-anchor': 'map',
+                    'hillshade-exaggeration': 1.0,
+                    'hillshade-shadow-color': 'rgba(0,0,0, 0.4)',
+                    'hillshade-highlight-color': '#ffffff'
+                }
+            });
+
             // 1. Coarse Shadow Layer: Capped at Z12 to allow upscaling
             map.addLayer({
                 id: 'shadow-coarse',
@@ -315,6 +334,21 @@
                 if (map.getLayer('shadow-detail')) {
                     map.setPaintProperty('shadow-detail', 'shadow-direction', azimuth);
                     map.setPaintProperty('shadow-detail', 'shadow-altitude', altitude);
+                }
+
+                // Update Igor Hillshade Layer
+                const hScale = Math.max(0, altitude / 90);
+                const detailShadowColor = `rgba(0,0,0, ${0.4 - hScale * 0.2})`; // Darker near sunrise/sunset
+
+                let detailHlColor = '#ffffff';
+                if (altitude < 5) detailHlColor = '#ff8c42';
+                else if (altitude < 15) detailHlColor = '#ffcf9e';
+
+                if (map.getLayer('detail-native')) {
+                    map.setPaintProperty('detail-native', 'hillshade-illumination-direction', azimuth);
+                    map.setPaintProperty('detail-native', 'hillshade-illumination-altitude', [altitude, altitude, altitude, altitude]);
+                    map.setPaintProperty('detail-native', 'hillshade-shadow-color', detailShadowColor);
+                    map.setPaintProperty('detail-native', 'hillshade-highlight-color', detailHlColor);
                 }
 
                 // Calculate Dynamic Colors (Mirroring our GLSL Shader Math)
@@ -405,6 +439,11 @@
             const detailToggle = document.getElementById('detail-toggle');
             detailToggle.addEventListener('change', (e) => {
                 map.setLayoutProperty('shadow-detail', 'visibility', e.target.checked ? 'visible' : 'none');
+            });
+
+            const hillshadeToggle = document.getElementById('hillshade-toggle');
+            hillshadeToggle.addEventListener('change', (e) => {
+                map.setLayoutProperty('detail-native', 'visibility', e.target.checked ? 'visible' : 'none');
             });
 
 
