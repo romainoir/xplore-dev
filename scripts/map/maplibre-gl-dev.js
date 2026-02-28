@@ -65769,6 +65769,20 @@ function drawElevation(painter, terrain) {
             }
         }
     }
+    // 4. Pruning: Remove low-res tiles if they are covered by higher-res tiles
+    // Find the maximum zoom level currently in the capture set
+    let maxZoom = 0;
+    for (const tile of captureSet.values()) {
+        maxZoom = Math.max(maxZoom, tile.tileID.canonical.z);
+    }
+    // Only keep tiles that are within 3 zoom levels of the maximum detail available
+    // E.g. if we have Z14 tiles, keep Z14, Z13, Z12, Z11, discard Z10, Z9, etc.
+    const pruneThreshold = Math.max(MIN_NEIGHBOR_ZOOM, maxZoom - 3);
+    for (const [key, tile] of captureSet.entries()) {
+        if (tile.tileID.canonical.z < pruneThreshold) {
+            captureSet.delete(key);
+        }
+    }
     // Recompute final bounds including the extended tiles
     minX = Infinity;
     minY = Infinity;
