@@ -146,14 +146,7 @@
 
         <div style="display: flex; align-items: center; gap: 10px;">
             <input type="checkbox" id="coarse-toggle" checked style="width: 20px; height: 20px; cursor: pointer;">
-            <label for="coarse-toggle" style="margin: 0; color: #4dabf7; cursor: pointer;">Show Coarse Shadows (
-                <label for="coarse-toggle" style="margin: 0; color: #4dabf7; cursor: pointer;">Show Coarse Shadows (
-                    <=Z12)< /label>
-        </div>
-        <div style="display: flex; align-items: center; gap: 10px;">
-            <input type="checkbox" id="detail-toggle" checked style="width: 20px; height: 20px; cursor: pointer;">
-            <label for="detail-toggle" style="margin: 0; color: #ff6b6b; cursor: pointer;">Show Detail Shadows
-                (>=Z12)</label>
+            <label for="coarse-toggle" style="margin: 0; color: #4dabf7; cursor: pointer;">Show Global Shadows</label>
         </div>
         <div style="display: flex; align-items: center; gap: 10px;">
             <input type="checkbox" id="hillshade-toggle" checked style="width: 20px; height: 20px; cursor: pointer;">
@@ -281,18 +274,6 @@
                 }
             });
 
-            // 2. Detail Shadow Layer: Starts at Z12 for high-resolution
-            map.addLayer({
-                id: 'shadow-detail',
-                type: 'shadow',
-                source: 'terrainSource',
-                minzoom: 12,
-                paint: {
-                    'shadow-opacity': 1.0,
-                    'shadow-color': '#000000',
-                    'shadow-penumbra': 1.0
-                }
-            });
 
             // SunCalc logic
             const dateInput = document.getElementById('date-input');
@@ -330,11 +311,6 @@
                     map.setPaintProperty('shadow-coarse', 'shadow-altitude', altitude);
                 }
 
-                // Update Detail Layer
-                if (map.getLayer('shadow-detail')) {
-                    map.setPaintProperty('shadow-detail', 'shadow-direction', azimuth);
-                    map.setPaintProperty('shadow-detail', 'shadow-altitude', altitude);
-                }
 
                 // Update Igor Hillshade Layer
                 const hScale = Math.max(0, altitude / 90);
@@ -436,10 +412,6 @@
                 map.setLayoutProperty('shadow-coarse', 'visibility', e.target.checked ? 'visible' : 'none');
             });
 
-            const detailToggle = document.getElementById('detail-toggle');
-            detailToggle.addEventListener('change', (e) => {
-                map.setLayoutProperty('shadow-detail', 'visibility', e.target.checked ? 'visible' : 'none');
-            });
 
             const hillshadeToggle = document.getElementById('hillshade-toggle');
             hillshadeToggle.addEventListener('change', (e) => {
