@@ -65740,9 +65740,7 @@ function drawElevation(painter, terrain) {
         maxY += extensionMercator;
     else
         minY -= extensionMercator;
-    // 3. Find loaded tiles (min Z9) that cover the extended area
-    // Lowered to Z9 so Shadow Overscan grandparent tiles are rendered into the FBO.
-    const MIN_NEIGHBOR_ZOOM = 9;
+    // 3. Find loaded tiles that cover the extended area
     const innerTileManager = terrain.tileManager.tileManager || terrain.tileManager;
     // MapLibre v5+ refactored _tiles into _inViewTiles
     let allTiles = [];
@@ -65756,8 +65754,6 @@ function drawElevation(painter, terrain) {
         if (!tile || !tile.tileID)
             continue;
         const id = tile.tileID.canonical;
-        if (id.z < MIN_NEIGHBOR_ZOOM)
-            continue; // Skip coarse tiles
         const scale = 1 << id.z;
         const tx = id.x / scale;
         const ty = id.y / scale;
@@ -65777,7 +65773,8 @@ function drawElevation(painter, terrain) {
     }
     // Only keep tiles that are within 3 zoom levels of the maximum detail available
     // E.g. if we have Z14 tiles, keep Z14, Z13, Z12, Z11, discard Z10, Z9, etc.
-    const pruneThreshold = Math.max(MIN_NEIGHBOR_ZOOM, maxZoom - 3);
+    // However, if we're zoomed out to Z5, maxZoom is 5, so pruneThreshold is 2.
+    const pruneThreshold = Math.max(0, maxZoom - 3);
     for (const [key, tile] of captureSet.entries()) {
         if (tile.tileID.canonical.z < pruneThreshold) {
             captureSet.delete(key);
