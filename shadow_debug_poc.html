@@ -153,6 +153,10 @@
             <label for="hillshade-toggle" style="margin: 0; color: #4dabf7; cursor: pointer;">Show Igor
                 Hillshade</label>
         </div>
+        <div style="display: flex; align-items: center; gap: 10px;">
+            <input type="checkbox" id="daylight-toggle" style="width: 20px; height: 20px; cursor: pointer;">
+            <label for="daylight-toggle" style="margin: 0; color: #f5d300; cursor: pointer;">Show Sun Duration</label>
+        </div>
         <button id="debug-toggle"
             style="width:100%;background:#ff6b6b;color:white;border:none;padding:10px;border-radius:4px;cursor:pointer;font-weight:bold;margin-top:5px;">
             Cycle Debug Mode (Off/Detail/Atlas/Diag)
@@ -262,15 +266,36 @@
                 }
             });
 
-            // 1. Coarse Shadow Layer: Capped at Z12 to allow upscaling
+            // 1. Coarse Shadow Layer (Unifies Z12+ detail and global scale)
             map.addLayer({
                 id: 'shadow-coarse',
                 type: 'shadow',
-                source: 'coarseTerrainSource',
+                source: 'terrainSource', // Standardize to full terrain source
                 paint: {
                     'shadow-opacity': 1.0,
                     'shadow-color': '#000000',
                     'shadow-penumbra': 1.0
+                }
+            });
+
+            // 2. Sun Duration Layer (Starts disabled)
+            map.addLayer({
+                id: 'daylight-native',
+                type: 'daylight',
+                source: 'terrainSource',
+                layout: { 'visibility': 'none' },
+                paint: {
+                    'daylight-opacity': 0.8,
+                    'daylight-color-ramp': [
+                        'interpolate',
+                        ['linear'],
+                        ['line-progress'],
+                        0, '#020024',
+                        0.2, '#090979',
+                        0.5, '#00d4ff',
+                        0.8, '#f5d300',
+                        1.0, '#fffff0'
+                    ]
                 }
             });
 
@@ -416,6 +441,11 @@
             const hillshadeToggle = document.getElementById('hillshade-toggle');
             hillshadeToggle.addEventListener('change', (e) => {
                 map.setLayoutProperty('detail-native', 'visibility', e.target.checked ? 'visible' : 'none');
+            });
+
+            const daylightToggle = document.getElementById('daylight-toggle');
+            daylightToggle.addEventListener('change', (e) => {
+                map.setLayoutProperty('daylight-native', 'visibility', e.target.checked ? 'visible' : 'none');
             });
 
 

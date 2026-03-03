@@ -65243,7 +65243,7 @@ function drawDaylight(painter, tileManager, layer, tileIDs, renderOptions // esl
         const program = painter.useProgram('daylight');
         // Bind the Horizon Atlas to unit 0
         context.activeTexture.set(gl.TEXTURE0);
-        tile.horizonTexture.bind(gl.LINEAR, gl.CLAMP_TO_EDGE);
+        tile.horizonTexture.bind(gl.NEAREST, gl.CLAMP_TO_EDGE);
         // Bind the Custom Color Ramp to unit 1
         context.activeTexture.set(gl.TEXTURE1);
         if (colorRampTexture) {
