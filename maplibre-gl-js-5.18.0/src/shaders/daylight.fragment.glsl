@@ -41,14 +41,19 @@ float getHorizonAngle(vec2 uv, float sunAzimuth) {
     int row0 = idx0 / 4;
     int ch0 = idx0 - (row0 * 4); // idx0 % 4
     
-    vec2 atlasUV0 = vec2(uv.x, (uv.y + float(row0)) / 8.0);
+    // Clamp the local tile UV mathematically inward by half a pixel (assuming ~256px tile)
+    // At uv.y = 1.0, 1.0/8 maps exactly to the bottom edge of row0 and the top edge of row1!
+    // This bleeds perfectly wrong azimuth data into the tile boundary and creates "border stripes".
+    float safeY = clamp(uv.y, 0.002, 0.998);
+
+    vec2 atlasUV0 = vec2(uv.x, (safeY + float(row0)) / 8.0);
     vec4 encoded0 = texture(u_horizon, atlasUV0);
     float packed0 = ch0 == 0 ? encoded0.r : (ch0 == 1 ? encoded0.g : (ch0 == 2 ? encoded0.b : encoded0.a));
     float angle0 = (packed0 * PI) - (PI / 2.0);
 
     int row1 = idx1 / 4;
     int ch1 = idx1 - (row1 * 4); // idx1 % 4
-    vec2 atlasUV1 = vec2(uv.x, (uv.y + float(row1)) / 8.0);
+    vec2 atlasUV1 = vec2(uv.x, (safeY + float(row1)) / 8.0);
     vec4 encoded1 = texture(u_horizon, atlasUV1);
     float packed1 = ch1 == 0 ? encoded1.r : (ch1 == 1 ? encoded1.g : (ch1 == 2 ? encoded1.b : encoded1.a));
     float angle1 = (packed1 * PI) - (PI / 2.0);
