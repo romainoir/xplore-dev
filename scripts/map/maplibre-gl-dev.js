@@ -49336,6 +49336,7 @@ function fillBorder(tile, borderTile) {
     var _a;
     tile.needsHillshadePrepare = true;
     tile.needsTerrainPrepare = true;
+    tile.needsHorizonPrepare = true;
     let dx = borderTile.tileID.canonical.x - tile.tileID.canonical.x;
     const dy = borderTile.tileID.canonical.y - tile.tileID.canonical.y;
     const dim = Math.pow(2, tile.tileID.canonical.z);
