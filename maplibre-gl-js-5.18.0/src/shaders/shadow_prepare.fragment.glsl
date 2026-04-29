@@ -20,6 +20,10 @@ uniform float u_has_north;
 uniform float u_has_west;
 uniform float u_has_corner;
 
+uniform vec4 u_zoom_north;
+uniform vec4 u_zoom_west;
+uniform vec4 u_zoom_corner;
+
 #define MAX_STEPS 128
 #define PI 3.141592653589793
 
@@ -54,20 +58,23 @@ float sampleGlobalElevation(vec2 uv) {
 
     if (xOut && yOut && u_has_corner > 0.5) {
         vec2 neighborUV = vec2(uv.x < 0.0 ? uv.x + 1.0 : uv.x - 1.0, uv.y < 0.0 ? uv.y + 1.0 : uv.y - 1.0);
-        if (neighborUV.x >= 0.0 && neighborUV.x <= 1.0 && neighborUV.y >= 0.0 && neighborUV.y <= 1.0) {
-            return sampleElevation(u_dem_corner, neighborUV);
+        vec2 scaledUV = u_zoom_corner.yz + (neighborUV * u_zoom_corner.x);
+        if (scaledUV.x >= 0.0 && scaledUV.x <= 1.0 && scaledUV.y >= 0.0 && scaledUV.y <= 1.0) {
+            return sampleElevation(u_dem_corner, scaledUV);
         }
     }
     if (xOut && !yOut && u_has_west > 0.5) {
         vec2 neighborUV = vec2(uv.x < 0.0 ? uv.x + 1.0 : uv.x - 1.0, uv.y);
-        if (neighborUV.x >= 0.0 && neighborUV.x <= 1.0) {
-            return sampleElevation(u_dem_west, neighborUV);
+        vec2 scaledUV = u_zoom_west.yz + (neighborUV * u_zoom_west.x);
+        if (scaledUV.x >= 0.0 && scaledUV.x <= 1.0) {
+            return sampleElevation(u_dem_west, scaledUV);
         }
     }
     if (yOut && !xOut && u_has_north > 0.5) {
         vec2 neighborUV = vec2(uv.x, uv.y < 0.0 ? uv.y + 1.0 : uv.y - 1.0);
-        if (neighborUV.y >= 0.0 && neighborUV.y <= 1.0) {
-            return sampleElevation(u_dem_north, neighborUV);
+        vec2 scaledUV = u_zoom_north.yz + (neighborUV * u_zoom_north.x);
+        if (scaledUV.y >= 0.0 && scaledUV.y <= 1.0) {
+            return sampleElevation(u_dem_north, scaledUV);
         }
     }
 
@@ -116,10 +123,10 @@ void main() {
     // and geometrically increase the step size to reach far distances quickly.
     float currentPixelStep = 2.0;
     
-    // Strict distance cap to exactly 1.0 geometric tile width!
-    // Since we load a 3x3 structural halo for raster-dem sources, 1 tile width is the maximum
-    // guaranteed navigable distance in all directions without inexplicably crashing into unloaded structural boundaries.
-    float maxDist = (u_dimension.x - 2.0) * u_metersPerPixel;
+    // Daylight-duration needs the local terrain horizon, not just the current tile.
+    // The shader can safely sample the current tile plus one sun-facing neighbor/corner,
+    // so use most of that footprint while letting out-of-bounds sampling terminate rays.
+    float maxDist = (u_dimension.x - 2.0) * u_metersPerPixel * 1.75;
 
     for (int i = 0; i < 96; i++) {
         float stepDist = u_metersPerPixel * currentPixelStep;

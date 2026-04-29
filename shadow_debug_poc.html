@@ -4,735 +4,1638 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Shadow Debug POC - v20260223-2013</title>
-    <!-- Custom MapLibre GL JS build with experimental custom shaders! -->
-    <script src="scripts/map/maplibre-gl-dev.js?v=20260226-1813"></script>
-    <link href="https://unpkg.com/maplibre-gl@latest/dist/maplibre-gl.css" rel="stylesheet" />
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.9.0/suncalc.min.js"></script>
+    <title>Shadow Debug POC - refactor 20260427</title>
+    <link href="maplibre-gl-js-5.18.0/src/css/maplibre-gl.css" rel="stylesheet">
+    <script src="scripts/map/maplibre-gl-dev.js?v=20260429-shadow-poc-47"></script>
     <style>
+        :root {
+            color-scheme: dark;
+            --panel-bg: rgba(13, 16, 20, 0.86);
+            --panel-border: rgba(255, 255, 255, 0.14);
+            --text: #f5f7fb;
+            --muted: #b5bfca;
+            --blue: #4dabf7;
+            --amber: #f1c40f;
+            --red: #ff6b6b;
+            --green: #2ecc71;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html,
+        body,
+        #map {
+            width: 100%;
+            height: 100%;
+        }
+
         body {
             margin: 0;
-            padding: 0;
-            background-color: #fff;
-            font-family: sans-serif;
-            color: #fff;
+            overflow: hidden;
+            background: #f5f7fb;
+            font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            color: var(--text);
         }
 
         #map {
             position: absolute;
-            top: 0;
-            bottom: 0;
-            width: 100%;
-            background-color: #fff;
+            inset: 0;
+            background: #f5f7fb;
+        }
+
+        .panel {
+            position: absolute;
+            z-index: 1000;
+            width: min(320px, calc(100vw - 20px));
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            border-radius: 8px;
+            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.28);
+            backdrop-filter: blur(8px);
         }
 
         #controls {
-            position: absolute;
             top: 10px;
             left: 10px;
-            background: rgba(0, 0, 0, 0.8);
-            padding: 15px;
-            border-radius: 8px;
-            z-index: 1000;
-            width: 300px;
-            max-height: calc(100vh - 280px);
+            max-height: calc(100vh - 24px);
             overflow-y: auto;
+            padding: 14px;
+        }
+
+        #controls-bottom {
+            right: 10px;
+            bottom: 30px;
+            padding: 12px;
+        }
+
+        h3 {
+            margin: 0 0 12px;
+            font-size: 16px;
+            line-height: 1.2;
         }
 
         .row {
             margin-bottom: 10px;
         }
 
-        label {
-            display: block;
-            font-size: 14px;
-            margin-bottom: 5px;
-            color: #ccc;
+        .section {
+            margin-top: 15px;
+            padding-top: 10px;
+            border-top: 1px solid rgba(255, 255, 255, 0.18);
+            color: var(--blue);
+            font-weight: 700;
         }
 
-        span.val {
-            color: #fff;
-            font-weight: bold;
+        .section.penumbra {
+            color: #bd8cff;
+        }
+
+        .section.alpha {
+            color: var(--amber);
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: var(--muted);
+            font-size: 13px;
+            line-height: 1.25;
+        }
+
+        .value {
+            color: var(--text);
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
         }
 
         input[type="range"] {
             width: 100%;
-            accent-color: #4dabf7;
+            accent-color: var(--blue);
         }
 
-        input[type="date"],
-        input[type="time"] {
+        input[type="date"] {
             width: 100%;
-            box-sizing: border-box;
-            background: rgba(0, 0, 0, 0.5);
-            color: #fff;
-            border: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 6px 8px;
+            color: var(--text);
+            background: rgba(0, 0, 0, 0.38);
+            border: 1px solid rgba(255, 255, 255, 0.18);
             border-radius: 4px;
-            padding: 5px;
-            color-scheme: dark;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            font: inherit;
         }
 
-        .debug-btn {
-            background: #ff6b6b;
-            color: #fff;
-            border: none;
-            padding: 8px 12px;
-            border-radius: 4px;
+        .toggle-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            min-height: 30px;
+        }
+
+        .toggle-row input {
+            width: 20px;
+            height: 20px;
             cursor: pointer;
-            font-family: inherit;
-            font-weight: bold;
-            margin-top: 10px;
+        }
+
+        .toggle-row label {
+            margin: 0;
+            cursor: pointer;
+        }
+
+        button {
             width: 100%;
+            min-height: 34px;
+            border: 0;
+            border-radius: 5px;
+            color: #fff;
+            font: 700 12px/1.2 inherit;
+            cursor: pointer;
+        }
+
+        button:disabled {
+            cursor: not-allowed;
+            opacity: 0.55;
+        }
+
+        .reload-button {
+            margin-top: 10px;
+            background: var(--blue);
+        }
+
+        .atlas-button {
+            margin-top: 10px;
+            color: #121212;
+            background: var(--amber);
+        }
+
+        .close-button {
+            margin-top: 10px;
+            background: #e74c3c;
+        }
+
+        .copy-debug-button {
+            position: sticky;
+            bottom: 0;
+            margin-top: 10px;
+            background: #34495e;
+        }
+
+        #status-panel {
+            left: 10px;
+            bottom: 10px;
+            width: min(440px, calc(100vw - 20px));
+            padding: 8px 10px;
+            color: #d7e0ea;
+            font: 12px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            pointer-events: none;
+        }
+
+        #fps-counter {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            z-index: 99999;
+            min-width: 150px;
+            padding: 8px 12px;
+            border-radius: 8px;
+            background: rgba(0, 0, 0, 0.85);
+            color: var(--green);
+            font: 700 16px/1.18 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            text-align: center;
+            white-space: pre;
+            pointer-events: none;
+        }
+
+        #tile-debug-panel {
+            display: none;
+            top: 72px;
+            right: 10px;
+            width: min(390px, calc(100vw - 20px));
+            max-height: min(390px, calc(100vh - 92px));
+            padding: 10px 12px;
+            overflow: auto;
+            pointer-events: auto;
+            user-select: text;
+            -webkit-user-select: text;
+        }
+
+        #tile-debug-panel h3 {
+            margin-bottom: 8px;
+            color: var(--amber);
+            font-size: 14px;
+        }
+
+        #tile-log {
+            margin: 0;
+            min-height: 180px;
+            overflow: visible;
+            color: #d7e0ea;
+            font: 11px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            white-space: pre;
+            cursor: text;
+            user-select: text;
+            -webkit-user-select: text;
+        }
+
+        #atlas-debug-overlay {
+            display: none;
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 2000;
+            width: min(430px, calc(100vw - 20px));
+            padding: 15px;
+            background: rgba(8, 10, 14, 0.94);
+            border: 1px solid var(--panel-border);
+            border-radius: 8px;
+            box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
+        }
+
+        #atlas-debug-overlay h3 {
+            color: var(--amber);
+        }
+
+        #atlas-debug-overlay p {
+            margin: -4px 0 10px;
+            color: #aab3bd;
+            font-size: 12px;
+            line-height: 1.35;
+        }
+
+        .atlas-canvas-wrap {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 1 / 1;
+            overflow: hidden;
+            background: #20242c;
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            border-radius: 4px;
+        }
+
+        #atlas-canvas,
+        #atlas-overlay-canvas {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        #atlas-overlay-canvas {
+            pointer-events: none;
+        }
+
+        @media (max-width: 760px) {
+            body {
+                overflow: auto;
+            }
+
+            #map {
+                position: fixed;
+            }
+
+            #controls,
+            #controls-bottom,
+            #status-panel,
+            #tile-debug-panel,
+            #atlas-debug-overlay {
+                position: relative;
+                top: auto;
+                right: auto;
+                bottom: auto;
+                left: auto;
+                width: calc(100vw - 20px);
+                margin: 10px;
+            }
+
+            #controls {
+                max-height: none;
+            }
+
+            #fps-counter {
+                top: 10px;
+                right: 10px;
+                font-size: 16px;
+            }
         }
     </style>
 </head>
 
 <body>
     <div id="map"></div>
-    <div id="controls">
+
+    <section id="controls" class="panel" aria-label="Shadow debugger controls">
         <h3>Shadow Debugger</h3>
+
         <div class="row">
-            <label>Date & Time</label>
+            <label for="date-input">Date</label>
             <input type="date" id="date-input">
-            <label style="margin-top: 5px;">Time: <span class="val" id="time-val">12:00</span></label>
-            <input type="range" id="time-input" min="0" max="23.9" step="0.08333333333333333" value="8.5">
-        </div>
-        <div class="row" style="margin-top: 15px; border-top: 1px solid #444; padding-top: 10px;">
-            <label style="color: #4dabf7; font-weight: bold;">Performance Tuning</label>
         </div>
         <div class="row">
-            <label>Raymarch Step Size (px): <span class="val" id="stepsize-val">3.0</span></label>
-            <input type="range" id="stepsize" min="0.5" max="10.0" step="0.5" value="3.0">
-        </div>
-        <div class="row">
-            <label>Max Raymarch Steps: <span class="val" id="maxsteps-val">256</span></label>
-            <input type="range" id="maxsteps" min="8" max="256" step="8" value="256">
+            <label for="time-input">Time: <span class="value" id="time-val">08:30</span></label>
+            <input type="range" id="time-input" min="0" max="1435" step="5" value="510">
         </div>
 
-        <div class="row" style="margin-top: 15px; border-top: 1px solid #444; padding-top: 10px;">
-            <label style="color: #9b59b6; font-weight: bold;">Soft Penumbra Physics (Blur)</label>
+        <div class="row section">
+            <label>Sun Azimuth: <span class="value" id="azimuth-val">...</span> deg</label>
+            <label>Sun Altitude: <span class="value" id="altitude-val">...</span> deg</label>
         </div>
-        <div class="row">
-            <label>Contact Hardness (Base radius): <span class="val" id="softbase-val">50</span>m</label>
-            <input type="range" id="softbase" min="10" max="200" step="10" value="50">
+    </section>
+
+    <section id="controls-bottom" class="panel" aria-label="Layer controls">
+        <label style="color:#fff;font-weight:700;margin-bottom:8px;">Layer Controls</label>
+
+        <div class="toggle-row">
+            <input type="checkbox" id="coarse-toggle" checked>
+            <label for="coarse-toggle" style="color:var(--blue);">Show Global Shadows</label>
         </div>
-        <div class="row">
-            <label>Distance Accumulation Multiplier: <span class="val" id="softmult-val">2.5</span>x</label>
-            <input type="range" id="softmult" min="0.1" max="10.0" step="0.1" value="2.5">
+        <div class="toggle-row">
+            <input type="checkbox" id="satellite-toggle">
+            <label for="satellite-toggle" style="color:#d7e0ea;">Show Esri Satellite</label>
         </div>
-        <div class="row">
-            <label>Max Blur Radius (Clamp): <span class="val" id="softmax-val">300</span>m</label>
-            <input type="range" id="softmax" min="100" max="1500" step="50" value="300">
+        <div class="toggle-row">
+            <input type="checkbox" id="daylight-toggle">
+            <label for="daylight-toggle" style="color:var(--amber);">Show Sun Duration</label>
+        </div>
+        <div class="toggle-row">
+            <input type="checkbox" id="tile-log-toggle">
+            <label for="tile-log-toggle" style="color:#d7e0ea;">Show Tile/FPS Log</label>
         </div>
 
-        <div class="row" style="margin-top: 15px; border-top: 1px solid #444; padding-top: 10px;">
-            <label style="color: #f39c12; font-weight: bold;">Cartographic Layers (Additive Alpha)</label>
-        </div>
-        <div class="row">
-            <label>Shadow Layer Darkness: <span class="val" id="castmult-val">3.0x</span></label>
-            <input type="range" id="castmult" min="0.0" max="3.0" step="0.1" value="3.0">
-        </div>
+        <button id="reload-btn" class="reload-button">Hard Reload Page</button>
+        <button id="show-atlas-btn" class="atlas-button">Show Internal Elevation Atlas</button>
+    </section>
 
-        <div class="row" style="margin-top: 15px; border-top: 1px solid #444; padding-top: 10px;">
-            <label>Sun Azimuth: <span class="val" id="azimuth-val">...</span>°</label>
-            <label>Sun Altitude: <span class="val" id="altitude-val">...</span>°</label>
-        </div>
-    </div>
-    <div id="controls-bottom"
-        style="position: absolute; bottom: 30px; right: 10px; z-index: 1000; width: 300px; background: rgba(0,0,0,0.8); padding: 10px; border-radius: 8px;">
-        <label style="color: #fff; font-weight: bold; margin-bottom: 8px; display: block;">Layer Controls</label>
+    <section id="status-panel" class="panel" aria-live="polite">Loading custom MapLibre build...</section>
+    <div id="fps-counter">-- FPS</div>
+    <section id="tile-debug-panel" class="panel" aria-label="Tile performance debug">
+        <h3>Tile/FPS Debug</h3>
+        <pre id="tile-log">Waiting for tile stats...</pre>
+        <button id="copy-tile-log-btn" class="copy-debug-button">Copy Debug Text</button>
+    </section>
 
-        <div style="display: flex; align-items: center; gap: 10px;">
-            <input type="checkbox" id="coarse-toggle" checked style="width: 20px; height: 20px; cursor: pointer;">
-            <label for="coarse-toggle" style="margin: 0; color: #4dabf7; cursor: pointer;">Show Global Shadows</label>
+    <section id="atlas-debug-overlay" aria-label="Elevation atlas debug overlay">
+        <h3>Elevation Atlas</h3>
+        <p id="atlas-status">Waiting for atlas metadata.</p>
+        <div class="atlas-canvas-wrap">
+            <canvas id="atlas-canvas" width="2048" height="2048"></canvas>
+            <canvas id="atlas-overlay-canvas" width="400" height="400"></canvas>
         </div>
-        <div style="display: flex; align-items: center; gap: 10px;">
-            <input type="checkbox" id="hillshade-toggle" checked style="width: 20px; height: 20px; cursor: pointer;">
-            <label for="hillshade-toggle" style="margin: 0; color: #4dabf7; cursor: pointer;">Show Igor
-                Hillshade</label>
-        </div>
-        <div style="display: flex; align-items: center; gap: 10px;">
-            <input type="checkbox" id="daylight-toggle" style="width: 20px; height: 20px; cursor: pointer;">
-            <label for="daylight-toggle" style="margin: 0; color: #f5d300; cursor: pointer;">Show Sun Duration</label>
-        </div>
-        <button id="debug-toggle"
-            style="width:100%;background:#ff6b6b;color:white;border:none;padding:10px;border-radius:4px;cursor:pointer;font-weight:bold;margin-top:5px;">
-            Cycle Debug Mode (Off/Detail/Atlas/Diag)
-        </button>
-        <div id="debug-status"
-            style="font-size:12px;color:#fff;margin-top:4px;text-align:center;font-family:monospace;">Mode: OFF
-        </div>
-
-        <div
-            style="font-size:11px;color:#aaa;background:rgba(0,0,0,0.3);padding:8px;border-radius:4px;margin-top:10px;">
-            <b style="color:white;display:block;margin-bottom:4px;">Legend:</b>
-            <div
-                style="height:10px;background:linear-gradient(to right, #001, #609, #f11, #fa0, #ffc);border-radius:2px;margin-bottom:4px;">
-            </div>
-            0m <span style="float:right">4000m (Detail)</span>
-            <div style="margin-top:6px;color:#f39c12"><span style="color:#f39c12">■</span> Atlas Intensity (Amber)
-            </div>
-            <div style="margin-top:2px;color:#ffff00"><span style="color:#ffff00">■</span> Atlas Diagnostic (Grid)
-            </div>
-        </div>
-        <button onclick="location.reload(true)"
-            style="width:100%;background:#4dabf7;color:white;border:none;padding:6px;border-radius:4px;cursor:pointer;font-size:11px;margin-top:10px;">
-            Hard Reload Page (Clear Cache)
-        </button>
-        <button id="show-atlas-btn"
-            style="width:100%;background:#f1c40f;color:#000;border:none;padding:10px;border-radius:4px;cursor:pointer;font-weight:bold;margin-top:10px;">
-            Show Internal Elevation Atlas (Debug)
-        </button>
-    </div>
-
-    <div id="atlas-debug-overlay"
-        style="display:none; position:absolute; top:10px; right:10px; background:rgba(0,0,0,0.9); padding:15px; border-radius:8px; z-index:2000; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
-        <h3 style="margin-top:0; color:#f1c40f;">Elevation Atlas (2048x2048)</h3>
-        <p style="font-size:12px; color:#aaa; margin-top:-10px;">This is the exact texture the shadow raymarcher
-            sees.
-            The boxes show the currently packed tiles.</p>
-        <div
-            style="position:relative; width:400px; height:400px; background:#222; border:1px solid #444; overflow:hidden;">
-            <canvas id="atlas-canvas" width="2048" height="2048"
-                style="width:100%; height:100%; position:absolute; top:0; left:0;"></canvas>
-            <canvas id="atlas-overlay-canvas" width="400" height="400"
-                style="width:100%; height:100%; position:absolute; top:0; left:0; pointer-events:none;"></canvas>
-        </div>
-        <button id="close-atlas-btn"
-            style="width:100%; background:#e74c3c; color:white; border:none; padding:8px; border-radius:4px; cursor:pointer; font-weight:bold; margin-top:10px;">Close
-            Overlay</button>
-    </div>
-    </div>
-    </div>
+        <button id="close-atlas-btn" class="close-button">Close Overlay</button>
+    </section>
 
     <script>
-        const MAPTERHORN_TILE_URL = 'https://tiles.mapterhorn.com/{z}/{x}/{y}.webp';
+        (() => {
+            'use strict';
 
-        const map = new maplibregl.Map({
-            container: 'map',
-            center: [6.18, 45.85], // Mont Blanc / Chamonix area
-            zoom: 12.5,
-            pitch: 65,
-            bearing: -40,
-            style: {
-                version: 8,
-                sources: {
-                    'terrainSource': {
-                        type: 'raster-dem',
-                        tiles: [MAPTERHORN_TILE_URL],
-                        encoding: 'terrarium',
-                        tileSize: 256,
-                        maxzoom: 15
-                    },
-                    'coarseTerrainSource': {
-                        type: 'raster-dem',
-                        tiles: [MAPTERHORN_TILE_URL],
-                        encoding: 'terrarium',
-                        tileSize: 256,
-                        maxzoom: 16
+            const MAPTERHORN_TILE_URL = 'https://tiles.mapterhorn.com/{z}/{x}/{y}.webp';
+            const ESRI_WORLD_IMAGERY_TILE_URL = 'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+            const DEFAULT_CENTER = [6.18, 45.85];
+            const DEFAULT_ZOOM = 12.5;
+            const DEFAULT_PITCH = 65;
+            const DEFAULT_BEARING = -40;
+            const TERRAIN_EXAGGERATION = 1.3;
+            const SHADOW_MIN_RENDER_ALTITUDE = 2;
+            const SHADOW_MAX_RENDER_ALTITUDE = 89.9;
+            const ATLAS_REFRESH_MS = 1500;
+            const TILE_DEBUG_PANEL_REFRESH_MS = 1000;
+            const TIME_PREVIEW_THROTTLE_MS = 360;
+            const CAMERA_SHADOW_SETTLE_MS = 450;
+            const CAMERA_SHADOW_FINE_DELAY_MS = 1200;
+            const CAMERA_SHADOW_IDLE_TIMEOUT_MS = 1800;
+            const USE_TRANSPARENT_HILLSHADE_CACHE = true;
+
+            const dom = {
+                map: document.getElementById('map'),
+                status: document.getElementById('status-panel'),
+                fps: document.getElementById('fps-counter'),
+                date: document.getElementById('date-input'),
+                time: document.getElementById('time-input'),
+                timeVal: document.getElementById('time-val'),
+                azimuthVal: document.getElementById('azimuth-val'),
+                altitudeVal: document.getElementById('altitude-val'),
+                coarseToggle: document.getElementById('coarse-toggle'),
+                satelliteToggle: document.getElementById('satellite-toggle'),
+                daylightToggle: document.getElementById('daylight-toggle'),
+                tileLogToggle: document.getElementById('tile-log-toggle'),
+                reload: document.getElementById('reload-btn'),
+                showAtlas: document.getElementById('show-atlas-btn'),
+                closeAtlas: document.getElementById('close-atlas-btn'),
+                atlasOverlay: document.getElementById('atlas-debug-overlay'),
+                atlasStatus: document.getElementById('atlas-status'),
+                atlasCanvas: document.getElementById('atlas-canvas'),
+                atlasOverlayCanvas: document.getElementById('atlas-overlay-canvas'),
+                tileDebugPanel: document.getElementById('tile-debug-panel'),
+                tileLog: document.getElementById('tile-log'),
+                copyTileLog: document.getElementById('copy-tile-log-btn'),
+            };
+
+            const state = {
+                map: null,
+                atlasTimer: null,
+                lastSunUpdateAt: 0,
+                interactionTimer: null,
+                previewTimer: null,
+                tileErrorCount: 0,
+                tileDebugEnabled: false,
+                layersInstalled: false,
+                layerInstallAttempts: 0,
+                lastAtlasTimestamp: 0,
+                lastAtlasPixelsTimestamp: 0,
+                lastTilePanelUpdateAt: 0,
+                lastTileConsoleLogAt: 0,
+                lastFpsStats: null,
+                lastTileDebugText: '',
+                lastTileDebugSnapshot: null,
+                lastTileDebugUiMs: 0,
+                lastFrameGapMs: 0,
+                cameraMoving: false,
+                cameraShadowDeferred: false,
+                cameraShadowRefreshHold: false,
+                cameraShadowRefreshTimer: null,
+                cameraShadowIdleTimer: null,
+                cameraShadowFullTimer: null,
+                cameraShadowIdleRelease: null,
+                cameraShadowPreviewActive: false,
+                longTasks: [],
+                longTaskObserver: null,
+                longTaskObserverInstalled: false,
+                offscreenAtlasCanvas: document.createElement('canvas'),
+            };
+
+            window._shadowTileDebugEnabled = false;
+            window._castShadowMult = 1.45;
+            window._selfShadowMult = 1.0;
+            window._terrainNativeDemZoom = true;
+            const rangeBindings = [];
+
+            function clamp(value, min, max) {
+                return Math.max(min, Math.min(max, value));
+            }
+
+            function smoothstep(edge0, edge1, value) {
+                const t = clamp((value - edge0) / (edge1 - edge0), 0, 1);
+                return t * t * (3 - 2 * t);
+            }
+
+            function mixNumber(a, b, t) {
+                return a * (1 - t) + b * t;
+            }
+
+            function rgbString(rgb) {
+                return `rgb(${Math.round(rgb[0])}, ${Math.round(rgb[1])}, ${Math.round(rgb[2])})`;
+            }
+
+            function setStatus(message, tone = 'info') {
+                dom.status.textContent = message;
+                dom.status.style.color = tone === 'error' ? '#ffb3b3' : tone === 'warn' ? '#ffe08a' : '#d7e0ea';
+            }
+
+            function getErrorMessage(errorLike) {
+                if (!errorLike) return 'Unknown error';
+                if (errorLike.error) return getErrorMessage(errorLike.error);
+                if (errorLike.message) return errorLike.message;
+                if (typeof errorLike === 'string') return errorLike;
+                return String(errorLike);
+            }
+
+            function todayForDateInput() {
+                const now = new Date();
+                return [
+                    now.getFullYear(),
+                    String(now.getMonth() + 1).padStart(2, '0'),
+                    String(now.getDate()).padStart(2, '0')
+                ].join('-');
+            }
+
+            function minutesToLabel(totalMinutes) {
+                const minutes = clamp(Number.parseInt(totalMinutes, 10) || 0, 0, 1435);
+                const hours = Math.floor(minutes / 60);
+                const mins = minutes % 60;
+                return `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
+            }
+
+            function getSelectedDateTime() {
+                const dateParts = dom.date.value.split('-').map(part => Number.parseInt(part, 10));
+                if (dateParts.length !== 3 || dateParts.some(part => !Number.isFinite(part))) {
+                    return null;
+                }
+
+                const minutes = clamp(Number.parseInt(dom.time.value, 10) || 0, 0, 1435);
+                return new Date(dateParts[0], dateParts[1] - 1, dateParts[2], Math.floor(minutes / 60), minutes % 60, 0);
+            }
+
+            const solar = (() => {
+                const PI = Math.PI;
+                const rad = PI / 180;
+                const dayMs = 86400000;
+                const J1970 = 2440588;
+                const J2000 = 2451545;
+                const obliquity = rad * 23.4397;
+
+                const toJulian = date => date.valueOf() / dayMs - 0.5 + J1970;
+                const toDays = date => toJulian(date) - J2000;
+                const rightAscension = (longitude, latitude) => Math.atan2(
+                    Math.sin(longitude) * Math.cos(obliquity) - Math.tan(latitude) * Math.sin(obliquity),
+                    Math.cos(longitude)
+                );
+                const declination = (longitude, latitude) => Math.asin(
+                    Math.sin(latitude) * Math.cos(obliquity) +
+                    Math.cos(latitude) * Math.sin(obliquity) * Math.sin(longitude)
+                );
+                const azimuth = (hourAngle, latitude, declinationValue) => Math.atan2(
+                    Math.sin(hourAngle),
+                    Math.cos(hourAngle) * Math.sin(latitude) - Math.tan(declinationValue) * Math.cos(latitude)
+                );
+                const altitude = (hourAngle, latitude, declinationValue) => Math.asin(
+                    Math.sin(latitude) * Math.sin(declinationValue) +
+                    Math.cos(latitude) * Math.cos(declinationValue) * Math.cos(hourAngle)
+                );
+                const siderealTime = (days, lw) => rad * (280.16 + 360.9856235 * days) - lw;
+                const solarMeanAnomaly = days => rad * (357.5291 + 0.98560028 * days);
+                const eclipticLongitude = meanAnomaly => {
+                    const center = rad * (
+                        1.9148 * Math.sin(meanAnomaly) +
+                        0.02 * Math.sin(2 * meanAnomaly) +
+                        0.0003 * Math.sin(3 * meanAnomaly)
+                    );
+                    return meanAnomaly + center + rad * 102.9372 + PI;
+                };
+                const sunCoords = days => {
+                    const meanAnomaly = solarMeanAnomaly(days);
+                    const longitude = eclipticLongitude(meanAnomaly);
+                    return {
+                        dec: declination(longitude, 0),
+                        ra: rightAscension(longitude, 0)
+                    };
+                };
+
+                return {
+                    getPosition(date, lat, lng) {
+                        const lw = rad * -lng;
+                        const phi = rad * lat;
+                        const days = toDays(date);
+                        const coords = sunCoords(days);
+                        const hourAngle = siderealTime(days, lw) - coords.ra;
+                        return {
+                            azimuth: azimuth(hourAngle, phi, coords.dec),
+                            altitude: altitude(hourAngle, phi, coords.dec)
+                        };
                     }
-                },
-                layers: [
-                    {
-                        id: 'background',
-                        type: 'background',
-                        paint: { 'background-color': '#ffffff' }
-                    }
-                ]
-            }
-        });
-
-        // 3D Navigation Controls
-        map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }));
-
-        map.on('load', () => {
-            // Enable 3D Terrain
-            map.setTerrain({ source: 'terrainSource', exaggeration: 1.3 });
-
-
-
-            // 0. Igor Hillshade Layer (structure/ambient)
-            map.addLayer({
-                id: 'detail-native',
-                type: 'hillshade',
-                source: 'terrainSource',
-                paint: {
-                    'hillshade-illumination-anchor': 'map',
-                    'hillshade-exaggeration': 1.0,
-                    'hillshade-shadow-color': 'rgba(0,0,0, 0.4)',
-                    'hillshade-highlight-color': '#ffffff'
-                }
-            });
-
-            // 1. Coarse Shadow Layer (Unifies Z12+ detail and global scale)
-            map.addLayer({
-                id: 'shadow-coarse',
-                type: 'shadow',
-                source: 'terrainSource', // Standardize to full terrain source
-                paint: {
-                    'shadow-opacity': 1.0,
-                    'shadow-color': '#000000',
-                    'shadow-penumbra': 1.0
-                }
-            });
-
-            // 2. Sun Duration Layer (Starts disabled)
-            map.addLayer({
-                id: 'daylight-native',
-                type: 'daylight',
-                source: 'terrainSource',
-                layout: { 'visibility': 'none' },
-                paint: {
-                    'daylight-opacity': 0.8,
-                    'daylight-color-ramp': [
-                        'interpolate',
-                        ['linear'],
-                        ['line-progress'],
-                        0, '#020024',
-                        0.2, '#090979',
-                        0.5, '#00d4ff',
-                        0.8, '#f5d300',
-                        1.0, '#fffff0'
-                    ]
-                }
-            });
-
-
-            // SunCalc logic
-            const dateInput = document.getElementById('date-input');
-            const timeInput = document.getElementById('time-input');
-
-            const now = new Date();
-            dateInput.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-
-            function updateSun() {
-                const center = map.getCenter();
-                const dList = dateInput.value.split('-');
-                if (dList.length !== 3) return;
-
-                const timeVal = parseFloat(timeInput.value);
-                const hours = Math.floor(timeVal);
-                const mins = Math.floor((timeVal - hours) * 60);
-
-                const timeStr = `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`;
-                document.getElementById('time-val').innerText = timeStr;
-
-                const d = new Date(dList[0], parseInt(dList[1]) - 1, dList[2], hours, mins, 0);
-
-                const sunPos = SunCalc.getPosition(d, center.lat, center.lng);
-                let azimuth = (sunPos.azimuth * 180 / Math.PI + 180) % 360;
-                let altitude = sunPos.altitude * 180 / Math.PI;
-
-                document.getElementById('azimuth-val').innerText = azimuth.toFixed(1);
-                document.getElementById('altitude-val').innerText = altitude.toFixed(1);
-
-                // console.log(`[SHADOW-UPDATE] Time: ${timeStr} | Azimuth: ${azimuth.toFixed(1)}° | Altitude: ${altitude.toFixed(1)}°`);
-
-                // Update Coarse Layer
-                if (map.getLayer('shadow-coarse')) {
-                    map.setPaintProperty('shadow-coarse', 'shadow-direction', azimuth);
-                    map.setPaintProperty('shadow-coarse', 'shadow-altitude', altitude);
-                }
-
-
-                // Update Igor Hillshade Layer
-                const hScale = Math.max(0, altitude / 90);
-                const detailShadowColor = `rgba(0,0,0, ${0.4 - hScale * 0.2})`; // Darker near sunrise/sunset
-
-                let detailHlColor = '#ffffff';
-                if (altitude < 5) detailHlColor = '#ff8c42';
-                else if (altitude < 15) detailHlColor = '#ffcf9e';
-
-                if (map.getLayer('detail-native')) {
-                    map.setPaintProperty('detail-native', 'hillshade-illumination-direction', azimuth);
-                    map.setPaintProperty('detail-native', 'hillshade-illumination-altitude', [altitude, altitude, altitude, altitude]);
-                    map.setPaintProperty('detail-native', 'hillshade-shadow-color', detailShadowColor);
-                    map.setPaintProperty('detail-native', 'hillshade-highlight-color', detailHlColor);
-                }
-
-                // Calculate Dynamic Colors (Mirroring our GLSL Shader Math)
-                const sunMix = Math.max(0, Math.min(1, (0.45 - altitude * Math.PI / 180) / (0.45 - 0.10)));
-
-                // Highlight: Warm White -> Golden Orange
-                const rH = Math.round((1.0) * 255);
-                const gH = Math.round((0.95 * (1 - sunMix) + 0.7 * sunMix) * 255);
-                const bH = Math.round((0.9 - 0.6 * sunMix) * 255); // 0.9 -> 0.3
-
-                // Shadow: Crisp Cyan -> Rich Indigo
-                const rS = Math.round((0.0 * (1 - sunMix) + 0.15 * sunMix) * 255);
-                const gS = Math.round((0.35 * (1 - sunMix) + 0.05 * sunMix) * 255);
-                const bS = Math.round((0.55 * (1 - sunMix) + 0.35 * sunMix) * 255);
-
-                const highlightColor = `rgb(${rH}, ${gH}, ${bH})`;
-                const shadowColor = `rgb(${rS}, ${gS}, ${bS})`;
-
-                map.triggerRepaint();
-            }
-
-            // Performance Tuning Controls
-            const stepSizeInput = document.getElementById('stepsize');
-            window._shadowStepSize = parseFloat(stepSizeInput.value);
-            stepSizeInput.addEventListener('input', (e) => {
-                const val = parseFloat(e.target.value);
-                document.getElementById('stepsize-val').innerText = val.toFixed(1);
-                window._shadowStepSize = val;
-                map.triggerRepaint();
-            });
-
-            const maxStepsInput = document.getElementById('maxsteps');
-            window._shadowMaxSteps = parseInt(maxStepsInput.value, 10);
-            maxStepsInput.addEventListener('input', (e) => {
-                const val = parseInt(e.target.value, 10);
-                document.getElementById('maxsteps-val').innerText = val;
-                window._shadowMaxSteps = val;
-                map.triggerRepaint();
-            });
-
-            // Soft Penumbra (Blur) Controls
-            const softBaseInput = document.getElementById('softbase');
-            window._shadowSoftBase = parseFloat(softBaseInput.value);
-            softBaseInput.addEventListener('input', (e) => {
-                const val = parseFloat(e.target.value);
-                document.getElementById('softbase-val').innerText = val;
-                window._shadowSoftBase = val;
-                map.triggerRepaint();
-            });
-
-            const softMultInput = document.getElementById('softmult');
-            window._shadowSoftMult = parseFloat(softMultInput.value);
-            softMultInput.addEventListener('input', (e) => {
-                const val = parseFloat(e.target.value);
-                document.getElementById('softmult-val').innerText = val.toFixed(1);
-                window._shadowSoftMult = val;
-                map.triggerRepaint();
-            });
-
-            const softMaxInput = document.getElementById('softmax');
-            window._shadowSoftMax = parseFloat(softMaxInput.value);
-            softMaxInput.addEventListener('input', (e) => {
-                const val = parseFloat(e.target.value);
-                document.getElementById('softmax-val').innerText = val;
-                window._shadowSoftMax = val;
-                map.triggerRepaint();
-            });
-
-            // Intensity Controls
-            const castMultInput = document.getElementById('castmult');
-            window._castShadowMult = parseFloat(castMultInput.value);
-            castMultInput.addEventListener('input', (e) => {
-                const val = parseFloat(e.target.value);
-                document.getElementById('castmult-val').innerText = val.toFixed(1) + 'x';
-                window._castShadowMult = val;
-                map.triggerRepaint();
-            });
-
-
-
-            // Independent Toggles
-
-            const coarseToggle = document.getElementById('coarse-toggle');
-            coarseToggle.addEventListener('change', (e) => {
-                map.setLayoutProperty('shadow-coarse', 'visibility', e.target.checked ? 'visible' : 'none');
-            });
-
-
-            const hillshadeToggle = document.getElementById('hillshade-toggle');
-            hillshadeToggle.addEventListener('change', (e) => {
-                map.setLayoutProperty('detail-native', 'visibility', e.target.checked ? 'visible' : 'none');
-            });
-
-            const daylightToggle = document.getElementById('daylight-toggle');
-            daylightToggle.addEventListener('change', (e) => {
-                map.setLayoutProperty('daylight-native', 'visibility', e.target.checked ? 'visible' : 'none');
-            });
-
-
-
-            // Debug mode toggle (Cycling 0, 1, 2)
-            const debugToggle = document.getElementById('debug-toggle');
-            const debugStatus = document.getElementById('debug-status');
-            window._shadowDebugMode = 0;
-
-            debugToggle.addEventListener('click', () => {
-                window._shadowDebugMode = (window._shadowDebugMode + 1) % 4;
-
-                let modeText = "OFF";
-                let bgColor = "#ff6b6b";
-                if (window._shadowDebugMode === 1) { modeText = "DETAIL DEBUG"; bgColor = "#44cc44"; }
-                if (window._shadowDebugMode === 2) { modeText = "ATLAS INTENSITY"; bgColor = "#f39c12"; }
-                if (window._shadowDebugMode === 3) { modeText = "ATLAS UV MAPPING"; bgColor = "#4dabf7"; }
-
-                debugStatus.innerText = "Mode: " + modeText;
-                debugToggle.style.background = bgColor;
-                map.triggerRepaint();
-            });
-
-            let _interactionTimeout;
-            let _throttleTimeout;
-            let _isThrottled = false;
-
-            function triggerInteraction() {
-                window._isInteractingWithTime = true;
-
-                // Always update the text label instantly at 60Hz for UI responsiveness
-                const timeVal = parseFloat(timeInput.value);
-                const hours = Math.floor(timeVal);
-                const mins = Math.floor((timeVal - hours) * 60);
-                document.getElementById('time-val').innerText = `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`;
-
-                // Throttle the extremely heavy GPU WebGL Repaint to 4 FPS (250ms) 
-                if (!_isThrottled) {
-                    updateSun();
-                    _isThrottled = true;
-                    _throttleTimeout = setTimeout(() => {
-                        _isThrottled = false;
-                    }, 250);
-                }
-
-                // When the user stops dragging for 250ms, render the final 96-step pristine shadow
-                clearTimeout(_interactionTimeout);
-                _interactionTimeout = setTimeout(() => {
-                    window._isInteractingWithTime = false;
-                    updateSun();
-                }, 250);
-            }
-
-            dateInput.addEventListener('input', triggerInteraction);
-            dateInput.addEventListener('change', triggerInteraction);
-            timeInput.addEventListener('input', triggerInteraction);
-            timeInput.addEventListener('change', triggerInteraction);
-
-            map.on('move', updateSun);
-            updateSun();
-            const fpsDiv = document.createElement('div');
-            fpsDiv.style.cssText = 'position:fixed;top:10px;right:10px;z-index:99999;background:rgba(0,0,0,0.85);color:#2ecc71;padding:8px 14px;font:bold 24px monospace;border-radius:8px;pointer-events:none';
-            document.body.appendChild(fpsDiv);
-            let frames = [];
-            let lt = performance.now();
-            (function fpsTick() {
-                const n = performance.now();
-                frames.push(n - lt);
-                lt = n;
-                if (frames.length > 60) frames.shift();
-                const fps = Math.round(1000 / (frames.reduce((a, b) => a + b) / frames.length));
-                fpsDiv.textContent = fps + ' FPS';
-                fpsDiv.style.color = fps > 40 ? '#2ecc71' : fps > 20 ? '#f1c40f' : '#e74c3c';
-                requestAnimationFrame(fpsTick);
+                };
             })();
 
-            // === ELEVATION ATLAS DEBUG OVERLAY LOGIC ===
-            const atlasOverlay = document.getElementById('atlas-debug-overlay');
-            const showAtlasBtn = document.getElementById('show-atlas-btn');
-            const closeAtlasBtn = document.getElementById('close-atlas-btn');
-            const atlasCanvas = document.getElementById('atlas-canvas');
-            const overlayCanvas = document.getElementById('atlas-overlay-canvas');
+            function computeSun(date, center) {
+                const sunPos = solar.getPosition(date, center.lat, center.lng);
+                return {
+                    azimuth: (sunPos.azimuth * 180 / Math.PI + 180) % 360,
+                    altitude: sunPos.altitude * 180 / Math.PI
+                };
+            }
 
-            let debugInterval;
+            function colorRampForSun(altitude) {
+                const altitudeRad = altitude * Math.PI / 180;
+                const directSun = smoothstep(-2.0, 8.0, altitude);
+                const skyAmbient = smoothstep(-16.0, 6.0, altitude);
+                const horizonWarmth = smoothstep(-6.0, 2.0, altitude) * (1.0 - smoothstep(6.0, 16.0, altitude));
+                const sunMix = clamp((0.52 - altitudeRad) / (0.52 - 0.08), 0, 1);
+                const highlight = {
+                    r: 255,
+                    g: Math.round((0.97 * (1 - sunMix) + 0.76 * sunMix) * 255),
+                    b: Math.round((0.92 - 0.50 * sunMix) * 255)
+                };
+                const shadow = {
+                    r: Math.round((0.07 + 0.11 * sunMix) * 255),
+                    g: Math.round((0.26 * (1 - sunMix) + 0.10 * sunMix) * 255),
+                    b: Math.round((0.44 * (1 - sunMix) + 0.34 * sunMix) * 255)
+                };
+                const hillshadeHighlightRgb = [
+                    mixNumber(170, mixNumber(255, 255, horizonWarmth), skyAmbient),
+                    mixNumber(190, mixNumber(180, 248, directSun), skyAmbient),
+                    mixNumber(220, mixNumber(130, 255, directSun), skyAmbient)
+                ];
+                const hillshadeShadowOpacity = mixNumber(0.11, 0.26, directSun) + horizonWarmth * 0.035;
+                return {
+                    highlight: `rgb(${highlight.r}, ${highlight.g}, ${highlight.b})`,
+                    shadow: `rgb(${shadow.r}, ${shadow.g}, ${shadow.b})`,
+                    directSun,
+                    skyAmbient,
+                    hillshadeHighlight: rgbString(hillshadeHighlightRgb),
+                    hillshadeShadow: `rgba(0,0,0, ${clamp(hillshadeShadowOpacity, 0.10, 0.32).toFixed(3)})`
+                };
+            }
 
-            showAtlasBtn.addEventListener('click', () => {
-                atlasOverlay.style.display = 'block';
+            function setLayerVisibility(layerId, visible) {
+                const map = state.map;
+                if (!map || !map.getLayer(layerId)) return;
+                map.setLayoutProperty(layerId, 'visibility', visible ? 'visible' : 'none');
                 map.triggerRepaint();
-                debugInterval = setInterval(updateAtlasDebug, 200);
-            });
+            }
 
-            closeAtlasBtn.addEventListener('click', () => {
-                atlasOverlay.style.display = 'none';
-                clearInterval(debugInterval);
-            });
+            function safeSetPaint(layerId, property, value) {
+                const map = state.map;
+                if (!map || !map.getLayer(layerId)) return;
+                try {
+                    map.setPaintProperty(layerId, property, value);
+                } catch (error) {
+                    setStatus(`${layerId}.${property}: ${getErrorMessage(error)}`, 'warn');
+                }
+            }
 
-            function updateAtlasDebug() {
-                if (!window._elevationAtlasDebug) return;
+            function updateSun(forceRepaint = true) {
+                const map = state.map;
+                if (!map) return;
 
-                const pixels = map.readElevationAtlasPixels();
-                if (!pixels) return;
-
-                if (typeof window._debugElevationUnpackCount === 'undefined') {
-                    window._debugElevationUnpackCount = 0;
+                const date = getSelectedDateTime();
+                if (!date || Number.isNaN(date.getTime())) {
+                    setStatus('Invalid date/time selected.', 'warn');
+                    return;
                 }
 
-                const ctx = atlasCanvas.getContext('2d');
+                dom.timeVal.textContent = minutesToLabel(dom.time.value);
 
-                // Decode MapLibre High-Precision Float Elevation Atlas
-                // The Atlas uses a custom 4-byte float packing, NOT Terrain-RGB.
-                // Formula from terrain_elevation.fragment.glsl pack():
-                // bitSh = vec4(256^3, 256^2, 256, 1)
-                for (let i = 0; i < pixels.length; i += 4) {
-                    const r = pixels[i] / 255.0;
-                    const g = pixels[i + 1] / 255.0;
-                    const b = pixels[i + 2] / 255.0;
-                    const a = pixels[i + 3] / 255.0;
+                const center = map.getCenter();
+                const sun = computeSun(date, center);
+                const renderAltitude = clamp(sun.altitude, SHADOW_MIN_RENDER_ALTITUDE, SHADOW_MAX_RENDER_ALTITUDE);
+                const colors = colorRampForSun(sun.altitude);
+                const shadowOpacity = dom.coarseToggle.checked ? colors.directSun : 0.0;
+                window._actualSunAltitudeRad = sun.altitude * Math.PI / 180;
+                window._directSunAmount = colors.directSun;
+                window._skyAmbientAmount = colors.skyAmbient;
+                window._daylightDateMs = date.getTime();
+                window._shadowSunDirection = [
+                    Math.sin(sun.azimuth * Math.PI / 180),
+                    -Math.cos(sun.azimuth * Math.PI / 180)
+                ];
 
-                    // Treat completely transparent pixels as empty (no tile data)
-                    if (pixels[i + 3] === 0) {
-                        pixels[i] = 30;
-                        pixels[i + 1] = 30;
-                        pixels[i + 2] = 30;
-                        pixels[i + 3] = 255;
+                dom.azimuthVal.textContent = sun.azimuth.toFixed(1);
+                dom.altitudeVal.textContent = sun.altitude.toFixed(1);
+
+                safeSetPaint('shadow-coarse', 'shadow-direction', sun.azimuth);
+                safeSetPaint('shadow-coarse', 'shadow-altitude', renderAltitude);
+                safeSetPaint('shadow-coarse', 'shadow-opacity', shadowOpacity);
+                safeSetPaint('shadow-coarse', 'shadow-shadow-color', colors.shadow);
+                safeSetPaint('shadow-coarse', 'shadow-highlight-color', colors.highlight);
+                safeSetPaint('terrain-derivative-cache', 'hillshade-illumination-direction', sun.azimuth);
+                safeSetPaint('terrain-derivative-cache', 'hillshade-illumination-altitude', renderAltitude);
+
+                window.sunConfig = {
+                    azimuth: sun.azimuth,
+                    altitude: sun.altitude,
+                    renderAltitude,
+                    directSun: colors.directSun,
+                    skyAmbient: colors.skyAmbient
+                };
+
+                state.lastSunUpdateAt = performance.now();
+                if (forceRepaint) map.triggerRepaint();
+            }
+
+            function scheduleSunUpdate(fromInteraction = false) {
+                dom.timeVal.textContent = minutesToLabel(dom.time.value);
+
+                if (!state.map) return;
+                if (!fromInteraction) {
+                    requestAnimationFrame(() => updateSun(true));
+                    return;
+                }
+
+                window._isInteractingWithTime = true;
+                const now = performance.now();
+                const elapsed = now - state.lastSunUpdateAt;
+                if (elapsed > TIME_PREVIEW_THROTTLE_MS) {
+                    updateSun(true);
+                    return;
+                }
+
+                clearTimeout(state.previewTimer);
+                state.previewTimer = window.setTimeout(() => {
+                    if (window._isInteractingWithTime) updateSun(true);
+                }, TIME_PREVIEW_THROTTLE_MS - elapsed);
+            }
+
+            function finishSunInteraction() {
+                dom.timeVal.textContent = minutesToLabel(dom.time.value);
+                if (!state.map) return;
+
+                clearTimeout(state.previewTimer);
+                clearTimeout(state.interactionTimer);
+                clearCameraShadowRefreshTimers();
+                state.cameraShadowDeferred = false;
+                state.cameraShadowRefreshHold = false;
+                state.cameraShadowPreviewActive = false;
+                window._shadowCameraRefreshHold = false;
+                window._shadowProgressivePhase = 'stable';
+                window._isInteractingWithTime = false;
+                updateSun(true);
+            }
+
+            function deferCameraShadowRefresh() {
+                clearCameraShadowRefreshTimers();
+                state.cameraMoving = true;
+                state.cameraShadowDeferred = true;
+                state.cameraShadowRefreshHold = true;
+                state.cameraShadowPreviewActive = false;
+                window._shadowCameraMoving = true;
+                window._shadowCameraRefreshHold = true;
+                window._shadowProgressivePhase = 'held';
+            }
+
+            function finishCameraShadowRefresh() {
+                state.cameraMoving = false;
+                window._shadowCameraMoving = false;
+                if (!state.cameraShadowDeferred) return;
+
+                state.cameraShadowRefreshHold = true;
+                window._shadowCameraRefreshHold = true;
+                clearCameraShadowRefreshTimers();
+                state.cameraShadowRefreshTimer = window.setTimeout(waitForCameraShadowIdle, CAMERA_SHADOW_SETTLE_MS);
+            }
+
+            function clearCameraShadowRefreshTimers() {
+                clearTimeout(state.cameraShadowRefreshTimer);
+                clearTimeout(state.cameraShadowIdleTimer);
+                clearTimeout(state.cameraShadowFullTimer);
+                state.cameraShadowRefreshTimer = null;
+                state.cameraShadowIdleTimer = null;
+                state.cameraShadowFullTimer = null;
+
+                if (state.cameraShadowIdleRelease && state.map && typeof state.map.off === 'function') {
+                    state.map.off('idle', state.cameraShadowIdleRelease);
+                }
+                state.cameraShadowIdleRelease = null;
+            }
+
+            function releaseCameraShadowRefresh() {
+                if (!state.cameraShadowDeferred || state.cameraMoving) return;
+
+                clearCameraShadowRefreshTimers();
+                state.cameraShadowRefreshHold = false;
+                state.cameraShadowPreviewActive = true;
+                window._shadowCameraRefreshHold = false;
+                window._shadowProgressivePhase = 'preview';
+                updateSun(true);
+                state.map?.triggerRepaint();
+                state.cameraShadowFullTimer = window.setTimeout(releaseCameraShadowFullRefresh, CAMERA_SHADOW_FINE_DELAY_MS);
+            }
+
+            function releaseCameraShadowFullRefresh() {
+                state.cameraShadowFullTimer = null;
+                if (!state.cameraShadowDeferred || state.cameraMoving) return;
+
+                state.cameraShadowDeferred = false;
+                state.cameraShadowRefreshHold = false;
+                state.cameraShadowPreviewActive = false;
+                window._shadowCameraRefreshHold = false;
+                window._shadowProgressivePhase = 'full';
+                updateSun(true);
+                state.map?.triggerRepaint();
+            }
+
+            function waitForCameraShadowIdle() {
+                state.cameraShadowRefreshTimer = null;
+                if (!state.map || !state.cameraShadowDeferred || state.cameraMoving) return;
+
+                const tilesReady = typeof state.map.areTilesLoaded === 'function'
+                    ? state.map.areTilesLoaded()
+                    : typeof state.map.loaded === 'function' ? state.map.loaded() : false;
+
+                if (tilesReady) {
+                    releaseCameraShadowRefresh();
+                    return;
+                }
+
+                state.cameraShadowIdleRelease = () => releaseCameraShadowRefresh();
+                state.map.once('idle', state.cameraShadowIdleRelease);
+                state.cameraShadowIdleTimer = window.setTimeout(releaseCameraShadowRefresh, CAMERA_SHADOW_IDLE_TIMEOUT_MS);
+            }
+
+            function bindRangeControl(config) {
+                const input = document.getElementById(config.id);
+                const valueNode = document.getElementById(config.valueId);
+
+                const apply = () => {
+                    const parsed = config.parse(input.value);
+                    const value = Number.isFinite(parsed) ? parsed : config.parse(input.defaultValue);
+                    window[config.globalName] = value;
+                    valueNode.textContent = config.format(value);
+                    if (state.map) state.map.triggerRepaint();
+                };
+
+                input.addEventListener('input', apply);
+                apply();
+            }
+
+            function clearRuntimeDebugGlobals() {
+                [
+                    '_terrainTileDebug',
+                    '_hillshadePrepareDebug',
+                    '_hillshadeRenderDebug',
+                    '_shadowAtlasReuseDebug',
+                    '_shadowPassDebug',
+                    '_shadowOffscreenDebug',
+                    '_shadowCameraRefreshDebug',
+                    '_daylightPrepareDebug',
+                    '_daylightDebug'
+                ].forEach(key => {
+                    delete window[key];
+                });
+            }
+
+            function setTileDebugEnabled(enabled) {
+                state.tileDebugEnabled = !!enabled;
+                window._shadowTileDebugEnabled = state.tileDebugEnabled;
+                dom.tileDebugPanel.style.display = state.tileDebugEnabled ? 'block' : 'none';
+
+                if (!state.tileDebugEnabled) {
+                    state.lastTileDebugText = '';
+                    state.lastTileDebugSnapshot = null;
+                    state.lastTileDebugUiMs = 0;
+                    state.longTasks.length = 0;
+                    if (state.longTaskObserver) {
+                        state.longTaskObserver.disconnect();
+                        state.longTaskObserver = null;
+                        state.longTaskObserverInstalled = false;
+                    }
+                    dom.tileLog.textContent = 'Tile/FPS logging is disabled.';
+                    clearRuntimeDebugGlobals();
+                    state.map?.triggerRepaint();
+                    return;
+                }
+
+                installLongTaskObserver();
+                state.lastTilePanelUpdateAt = 0;
+                dom.tileLog.textContent = 'Waiting for tile stats...';
+                state.map?.triggerRepaint();
+                updateTileDebugPanel(state.lastFpsStats);
+            }
+
+            function installControls() {
+                rangeBindings.forEach(bindRangeControl);
+
+                dom.date.value = todayForDateInput();
+                dom.timeVal.textContent = minutesToLabel(dom.time.value);
+
+                dom.date.addEventListener('input', () => finishSunInteraction());
+                dom.date.addEventListener('change', () => finishSunInteraction());
+                dom.time.addEventListener('pointerdown', () => {
+                    window._isInteractingWithTime = true;
+                });
+                dom.time.addEventListener('input', () => scheduleSunUpdate(true));
+                dom.time.addEventListener('change', () => finishSunInteraction());
+                dom.time.addEventListener('pointerup', () => finishSunInteraction());
+                dom.time.addEventListener('keyup', event => {
+                    if (event.key === 'Enter' || event.key === 'Escape') finishSunInteraction();
+                });
+
+                dom.coarseToggle.addEventListener('change', event => {
+                    const visible = event.target.checked;
+                    setLayerVisibility('shadow-coarse', visible);
+                    safeSetPaint('shadow-coarse', 'shadow-opacity', visible ? (window.sunConfig?.directSun || 0.0) : 0.0);
+                });
+                dom.satelliteToggle.addEventListener('change', event => {
+                    setLayerVisibility('esri-satellite', event.target.checked);
+                });
+                dom.daylightToggle.addEventListener('change', event => {
+                    setLayerVisibility('daylight-native', event.target.checked);
+                });
+                dom.tileLogToggle.addEventListener('change', event => {
+                    setTileDebugEnabled(event.target.checked);
+                });
+                setTileDebugEnabled(false);
+
+                dom.reload.addEventListener('click', () => window.location.reload());
+                dom.showAtlas.addEventListener('click', openAtlasDebug);
+                dom.closeAtlas.addEventListener('click', closeAtlasDebug);
+                dom.copyTileLog.addEventListener('click', copyTileDebugText);
+                ['mousedown', 'touchstart', 'wheel', 'dblclick'].forEach(eventName => {
+                    dom.tileDebugPanel.addEventListener(eventName, event => event.stopPropagation());
+                });
+            }
+
+            function createStyle() {
+                const demSource = {
+                    type: 'raster-dem',
+                    tiles: [MAPTERHORN_TILE_URL],
+                    encoding: 'terrarium',
+                    tileSize: 512,
+                    maxzoom: 15,
+                    attribution: '<a href="https://mapterhorn.com/attribution">© Mapterhorn</a>'
+                };
+
+                return {
+                    version: 8,
+                    sources: {
+                        terrainSource: demSource,
+                        esriWorldImagery: {
+                            type: 'raster',
+                            tiles: [ESRI_WORLD_IMAGERY_TILE_URL],
+                            tileSize: 256,
+                            maxzoom: 19,
+                            attribution: 'Tiles &copy; Esri'
+                        }
+                    },
+                    layers: [
+                        {
+                            id: 'background',
+                            type: 'background',
+                            paint: { 'background-color': '#f5f7fb' }
+                        }
+                    ]
+                };
+            }
+
+            function safeAddLayer(layer) {
+                if (state.map.getLayer(layer.id)) return true;
+                try {
+                    state.map.addLayer(layer);
+                    return true;
+                } catch (error) {
+                    setStatus(`Could not add ${layer.id}: ${getErrorMessage(error)}`, 'error');
+                    return false;
+                }
+            }
+
+            function installLayers() {
+                if (state.layersInstalled) return true;
+                state.layerInstallAttempts += 1;
+
+                const map = state.map;
+
+                try {
+                    map.setTerrain({ source: 'terrainSource', exaggeration: TERRAIN_EXAGGERATION });
+                } catch (error) {
+                    setStatus(`Waiting for style load before installing terrain layers: ${getErrorMessage(error)}`, 'warn');
+                    return false;
+                }
+
+                let hillshadeReady = true;
+                if (USE_TRANSPARENT_HILLSHADE_CACHE) {
+                    hillshadeReady = safeAddLayer({
+                        id: 'terrain-derivative-cache',
+                        type: 'hillshade',
+                        source: 'terrainSource',
+                        layout: { visibility: 'visible' },
+                        paint: {
+                            'hillshade-method': 'igor',
+                            'hillshade-exaggeration': 1.0,
+                            'hillshade-illumination-direction': 315,
+                            'hillshade-illumination-altitude': 45,
+                            'hillshade-shadow-color': 'rgba(0,0,0,0)',
+                            'hillshade-highlight-color': 'rgba(255,255,255,0)',
+                            'hillshade-accent-color': 'rgba(255,255,255,0)'
+                        }
+                    });
+                } else {
+                    window._hillshadePrepareDebug = {
+                        layer: 'terrain-owned-derivative-cache',
+                        disabled: true,
+                        reason: 'terrain prepares visible tile derivatives directly',
+                        inputTiles: 0,
+                        prepared: 0,
+                        skippedClean: 0,
+                        skippedNoDem: 0,
+                        zooms: {},
+                        durationMs: 0,
+                        timestamp: performance.now()
+                    };
+                    window._hillshadeRenderDebug = {
+                        layer: 'terrain-owned-derivative-cache',
+                        skippedVisibleDraw: true,
+                        disabled: true,
+                        tileIDs: 0,
+                        timestamp: performance.now()
+                    };
+                }
+
+                const satelliteReady = safeAddLayer({
+                    id: 'esri-satellite',
+                    type: 'raster',
+                    source: 'esriWorldImagery',
+                    layout: { visibility: 'none' },
+                    paint: {
+                        'raster-opacity': 1.0,
+                        'raster-fade-duration': 0
+                    }
+                });
+
+                const shadowReady = safeAddLayer({
+                    id: 'shadow-coarse',
+                    type: 'shadow',
+                    source: 'terrainSource',
+                    paint: {
+                        'shadow-opacity': 1.0,
+                        'shadow-color': '#000000',
+                        'shadow-shadow-color': '#000000',
+                        'shadow-highlight-color': '#ffffff',
+                        'shadow-direction': 315,
+                        'shadow-altitude': 45,
+                        'shadow-max-distance': 8000,
+                        'shadow-penumbra': 1.0
+                    }
+                });
+
+                const daylightReady = safeAddLayer({
+                    id: 'daylight-native',
+                    type: 'daylight',
+                    source: 'terrainSource',
+                    layout: { visibility: 'none' },
+                    paint: {
+                        'daylight-opacity': 0.62,
+                        'daylight-color-ramp': [
+                            'interpolate',
+                            ['linear'],
+                            ['line-progress'],
+                            0, '#172033',
+                            0.18, '#264875',
+                            0.42, '#2f8c9d',
+                            0.68, '#c6b65c',
+                            0.88, '#f0d27c',
+                            1.0, '#fff4cc'
+                        ]
+                    }
+                });
+
+                dom.satelliteToggle.disabled = !satelliteReady;
+                dom.coarseToggle.disabled = !shadowReady;
+                dom.daylightToggle.disabled = !daylightReady;
+
+                updateSun(true);
+                state.layersInstalled = true;
+                setStatus('Map loaded. Terrain atlas and shadow passes will populate as DEM tiles arrive.');
+                return true;
+            }
+
+            function scheduleLayerInstall(delay = 0) {
+                if (state.layersInstalled) return;
+                window.setTimeout(() => {
+                    if (state.layersInstalled) return;
+                    const installed = installLayers();
+                    if (!installed && state.layerInstallAttempts < 40) {
+                        scheduleLayerInstall(250);
+                    }
+                }, delay);
+            }
+
+            function installMap() {
+                if (!window.maplibregl?.Map) {
+                    setStatus('Custom MapLibre build did not load.', 'error');
+                    return;
+                }
+
+                state.map = new maplibregl.Map({
+                    container: dom.map,
+                    center: DEFAULT_CENTER,
+                    zoom: DEFAULT_ZOOM,
+                    pitch: DEFAULT_PITCH,
+                    bearing: DEFAULT_BEARING,
+                    style: createStyle()
+                });
+
+                window.shadowDebugMap = state.map;
+
+                state.map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }));
+
+                state.map.once('load', () => scheduleLayerInstall(0));
+                state.map.once('style.load', () => scheduleLayerInstall(0));
+                scheduleLayerInstall(0);
+                scheduleLayerInstall(250);
+                state.map.on('movestart', deferCameraShadowRefresh);
+                state.map.on('move', deferCameraShadowRefresh);
+                state.map.on('moveend', () => {
+                    finishCameraShadowRefresh();
+                    if (dom.atlasOverlay.style.display === 'block') {
+                        updateAtlasDebug();
+                    }
+                });
+                state.map.on('error', event => {
+                    const message = getErrorMessage(event);
+                    if (/tile|image|fetch|network|request/i.test(message)) {
+                        state.tileErrorCount += 1;
+                        setStatus(`Tile/source warning (${state.tileErrorCount}): ${message}`, 'warn');
+                    } else {
+                        setStatus(message, 'error');
+                    }
+                });
+                state.map.on('webglcontextlost', () => setStatus('WebGL context lost.', 'error'));
+                state.map.on('webglcontextrestored', () => {
+                    setStatus('WebGL context restored. Rebuilding shadow layers...');
+                    state.map.once('idle', updateSun);
+                });
+            }
+
+            function installLongTaskObserver() {
+                if (state.longTaskObserverInstalled) return;
+                if (!('PerformanceObserver' in window)) return;
+                const supported = PerformanceObserver.supportedEntryTypes || [];
+                if (!supported.includes('longtask')) return;
+
+                try {
+                    const observer = new PerformanceObserver(list => {
+                        if (!state.tileDebugEnabled) return;
+                        for (const entry of list.getEntries()) {
+                            state.longTasks.push({
+                                startTime: entry.startTime,
+                                duration: entry.duration,
+                                name: entry.name || 'longtask'
+                            });
+                        }
+                        if (state.longTasks.length > 24) {
+                            state.longTasks.splice(0, state.longTasks.length - 24);
+                        }
+                    });
+                    observer.observe({ entryTypes: ['longtask'] });
+                    state.longTaskObserver = observer;
+                    state.longTaskObserverInstalled = true;
+                } catch (error) {
+                    console.warn('[shadow-poc perf] Long task observer unavailable:', getErrorMessage(error));
+                }
+            }
+
+            function updateFpsCounter() {
+                const samples = [];
+                let last = performance.now();
+
+                function tick() {
+                    const now = performance.now();
+                    const frameMs = now - last;
+                    if (frameMs > 1000) {
+                        state.lastFrameGapMs = frameMs;
+                        samples.length = 0;
+                        last = now;
+                        requestAnimationFrame(tick);
+                        return;
+                    }
+
+                    samples.push(frameMs);
+                    last = now;
+                    if (samples.length > 120) samples.shift();
+
+                    const average = samples.reduce((sum, value) => sum + value, 0) / samples.length;
+                    const sorted = samples.slice().sort((a, b) => a - b);
+                    const p95 = sorted[Math.max(0, Math.floor(sorted.length * 0.95) - 1)] || average;
+                    const worst = sorted[sorted.length - 1] || average;
+                    const longFrames = samples.filter(value => value > 50).length;
+                    const fps = Math.max(0, Math.round(1000 / average));
+                    const fpsStats = {
+                        fps,
+                        averageMs: average,
+                        p95Ms: p95,
+                        worstMs: worst,
+                        longFrames,
+                        frameMs,
+                        droppedGapMs: state.lastFrameGapMs,
+                        timestamp: now
+                    };
+                    state.lastFpsStats = fpsStats;
+                    dom.fps.textContent = `${fps} FPS\navg ${average.toFixed(1)}ms p95 ${p95.toFixed(1)}ms`;
+                    dom.fps.style.color = fps > 40 ? '#2ecc71' : fps > 20 ? '#f1c40f' : '#e74c3c';
+                    if (state.tileDebugEnabled && now - state.lastTilePanelUpdateAt > TILE_DEBUG_PANEL_REFRESH_MS) {
+                        state.lastTilePanelUpdateAt = now;
+                        updateTileDebugPanel(fpsStats);
+                    }
+                    requestAnimationFrame(tick);
+                }
+
+                requestAnimationFrame(tick);
+            }
+
+            function formatCounts(counts) {
+                if (!counts || typeof counts !== 'object') return '-';
+                return Object.entries(counts)
+                    .sort(([a], [b]) => Number(a) - Number(b))
+                    .map(([key, value]) => `z${key}:${value}`)
+                    .join(' ');
+            }
+
+            function fmtMs(value) {
+                return Number.isFinite(value) ? `${value.toFixed(1)}ms` : '-';
+            }
+
+            function sanitizeDebugValue(value, depth = 0) {
+                if (value === null || typeof value !== 'object') return value;
+                if (depth > 5) return '[depth-limit]';
+                if (Array.isArray(value)) {
+                    const items = value.slice(0, 200).map(item => sanitizeDebugValue(item, depth + 1));
+                    if (value.length > items.length) items.push(`[${value.length - items.length} more items]`);
+                    return items;
+                }
+
+                const cleaned = {};
+                Object.entries(value).forEach(([key, entry]) => {
+                    if (typeof entry === 'function') return;
+                    if (/canvas|context|texture|gl|pixels|imageData/i.test(key)) {
+                        cleaned[key] = '[omitted]';
+                        return;
+                    }
+                    cleaned[key] = sanitizeDebugValue(entry, depth + 1);
+                });
+                return cleaned;
+            }
+
+            function stringifyDebugSnapshot(snapshot) {
+                try {
+                    return JSON.stringify(sanitizeDebugValue(snapshot), null, 2);
+                } catch (error) {
+                    return `Could not stringify raw debug snapshot: ${getErrorMessage(error)}`;
+                }
+            }
+
+            async function copyTileDebugText() {
+                const summary = state.lastTileDebugText || dom.tileLog.textContent || '';
+                const raw = state.lastTileDebugSnapshot
+                    ? stringifyDebugSnapshot(state.lastTileDebugSnapshot)
+                    : '{}';
+                const text = [
+                    summary.replace(/\n\nraw snapshot available from Copy Debug Text\.$/, ''),
+                    '',
+                    'raw snapshot',
+                    raw
+                ].join('\n');
+                if (!text) return;
+
+                try {
+                    if (navigator.clipboard?.writeText) {
+                        await navigator.clipboard.writeText(text);
+                    } else {
+                        const textArea = document.createElement('textarea');
+                        textArea.value = text;
+                        textArea.setAttribute('readonly', '');
+                        textArea.style.position = 'fixed';
+                        textArea.style.left = '-9999px';
+                        document.body.appendChild(textArea);
+                        textArea.select();
+                        const copied = document.execCommand('copy');
+                        document.body.removeChild(textArea);
+                        if (!copied) throw new Error('document.execCommand("copy") returned false');
+                    }
+
+                    dom.copyTileLog.textContent = 'Copied';
+                    window.setTimeout(() => {
+                        dom.copyTileLog.textContent = 'Copy Debug Text';
+                    }, 900);
+                } catch (error) {
+                    setStatus(`Could not copy debug text: ${getErrorMessage(error)}`, 'warn');
+                }
+            }
+
+            function updateTileDebugPanel(fpsStats = state.lastFpsStats) {
+                if (!state.tileDebugEnabled) return;
+                const updateStart = performance.now();
+                const terrain = window._terrainTileDebug || {};
+                const atlas = window._elevationAtlasDebug || {};
+                const atlasReuse = window._shadowAtlasReuseDebug || {};
+                const shadow = window._shadowPassDebug || {};
+                const shadowOffscreen = window._shadowOffscreenDebug || {};
+                const hillshade = window._hillshadePrepareDebug || {};
+                const hillshadeRender = window._hillshadeRenderDebug || {};
+                const daylightPrepare = window._daylightPrepareDebug || {};
+                const daylight = window._daylightDebug || {};
+                const progressivePhase = window._shadowProgressivePhase || window._shadowProgressiveLastPhase || 'stable';
+                const moving = state.map && typeof state.map.isMoving === 'function' ? state.map.isMoving() : false;
+                const center = state.map ? state.map.getCenter() : null;
+                const mapState = state.map ? {
+                    moving,
+                    cameraShadowDeferred: state.cameraShadowDeferred,
+                    cameraShadowRefreshHold: state.cameraShadowRefreshHold,
+                    cameraShadowPreviewActive: state.cameraShadowPreviewActive,
+                    progressivePhase,
+                    zoom: state.map.getZoom(),
+                    bearing: state.map.getBearing(),
+                    pitch: state.map.getPitch(),
+                    center: center ? { lng: center.lng, lat: center.lat } : null
+                } : { moving: false };
+                const lastLongTask = state.longTasks[state.longTasks.length - 1];
+
+                const lines = [
+                    `fps ${fpsStats?.fps ?? '--'} avg ${fmtMs(fpsStats?.averageMs)} p95 ${fmtMs(fpsStats?.p95Ms)} worst ${fmtMs(fpsStats?.worstMs)} last ${fmtMs(fpsStats?.frameMs)} gap ${fmtMs(fpsStats?.droppedGapMs)} long>${fpsStats?.longFrames ?? 0}`,
+                    `map moving=${moving} shadowDeferred=${state.cameraShadowDeferred} refreshHold=${state.cameraShadowRefreshHold} preview=${state.cameraShadowPreviewActive} phase=${progressivePhase} zoom=${state.map ? state.map.getZoom().toFixed(2) : '-'}`,
+                    `debug ui=${fmtMs(state.lastTileDebugUiMs)} panelRate=${TILE_DEBUG_PANEL_REFRESH_MS}ms longTask=${lastLongTask ? fmtMs(lastLongTask.duration) : '-'}`,
+                    '',
+                    `terrain draw ${fmtMs(terrain.durationMs)} tiles=${terrain.renderTiles ?? '-'} moving=${terrain.moving ?? '-'}`,
+                    `terrain z ${formatCounts(terrain.terrainZooms)}`,
+                    `source z  ${formatCounts(terrain.sourceZooms)} missingDEM=${terrain.missingDem ?? '-'}`,
+                    `deriv ready=${terrain.derivativeReady ?? '-'} missing=${terrain.derivativeMissing ?? '-'} manualPrepare=${terrain.derivativeManualPrepare ?? '-'} skippedMoving=${terrain.derivativeSkippedMoving ?? '-'} prep=${fmtMs(terrain.derivativePrepareMs)}`,
+                    terrain.missingDerivativeTiles?.length ? `missing ${terrain.missingDerivativeTiles.join(' ')}` : 'missing -',
+                    '',
+                    hillshade.disabled
+                        ? `hillshade cache ${hillshade.layer || 'disabled'} offscreenLayer=false`
+                        : `hillshade prep ${fmtMs(hillshade.durationMs)} in=${hillshade.inputTiles ?? '-'} prepared=${hillshade.prepared ?? '-'} clean=${hillshade.skippedClean ?? '-'} noDEM=${hillshade.skippedNoDem ?? '-'} skippedMoving=${hillshade.skippedWhileMoving ?? '-'}`,
+                    `hillshade z ${formatCounts(hillshade.zooms)} visibleSkipped=${hillshadeRender.skippedVisibleDraw === true}`,
+                    '',
+                    `atlas ${fmtMs(atlas.durationMs)} visible=${atlas.visibleTiles ?? '-'} cells=${atlas.tiles?.length ?? '-'} lod=${atlas.lodZooms?.join('/') ?? '-'} phase=${atlas.progressivePhase ?? '-'}`,
+                    `atlas reuse covered=${atlasReuse.reusedCoveredAtlas === true} cachedPhase=${atlasReuse.cachedAtlasPhase ?? '-'}`,
+                    `atlas visible z ${formatCounts(atlas.visibleZooms)}`,
+                    `atlas capture z ${formatCounts(atlas.captureZooms)}`,
+                    `atlas source z ${formatCounts(atlas.sourceZooms)}`,
+                    '',
+                    `shadow ${shadow.skipped ? `skipped ${shadow.reason}` : fmtMs(shadow.durationMs)} size=${shadow.atlasPixelSize ?? '-'} blur=${fmtMs(shadow.blurMs)} steps=${shadow.maxSteps ?? '-'} step=${shadow.stepMeters ?? '-'} offscreenSkip=${shadowOffscreen.skippedCachedWhileMoving === true}`,
+                    `daylight atlas ${daylightPrepare.skipped ? `skipped ${daylightPrepare.reason}` : fmtMs(daylightPrepare.durationMs)} prepared=${daylightPrepare.prepared ?? '-'} clean=${daylightPrepare.clean ?? '-'} size=${daylightPrepare.daylightAtlasSize ?? daylight.daylightAtlasSize ?? '-'}/${daylightPrepare.elevationAtlasSize ?? daylight.elevationAtlasSize ?? '-'} steps=${daylightPrepare.maxSteps ?? '-'} step=${daylightPrepare.stepMeters ? daylightPrepare.stepMeters.toFixed(1) : '-'}`,
+                    `daylight draw tiles=${daylight.inputTiles ?? '-'} drawn=${daylight.drawnTiles ?? '-'} skipped=${daylight.skippedTiles ?? '-'} atlasReady=${daylight.atlasReady === true} samples=${daylightPrepare.samples ?? daylight.samples ?? '-'} stepMin=${daylightPrepare.timeWeightMins ? daylightPrepare.timeWeightMins.toFixed(1) : '-'} date=${daylight.date ? daylight.date.slice(0, 10) : '-'}`
+                ];
+
+                state.lastTileDebugSnapshot = {
+                    fps: fpsStats,
+                    map: mapState,
+                    debugUi: {
+                        panelRefreshMs: TILE_DEBUG_PANEL_REFRESH_MS,
+                        lastPanelUpdateMs: state.lastTileDebugUiMs,
+                        cameraSettleMs: CAMERA_SHADOW_SETTLE_MS,
+                        cameraFineDelayMs: CAMERA_SHADOW_FINE_DELAY_MS,
+                        cameraIdleTimeoutMs: CAMERA_SHADOW_IDLE_TIMEOUT_MS,
+                        progressivePhase,
+                        longTasks: state.longTasks.slice(-8)
+                    },
+                    terrain,
+                    hillshade,
+                    hillshadeRender,
+                    atlas,
+                    atlasReuse,
+                    shadow,
+                    shadowOffscreen,
+                    daylightPrepare,
+                    daylight
+                };
+                state.lastTileDebugText = `${lines.join('\n')}\n\nraw snapshot available from Copy Debug Text.`;
+                dom.tileLog.textContent = state.lastTileDebugText;
+                state.lastTileDebugUiMs = performance.now() - updateStart;
+
+                const now = performance.now();
+                if (now - state.lastTileConsoleLogAt > 2000) {
+                    state.lastTileConsoleLogAt = now;
+                    console.log('[shadow-poc perf]', {
+                        fps: fpsStats,
+                        debugUi: state.lastTileDebugSnapshot?.debugUi,
+                        terrain,
+                        hillshade,
+                        hillshadeRender,
+                        atlas,
+                        atlasReuse,
+                        shadow,
+                        shadowOffscreen
+                    });
+                }
+            }
+
+            function openAtlasDebug() {
+                if (!state.map || typeof state.map.readElevationAtlasPixels !== 'function') {
+                    setStatus('Elevation atlas readback API is not available in this MapLibre build.', 'warn');
+                    return;
+                }
+
+                dom.atlasOverlay.style.display = 'block';
+                state.map.triggerRepaint();
+                updateAtlasDebug();
+
+                clearInterval(state.atlasTimer);
+                state.atlasTimer = window.setInterval(updateAtlasDebug, ATLAS_REFRESH_MS);
+            }
+
+            function closeAtlasDebug() {
+                dom.atlasOverlay.style.display = 'none';
+                clearInterval(state.atlasTimer);
+                state.atlasTimer = null;
+            }
+
+            function drawAtlasMessage(message) {
+                const overlayCtx = dom.atlasOverlayCanvas.getContext('2d');
+                overlayCtx.clearRect(0, 0, dom.atlasOverlayCanvas.width, dom.atlasOverlayCanvas.height);
+                overlayCtx.fillStyle = 'rgba(0,0,0,0.62)';
+                overlayCtx.fillRect(0, 0, dom.atlasOverlayCanvas.width, dom.atlasOverlayCanvas.height);
+                overlayCtx.fillStyle = '#fff';
+                overlayCtx.font = '13px ui-monospace, Menlo, Consolas, monospace';
+                overlayCtx.fillText(message, 14, 28);
+                dom.atlasStatus.textContent = message;
+            }
+
+            function updateAtlasDebug() {
+                const meta = window._elevationAtlasDebug;
+                if (!meta || !Array.isArray(meta.bounds)) {
+                    drawAtlasMessage('Waiting for elevation atlas metadata.');
+                    return;
+                }
+
+                const isMoving = typeof state.map.isMoving === 'function' && state.map.isMoving();
+                if (isMoving && state.lastAtlasPixelsTimestamp) {
+                    drawAtlasOverlay(meta);
+                    updateAtlasStatus(meta, 'readback paused while moving');
+                    return;
+                }
+
+                if (meta.timestamp === state.lastAtlasPixelsTimestamp) {
+                    drawAtlasOverlay(meta);
+                    updateAtlasStatus(meta);
+                    return;
+                }
+
+                let pixels;
+                try {
+                    pixels = state.map.readElevationAtlasPixels();
+                } catch (error) {
+                    drawAtlasMessage(`Atlas readback failed: ${getErrorMessage(error)}`);
+                    return;
+                }
+
+                if (!pixels || !pixels.length) {
+                    drawAtlasMessage('Elevation atlas FBO is not ready yet.');
+                    return;
+                }
+
+                const atlasSize = meta.size || Math.sqrt(pixels.length / 4);
+                if (!Number.isFinite(atlasSize) || atlasSize <= 0) {
+                    drawAtlasMessage('Elevation atlas size is invalid.');
+                    return;
+                }
+                state.lastAtlasPixelsTimestamp = meta.timestamp;
+
+                if (dom.atlasCanvas.width !== atlasSize) {
+                    dom.atlasCanvas.width = atlasSize;
+                    dom.atlasCanvas.height = atlasSize;
+                    state.offscreenAtlasCanvas.width = atlasSize;
+                    state.offscreenAtlasCanvas.height = atlasSize;
+                } else if (state.offscreenAtlasCanvas.width !== atlasSize) {
+                    state.offscreenAtlasCanvas.width = atlasSize;
+                    state.offscreenAtlasCanvas.height = atlasSize;
+                }
+
+                const displayPixels = new Uint8ClampedArray(pixels);
+                for (let i = 0; i < displayPixels.length; i += 4) {
+                    if (displayPixels[i + 3] === 0) {
+                        displayPixels[i] = 30;
+                        displayPixels[i + 1] = 30;
+                        displayPixels[i + 2] = 30;
+                        displayPixels[i + 3] = 255;
                         continue;
                     }
 
-                    // MapLibre Float Unpacking
-                    // r has highest scale (1/(256^3)), a has lowest scale (1)
-                    // The GLSL bitUnsh is: vec4(1.0 / (256.0 * 256.0 * 256.0), 1.0 / (256.0 * 256.0), 1.0 / 256.0, 1.0)
-                    const bitR = 1.0 / 16777216.0;
-                    const bitG = 1.0 / 65536.0;
-                    const bitB = 1.0 / 256.0;
-                    const bitA = 1.0;
+                    const r = displayPixels[i] / 255;
+                    const g = displayPixels[i + 1] / 255;
+                    const b = displayPixels[i + 2] / 255;
+                    const a = displayPixels[i + 3] / 255;
+                    const packed = r / 16777216 + g / 65536 + b / 256 + a;
+                    const elevation = packed * 20000 - 10000;
+                    const normalized = clamp(elevation / 4800, 0, 1);
+                    const color = elevationToDebugColor(normalized);
 
-                    const dot = (r * bitR) + (g * bitG) + (b * bitB) + (a * bitA);
-                    const elev = (dot * 20000.0) - 10000.0;
-
-                    // Normalize to 0..1 based on roughly 0m to 4800m (Mont Blanc)
-                    const normalized = Math.max(0, Math.min(1, elev / 4800));
-
-                    if (window._debugElevationUnpackCount < 10 && a > 0) {
-                        console.log(`Unpack pixel ${i / 4}: RGBA[${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, ${Math.round(a * 255)}] -> Elev: ${elev.toFixed(2)}m (Norm: ${normalized.toFixed(3)})`);
-                        window._debugElevationUnpackCount++;
-                    }
-
-                    // Basic Hue ramp: Blue (low) -> Green -> Yellow -> Red -> White (high)
-                    let col;
-                    if (a === 0) {
-                        col = [30, 30, 30]; // Dark grey for out-of-bounds / empty
-                    } else if (normalized < 0.25) {
-                        const t = normalized / 0.25;
-                        col = [0, Math.floor(t * 255), 255]; // Blue to Cyan
-                    } else if (normalized < 0.5) {
-                        const t = (normalized - 0.25) / 0.25;
-                        col = [0, 255, Math.floor((1 - t) * 255)]; // Cyan to Green
-                    } else if (normalized < 0.75) {
-                        const t = (normalized - 0.5) / 0.25;
-                        col = [Math.floor(t * 255), 255, 0]; // Green to Yellow
-                    } else if (normalized < 0.95) {
-                        const t = (normalized - 0.75) / 0.20;
-                        col = [255, Math.floor((1 - t) * 255), 0]; // Yellow to Red
-                    } else {
-                        const t = (normalized - 0.95) / 0.05;
-                        const v = 255;
-                        col = [v, Math.floor(t * v), Math.floor(t * v)]; // Red to White
-                    }
-
-                    pixels[i] = col[0];
-                    pixels[i + 1] = col[1];
-                    pixels[i + 2] = col[2];
-                    pixels[i + 3] = 255; // Force solid alpha for canvas display
+                    displayPixels[i] = color[0];
+                    displayPixels[i + 1] = color[1];
+                    displayPixels[i + 2] = color[2];
+                    displayPixels[i + 3] = 255;
                 }
 
-                const imgData = new ImageData(new Uint8ClampedArray(pixels.buffer), 2048, 2048);
+                const atlasCtx = dom.atlasCanvas.getContext('2d');
+                const offscreenCtx = state.offscreenAtlasCanvas.getContext('2d');
+                offscreenCtx.putImageData(new ImageData(displayPixels, atlasSize, atlasSize), 0, 0);
 
-                // WebGL readPixels returns data upside down relative to Canvas, flip it
-                const flippedCtx = document.createElement('canvas').getContext('2d');
-                flippedCtx.canvas.width = 2048; flippedCtx.canvas.height = 2048;
-                flippedCtx.putImageData(imgData, 0, 0);
+                atlasCtx.save();
+                atlasCtx.clearRect(0, 0, atlasSize, atlasSize);
+                atlasCtx.scale(1, -1);
+                atlasCtx.translate(0, -atlasSize);
+                atlasCtx.drawImage(state.offscreenAtlasCanvas, 0, 0);
+                atlasCtx.restore();
 
-                ctx.save();
-                ctx.scale(1, -1);
-                ctx.translate(0, -2048);
-                ctx.drawImage(flippedCtx.canvas, 0, 0);
-                ctx.restore();
+                drawAtlasOverlay(meta);
+                updateAtlasStatus(meta);
+            }
 
-                // Draw Tile Outlines
-                const meta = window._elevationAtlasDebug;
-                const oCtx = overlayCanvas.getContext('2d');
-                oCtx.clearRect(0, 0, 400, 400);
+            function updateAtlasStatus(meta, suffix = '') {
+                if (meta.timestamp === state.lastAtlasTimestamp && !suffix) return;
+                state.lastAtlasTimestamp = meta.timestamp;
+                const fallbackText = Number.isFinite(meta.parentFallbackCount)
+                    ? `, ${meta.parentFallbackCount} parent fallbacks, ${meta.flatFallbackCount || 0} flat`
+                    : '';
+                const lodText = Array.isArray(meta.lodZooms) && meta.lodZooms.length
+                    ? `lod z${meta.lodZooms.join('/z')}, `
+                    : Number.isFinite(meta.targetZoom) ? `z${meta.targetZoom}, ` : '';
+                const suffixText = suffix ? `, ${suffix}` : '';
+                dom.atlasStatus.textContent = `${lodText}${meta.tiles?.length || 0} cells${fallbackText}, bounds ${meta.bounds.map(v => v.toFixed(5)).join(', ')}${suffixText}`;
+            }
+
+            function elevationToDebugColor(normalized) {
+                if (normalized < 0.25) {
+                    const t = normalized / 0.25;
+                    return [0, Math.floor(t * 255), 255];
+                }
+                if (normalized < 0.5) {
+                    const t = (normalized - 0.25) / 0.25;
+                    return [0, 255, Math.floor((1 - t) * 255)];
+                }
+                if (normalized < 0.75) {
+                    const t = (normalized - 0.5) / 0.25;
+                    return [Math.floor(t * 255), 255, 0];
+                }
+                if (normalized < 0.95) {
+                    const t = (normalized - 0.75) / 0.20;
+                    return [255, Math.floor((1 - t) * 255), 0];
+                }
+                const t = (normalized - 0.95) / 0.05;
+                return [255, Math.floor(t * 255), Math.floor(t * 255)];
+            }
+
+            function drawAtlasOverlay(meta) {
+                const ctx = dom.atlasOverlayCanvas.getContext('2d');
+                const width = dom.atlasOverlayCanvas.width;
+                const height = dom.atlasOverlayCanvas.height;
+                ctx.clearRect(0, 0, width, height);
 
                 const [minX, minY, maxX, maxY] = meta.bounds;
                 const spanX = maxX - minX;
                 const spanY = maxY - minY;
-
-                const zColors = { 10: '#3498db', 11: '#2ecc71', 12: '#f1c40f', 13: '#e67e22', 14: '#e74c3c', 15: '#9b59b6' };
-
-                meta.tiles.forEach(t => {
-                    const scale = 1 << t.z;
-                    const tx = t.x / scale;
-                    const ty = t.y / scale;
-                    const tw = 1 / scale;
-                    const th = 1 / scale;
-
-                    const relX = (tx - minX) / spanX;
-                    const relY = (ty - minY) / spanY;
-                    const relW = tw / spanX;
-                    const relH = th / spanY;
-
-                    const px = relX * 400;
-                    const py = relY * 400;
-                    const pw = relW * 400;
-                    const ph = relH * 400;
-
-                    const color = zColors[t.z] || '#ffffff';
-                    oCtx.strokeStyle = color;
-                    oCtx.lineWidth = 2;
-                    oCtx.strokeRect(px, py, pw, ph);
-
-                    oCtx.fillStyle = color;
-                    oCtx.font = "bold 10px monospace";
-                    oCtx.fillText(`Z${t.z}`, px + 4, py + 12);
-                });
-
-                // --- Draw Camera and Sun Vectors ---
-                const center = map.getCenter();
-                let mx = (center.lng + 180) / 360;
-                const sin = Math.sin(center.lat * Math.PI / 180);
-                let my = 0.5 - 0.25 * Math.log((1 + sin) / (1 - sin)) / Math.PI;
-                mx = mx - Math.floor(mx); // Normalize wrap
-
-                const cX = ((mx - minX) / spanX) * 400;
-                const cY = ((my - minY) / spanY) * 400;
-
-                // Camera Position (Magenta)
-                oCtx.fillStyle = '#ff00ff';
-                oCtx.beginPath();
-                oCtx.arc(cX, cY, 4, 0, Math.PI * 2);
-                oCtx.fill();
-
-                // Camera view direction
-                const bearing = map.getBearing() * Math.PI / 180;
-                const dirX = Math.sin(bearing);
-                const dirY = -Math.cos(bearing); // WebMercator -Y is North
-                oCtx.strokeStyle = '#ff00ff';
-                oCtx.lineWidth = 2;
-                oCtx.beginPath();
-                oCtx.moveTo(cX, cY);
-                oCtx.lineTo(cX + dirX * 30, cY + dirY * 30);
-                oCtx.stroke();
-
-                // Sun Direction (Yellow)
-                const dateElem = document.getElementById('date-input');
-                const timeElem = document.getElementById('time-input');
-                if (dateElem && timeElem && window.SunCalc) {
-                    const dList = dateElem.value.split('-');
-                    const timeVal = parseFloat(timeElem.value);
-                    const hours = Math.floor(timeVal);
-                    const mins = Math.floor((timeVal - hours) * 60);
-
-                    if (dList.length === 3) {
-                        const dt = new Date(dList[0], parseInt(dList[1]) - 1, dList[2], hours, mins, 0);
-                        const sunPos = SunCalc.getPosition(dt, center.lat, center.lng);
-                        const sunAzimuth = sunPos.azimuth + Math.PI; // North-relative Azimuth
-
-                        // Pointing TOWARDS the sun source
-                        const sunDirX = Math.sin(sunAzimuth);
-                        const sunDirY = -Math.cos(sunAzimuth);
-
-                        oCtx.strokeStyle = '#f1c40f'; // Yellow
-                        oCtx.lineWidth = 2;
-                        oCtx.beginPath();
-                        oCtx.moveTo(cX, cY);
-                        oCtx.lineTo(cX + sunDirX * 50, cY + sunDirY * 50);
-                        oCtx.stroke();
-
-                        // Sun Icon at the end of the line
-                        oCtx.fillStyle = '#f1c40f';
-                        oCtx.beginPath();
-                        oCtx.arc(cX + sunDirX * 50, cY + sunDirY * 50, 4, 0, Math.PI * 2);
-                        oCtx.fill();
-                    }
+                if (spanX <= 0 || spanY <= 0) {
+                    drawAtlasMessage('Atlas bounds have zero area.');
+                    return;
                 }
 
+                const zColors = {
+                    10: '#3498db',
+                    11: '#2ecc71',
+                    12: '#f1c40f',
+                    13: '#e67e22',
+                    14: '#e74c3c',
+                    15: '#9b59b6',
+                    16: '#ecf0f1'
+                };
+
+                (meta.tiles || []).forEach(tile => {
+                    const scale = 1 << tile.z;
+                    const tx = tile.x / scale;
+                    const ty = tile.y / scale;
+                    const tw = 1 / scale;
+                    const th = 1 / scale;
+                    const px = ((tx - minX) / spanX) * width;
+                    const py = ((ty - minY) / spanY) * height;
+                    const pw = (tw / spanX) * width;
+                    const ph = (th / spanY) * height;
+                    const color = zColors[tile.z] || '#ffffff';
+
+                    ctx.strokeStyle = color;
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(px, py, pw, ph);
+                    ctx.fillStyle = color;
+                    ctx.font = 'bold 10px ui-monospace, Menlo, Consolas, monospace';
+                    ctx.fillText(`Z${tile.z}`, px + 4, py + 12);
+                });
+
+                const center = state.map.getCenter();
+                const mercator = lngLatToMercator01(center.lng, center.lat);
+                const cX = ((mercator.x - minX) / spanX) * width;
+                const cY = ((mercator.y - minY) / spanY) * height;
+
+                drawVector(ctx, cX, cY, mapBearingVector(), 30, '#ff00ff', 4);
+
+                const date = getSelectedDateTime();
+                if (date) {
+                    const sun = computeSun(date, center);
+                    const radians = sun.azimuth * Math.PI / 180;
+                    drawVector(ctx, cX, cY, {
+                        x: Math.sin(radians),
+                        y: -Math.cos(radians)
+                    }, 50, '#f1c40f', 4);
+                }
             }
-        });
+
+            function lngLatToMercator01(lng, lat) {
+                const sin = Math.sin(lat * Math.PI / 180);
+                return {
+                    x: ((lng + 180) / 360) % 1,
+                    y: 0.5 - 0.25 * Math.log((1 + sin) / (1 - sin)) / Math.PI
+                };
+            }
+
+            function mapBearingVector() {
+                const bearing = state.map.getBearing() * Math.PI / 180;
+                return {
+                    x: Math.sin(bearing),
+                    y: -Math.cos(bearing)
+                };
+            }
+
+            function drawVector(ctx, x, y, dir, length, color, dotRadius) {
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(x, y);
+                ctx.lineTo(x + dir.x * length, y + dir.y * length);
+                ctx.stroke();
+                ctx.fillStyle = color;
+                ctx.beginPath();
+                ctx.arc(x, y, dotRadius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(x + dir.x * length, y + dir.y * length, dotRadius, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            window._shadowDebugMode = 0;
+            window._isInteractingWithTime = false;
+            window._shadowCameraMoving = false;
+            window._shadowCameraRefreshHold = false;
+            window._shadowProgressivePhase = 'stable';
+
+            installControls();
+            installMap();
+            updateFpsCounter();
+        })();
     </script>
 </body>
 

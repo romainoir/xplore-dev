@@ -46,12 +46,16 @@ export type TerrainUniformsType = {
     'u_shadow_intensity': Uniform1f;
     'u_debug_mode': Uniform1i;
     'u_cast_shadow_mult': Uniform1f;
+    'u_igor_relief_enabled': Uniform1f;
     'u_sun_altitude': Uniform1f;
     'u_sun_direction': Uniform2f;
     'u_dem_ao': Uniform1i;
     'u_dem_ao_dim': Uniform1f;
     'u_dem_ao_unpack': Uniform4f;
     'u_dem_ao_exag': Uniform1f;
+    'u_dem_ao_meters_per_pixel': Uniform1f;
+    'u_dem_derivative': Uniform1i;
+    'u_dem_derivative_available': Uniform1f;
     'u_elevation_atlas': Uniform1i;
     'u_metersPerPixel': Uniform1f;
     'u_max_steps': Uniform1f;
@@ -59,6 +63,7 @@ export type TerrainUniformsType = {
     'u_shadow_soft_base': Uniform1f;
     'u_shadow_soft_mult': Uniform1f;
     'u_shadow_soft_max': Uniform1f;
+    'u_self_shadow_mult': Uniform1f;
 };
 
 export type TerrainElevationUniformsType = {
@@ -106,12 +111,16 @@ const terrainUniforms = (context: Context, locations: UniformLocations): Terrain
     'u_shadow_intensity': new Uniform1f(context, locations.u_shadow_intensity),
     'u_debug_mode': new Uniform1i(context, locations.u_debug_mode),
     'u_cast_shadow_mult': new Uniform1f(context, locations.u_cast_shadow_mult),
+    'u_igor_relief_enabled': new Uniform1f(context, locations.u_igor_relief_enabled),
     'u_sun_altitude': new Uniform1f(context, locations.u_sun_altitude),
     'u_sun_direction': new Uniform2f(context, locations.u_sun_direction),
     'u_dem_ao': new Uniform1i(context, locations.u_dem_ao),
     'u_dem_ao_dim': new Uniform1f(context, locations.u_dem_ao_dim),
     'u_dem_ao_unpack': new Uniform4f(context, locations.u_dem_ao_unpack),
     'u_dem_ao_exag': new Uniform1f(context, locations.u_dem_ao_exag),
+    'u_dem_ao_meters_per_pixel': new Uniform1f(context, locations.u_dem_ao_meters_per_pixel),
+    'u_dem_derivative': new Uniform1i(context, locations.u_dem_derivative),
+    'u_dem_derivative_available': new Uniform1f(context, locations.u_dem_derivative_available),
     'u_elevation_atlas': new Uniform1i(context, locations.u_elevation_atlas),
     'u_metersPerPixel': new Uniform1f(context, locations.u_metersPerPixel),
     'u_max_steps': new Uniform1f(context, locations.u_max_steps),
@@ -119,6 +128,7 @@ const terrainUniforms = (context: Context, locations: UniformLocations): Terrain
     'u_shadow_soft_base': new Uniform1f(context, locations.u_shadow_soft_base),
     'u_shadow_soft_mult': new Uniform1f(context, locations.u_shadow_soft_mult),
     'u_shadow_soft_max': new Uniform1f(context, locations.u_shadow_soft_max),
+    'u_self_shadow_mult': new Uniform1f(context, locations.u_self_shadow_mult),
 });
 
 const terrainElevationUniforms = (context: Context, locations: UniformLocations): TerrainElevationUniformsType => ({
@@ -204,8 +214,12 @@ const terrainUniformValues = (
             return typeof opacity === 'number' ? opacity : 1.0;
         })(),
         'u_debug_mode': (typeof window !== 'undefined' && (window as any)._shadowDebugMode) ? (window as any)._shadowDebugMode : 0,
-        'u_cast_shadow_mult': (typeof window !== 'undefined' && (window as any)._castShadowMult !== undefined) ? (window as any)._castShadowMult : 3.0,
+        'u_cast_shadow_mult': (typeof window !== 'undefined' && (window as any)._castShadowMult !== undefined) ? (window as any)._castShadowMult : 1.8,
+        'u_igor_relief_enabled': 1.0,
         'u_sun_altitude': (() => {
+            if (typeof window !== 'undefined' && (window as any)._actualSunAltitudeRad !== undefined) {
+                return (window as any)._actualSunAltitudeRad;
+            }
             const sl = painter?.style?.getLayer('shadow-coarse') as any;
             return sl?.getShadowProperties ? sl.getShadowProperties().altitudeRadians : 0.5;
         })(),
@@ -219,6 +233,9 @@ const terrainUniformValues = (
         'u_dem_ao_dim': 514.0,  // Default, overridden per-tile in drawTerrain
         'u_dem_ao_unpack': [6553.6, 25.6, 0.1, 10000.0], // Default Mapbox DEM unpack
         'u_dem_ao_exag': 1.3, // Default, overridden per-tile in drawTerrain
+        'u_dem_ao_meters_per_pixel': 40075016.7 / (512 * Math.pow(2, tile ? tile.tileID.canonical.z : zoom)),
+        'u_dem_derivative': 12,
+        'u_dem_derivative_available': 0,
         'u_elevation_atlas': 14, // Bind elevation atlas to unit 14
         'u_metersPerPixel': 40075016.7 / (512 * Math.pow(2, tile ? tile.tileID.canonical.z : zoom)),
         'u_max_steps': (() => {
@@ -236,6 +253,7 @@ const terrainUniformValues = (
         'u_shadow_soft_base': (typeof window !== 'undefined' && (window as any)._shadowSoftBase !== undefined) ? (window as any)._shadowSoftBase : 10.0,
         'u_shadow_soft_mult': (typeof window !== 'undefined' && (window as any)._shadowSoftMult !== undefined) ? (window as any)._shadowSoftMult : 10.0,
         'u_shadow_soft_max': (typeof window !== 'undefined' && (window as any)._shadowSoftMax !== undefined) ? (window as any)._shadowSoftMax : 100.0,
+        'u_self_shadow_mult': (typeof window !== 'undefined' && (window as any)._selfShadowMult !== undefined) ? (window as any)._selfShadowMult : 1.0,
     };
 };
 

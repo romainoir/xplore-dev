@@ -109,6 +109,7 @@ export class Terrain {
     _fboElevationTexture: Texture;
     _fboShadowTexture: Texture;
     _fboShadowBlurTexture: Texture;
+    _fboDaylightTexture: Texture;
     _emptyDepthTexture: Texture;
     /**
      * GL Objects for the terrain-mesh
@@ -268,14 +269,14 @@ export class Terrain {
             const dy = tileID.canonical.y - (tileID.canonical.y >> dz << dz);
             const demMatrix = mat4.fromScaling(new Float64Array(16) as any, [1 / (EXTENT << dz), 1 / (EXTENT << dz), 0]);
             mat4.translate(demMatrix, demMatrix, [dx * EXTENT, dy * EXTENT, 0]);
-            this._demMatrixCache[tileID.key] = { matrix: demMatrix, coord: tileID };
+            this._demMatrixCache[matrixKey] = { matrix: demMatrix, coord: tileID };
         }
         // return uniform values & textures
         return {
             'u_depth': 2,
             'u_terrain': 3,
             'u_terrain_dim': sourceTile && sourceTile.dem && sourceTile.dem.dim || 1,
-            'u_terrain_matrix': matrixKey ? this._demMatrixCache[tileID.key].matrix : this._emptyDemMatrix,
+            'u_terrain_matrix': matrixKey ? this._demMatrixCache[matrixKey].matrix : this._emptyDemMatrix,
             'u_terrain_unpack': sourceTile && sourceTile.dem && sourceTile.dem.getUnpackVector() || this._emptyDemUnpack,
             'u_terrain_exaggeration': this.exaggeration,
             texture: (sourceTile && sourceTile.demTexture || this._emptyDemTexture).texture,
@@ -292,6 +293,7 @@ export class Terrain {
     _fboElevation: Framebuffer;
     _fboShadow: Framebuffer;
     _fboShadowBlur: Framebuffer;
+    _fboDaylight: Framebuffer;
     static readonly ATLAS_SIZE = 2048;
 
     getFramebuffer(texture: string): Framebuffer {
@@ -305,18 +307,27 @@ export class Terrain {
             if (this._fboElevationTexture) this._fboElevationTexture.destroy();
             if (this._fboShadowTexture) this._fboShadowTexture.destroy();
             if (this._fboShadowBlurTexture) this._fboShadowBlurTexture.destroy();
+            if (this._fboDaylightTexture) this._fboDaylightTexture.destroy();
             if (this._fboElevation) this._fboElevation.destroy();
             if (this._fboShadow) this._fboShadow.destroy();
             if (this._fboShadowBlur) this._fboShadowBlur.destroy();
+            if (this._fboDaylight) this._fboDaylight.destroy();
             delete this._fbo;
             delete this._fboDepthTexture;
             delete this._fboElevationTexture;
             delete this._fboShadowTexture;
             delete this._fboShadowBlurTexture;
+            delete this._fboDaylightTexture;
             delete this._fboCoordsTexture;
             delete this._fboElevation;
             delete this._fboShadow;
             delete this._fboShadowBlur;
+            delete this._fboDaylight;
+            delete (this as any)._shadowAtlasReady;
+            delete (this as any)._daylightAtlasReady;
+            delete (this as any)._daylightAtlasKey;
+            delete (this as any)._shadowAtlasReusedWhileMoving;
+            delete (this as any)._shadowAtlasNeedsRefreshAfterCameraMove;
         }
         if (!this._fboCoordsTexture) {
             this._fboCoordsTexture = new Texture(painter.context, { width, height, data: null }, painter.context.gl.RGBA, { premultiply: false });
@@ -330,15 +341,21 @@ export class Terrain {
         const atlasSize = Terrain.ATLAS_SIZE;
         if (!this._fboElevationTexture) {
             this._fboElevationTexture = new Texture(painter.context, { width: atlasSize, height: atlasSize, data: null }, painter.context.gl.RGBA, { premultiply: false });
-            this._fboElevationTexture.bind(painter.context.gl.LINEAR, painter.context.gl.CLAMP_TO_EDGE);
+            // The elevation atlas stores a packed float in RGBA channels. Hardware linear
+            // filtering corrupts the packed bytes, so shaders do their own bilinear decode.
+            this._fboElevationTexture.bind(painter.context.gl.NEAREST, painter.context.gl.CLAMP_TO_EDGE);
         }
         if (!this._fboShadowTexture) {
-            this._fboShadowTexture = new Texture(painter.context, { width, height, data: null }, painter.context.gl.RGBA, { premultiply: false });
+            this._fboShadowTexture = new Texture(painter.context, { width: atlasSize, height: atlasSize, data: null }, painter.context.gl.RGBA, { premultiply: false });
             this._fboShadowTexture.bind(painter.context.gl.LINEAR, painter.context.gl.CLAMP_TO_EDGE);
         }
         if (!this._fboShadowBlurTexture) {
-            this._fboShadowBlurTexture = new Texture(painter.context, { width, height, data: null }, painter.context.gl.RGBA, { premultiply: false });
+            this._fboShadowBlurTexture = new Texture(painter.context, { width: atlasSize, height: atlasSize, data: null }, painter.context.gl.RGBA, { premultiply: false });
             this._fboShadowBlurTexture.bind(painter.context.gl.LINEAR, painter.context.gl.CLAMP_TO_EDGE);
+        }
+        if (!this._fboDaylightTexture) {
+            this._fboDaylightTexture = new Texture(painter.context, { width: atlasSize, height: atlasSize, data: null }, painter.context.gl.RGBA, { premultiply: false });
+            this._fboDaylightTexture.bind(painter.context.gl.LINEAR, painter.context.gl.CLAMP_TO_EDGE);
         }
         if (!this._fbo) {
             this._fbo = painter.context.createFramebuffer(width, height, true, false);
@@ -367,6 +384,13 @@ export class Terrain {
             }
             this._fboShadowBlur.colorAttachment.set(this._fboShadowBlurTexture.texture);
             return this._fboShadowBlur;
+        }
+        if (texture === 'daylight') {
+            if (!this._fboDaylight) {
+                this._fboDaylight = painter.context.createFramebuffer(atlasSize, atlasSize, false, false);
+            }
+            this._fboDaylight.colorAttachment.set(this._fboDaylightTexture.texture);
+            return this._fboDaylight;
         }
 
         this._fbo.colorAttachment.set(texture === 'coords' ? this._fboCoordsTexture.texture :

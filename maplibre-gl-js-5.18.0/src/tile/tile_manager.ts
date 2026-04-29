@@ -661,61 +661,164 @@ export class TileManager extends Evented {
     }
 
     /**
-     * Add fixed Z10 grandparent tiles around the camera center to guarantee
-     * shadows from distant peaks even when looking down into a valley.
+     * Add a bounded, zoom-stable grid of DEM tiles for the global shadow atlas.
+     * This keeps the atlas loader aligned with the renderer's target LOD instead
+     * of retaining a fluctuating mixture of detailed children and coarse parents.
      */
     _addShadowOverscanTiles(idealTileIDs: OverscaledTileID[]): OverscaledTileID[] {
         const result = [...idealTileIDs];
         const seen = new Set<string>(idealTileIDs.map(t => t.key));
+        if (!this.transform || idealTileIDs.length === 0) return result;
 
-        const center = this.transform.center;
+        const worldCircumference = 40075016.7;
+        const shadowReachMeters = 5000;
+        const midShadowReachMeters = 2200;
+        const maxShadowTiles = 96;
+        const maxCoreTiles = 48;
+        const maybeSunDir = typeof window !== 'undefined' ? (window as any)._shadowSunDirection : null;
+        const hasSunDir = Array.isArray(maybeSunDir) &&
+            Number.isFinite(maybeSunDir[0]) &&
+            Number.isFinite(maybeSunDir[1]);
+        const sunDx = hasSunDir ? maybeSunDir[0] : 0;
+        const sunDy = hasSunDir ? maybeSunDir[1] : 0;
 
-        // Target Z10 for coarse shadows
-        const Z = 10;
-        // Don't overscan if the source doesn't go up to Z10 (rare)
-        if (this._source.minzoom > Z || this._source.maxzoom < Z) {
+        let referenceZoom = this._source.minzoom;
+        for (const tileID of idealTileIDs) {
+            referenceZoom = Math.max(referenceZoom, tileID.canonical.z);
+        }
+
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        for (const tileID of idealTileIDs) {
+            if (tileID.canonical.z < referenceZoom - 1) continue;
+
+            const scale = 1 << tileID.canonical.z;
+            const x = tileID.wrap + tileID.canonical.x / scale;
+            const y = tileID.canonical.y / scale;
+            const span = 1 / scale;
+            minX = Math.min(minX, x);
+            minY = Math.min(minY, y);
+            maxX = Math.max(maxX, x + span);
+            maxY = Math.max(maxY, y + span);
+        }
+
+        if (!Number.isFinite(minX) || !Number.isFinite(minY) || !Number.isFinite(maxX) || !Number.isFinite(maxY)) {
             return result;
         }
 
-        const scale = 1 << Z;
+        const sourceMinZoom = this._source.minzoom ?? 0;
+        const sourceMaxZoom = this._source.maxzoom ?? 22;
+        const terrainDeltaZoom = this.usedForTerrain && this._source.tileSize ?
+            Math.max(0, Math.round(Math.log2(this.tileSize / this._source.tileSize))) : 0;
+        const visibleBounds = { minX, minY, maxX, maxY };
+        const extendBounds = (bounds: typeof visibleBounds, meters: number) => {
+            const extension = meters / worldCircumference;
+            if (hasSunDir) {
+                return {
+                    minX: sunDx >= 0 ? bounds.minX : bounds.minX - extension,
+                    minY: sunDy >= 0 ? bounds.minY : bounds.minY - extension,
+                    maxX: sunDx >= 0 ? bounds.maxX + extension : bounds.maxX,
+                    maxY: sunDy >= 0 ? bounds.maxY + extension : bounds.maxY
+                };
+            }
+            return {
+                minX: bounds.minX - extension,
+                minY: bounds.minY - extension,
+                maxX: bounds.maxX + extension,
+                maxY: bounds.maxY + extension
+            };
+        };
+        const countCells = (bounds: typeof visibleBounds, zoom: number): number => {
+            const scale = 1 << zoom;
+            const minTileX = Math.floor(bounds.minX * scale);
+            const maxTileX = Math.ceil(bounds.maxX * scale) - 1;
+            const minTileY = Math.max(0, Math.min(scale - 1, Math.floor(bounds.minY * scale)));
+            const maxTileY = Math.max(0, Math.min(scale - 1, Math.ceil(bounds.maxY * scale) - 1));
+            if (maxTileX < minTileX || maxTileY < minTileY) return 0;
+            return (maxTileX - minTileX + 1) * (maxTileY - minTileY + 1);
+        };
+        const chooseZoom = (bounds: typeof visibleBounds, maxTiles: number) => {
+            let zoom = Math.max(sourceMinZoom, Math.min(sourceMaxZoom, Math.floor(this.transform.zoom) - terrainDeltaZoom));
+            while (zoom > sourceMinZoom && countCells(bounds, zoom) > maxTiles) zoom--;
+            return zoom;
+        };
+        const tileBounds = (tileID: OverscaledTileID) => {
+            const scale = 1 << tileID.canonical.z;
+            const span = 1 / scale;
+            const x = tileID.wrap + tileID.canonical.x / scale;
+            const y = tileID.canonical.y / scale;
+            return { minX: x, minY: y, maxX: x + span, maxY: y + span };
+        };
+        const boundsContain = (outer: typeof visibleBounds, inner: typeof visibleBounds): boolean => {
+            const epsilon = 1e-12;
+            return inner.minX >= outer.minX - epsilon &&
+                inner.minY >= outer.minY - epsilon &&
+                inner.maxX <= outer.maxX + epsilon &&
+                inner.maxY <= outer.maxY + epsilon;
+        };
 
-        // Compute Mercator Coordinate manually to avoid import issues
-        let x = (center.lng + 180) / 360;
-        const sin = Math.sin(center.lat * Math.PI / 180);
-        let y = 0.5 - 0.25 * Math.log((1 + sin) / (1 - sin)) / Math.PI;
+        const coreZoom = chooseZoom(visibleBounds, maxCoreTiles);
+        let midZoom = Math.max(sourceMinZoom, coreZoom - 1);
+        let farZoom = Math.max(sourceMinZoom, coreZoom - 2);
 
-        const wrap = Math.floor(x);
-        x = x - wrap;
-        y = Math.max(0, Math.min(1, y));
+        const collect = () => {
+            const extra: OverscaledTileID[] = [];
+            const extraSeen = new Set<string>();
+            const coveredBounds: Array<typeof visibleBounds> = [];
+            const addBand = (bounds: typeof visibleBounds, zoom: number, skipCovered: boolean) => {
+                const scale = 1 << zoom;
+                const minTileX = Math.floor(bounds.minX * scale);
+                const maxTileX = Math.ceil(bounds.maxX * scale) - 1;
+                const minTileY = Math.max(0, Math.min(scale - 1, Math.floor(bounds.minY * scale)));
+                const maxTileY = Math.max(0, Math.min(scale - 1, Math.ceil(bounds.maxY * scale) - 1));
+                const quantizedBounds = {
+                    minX: minTileX / scale,
+                    minY: minTileY / scale,
+                    maxX: (maxTileX + 1) / scale,
+                    maxY: (maxTileY + 1) / scale
+                };
+                let coveredCells = 0;
 
-        const cx = Math.floor(x * scale);
-        const cy = Math.floor(y * scale);
+                for (let rawX = minTileX; rawX <= maxTileX; rawX++) {
+                    const wrap = Math.floor(rawX / scale);
+                    const x = ((rawX % scale) + scale) % scale;
 
-        // 5x5 Grid around the camera
-        for (let dx = -2; dx <= 2; dx++) {
-            for (let dy = -2; dy <= 2; dy++) {
-                let nx = cx + dx;
-                const ny = cy + dy;
-                let w = wrap;
-
-                if (ny >= 0 && ny < scale) { // y-bounds
-                    // Wrap X across worlds
-                    if (nx < 0) {
-                        nx += scale;
-                        w -= 1;
-                    } else if (nx >= scale) {
-                        nx -= scale;
-                        w += 1;
-                    }
-
-                    const overscanID = new OverscaledTileID(Z, w, Z, nx, ny);
-                    if (!seen.has(overscanID.key)) {
-                        seen.add(overscanID.key);
-                        result.push(overscanID);
+                    for (let y = minTileY; y <= maxTileY; y++) {
+                        const overscanID = new OverscaledTileID(zoom, wrap, zoom, x, y);
+                        const bounds = tileBounds(overscanID);
+                        if (skipCovered && coveredBounds.some(covered => boundsContain(covered, bounds))) {
+                            continue;
+                        }
+                        coveredCells++;
+                        if (!seen.has(overscanID.key) && !extraSeen.has(overscanID.key)) {
+                            extraSeen.add(overscanID.key);
+                            extra.push(overscanID);
+                        }
                     }
                 }
-            }
+
+                if (coveredCells > 0) {
+                    coveredBounds.push(quantizedBounds);
+                }
+            };
+
+            addBand(visibleBounds, coreZoom, false);
+            addBand(extendBounds(visibleBounds, midShadowReachMeters), midZoom, true);
+            addBand(extendBounds(visibleBounds, shadowReachMeters), farZoom, true);
+            return extra;
+        };
+
+        let extra = collect();
+        while (extra.length > maxShadowTiles && (farZoom > sourceMinZoom || midZoom > sourceMinZoom)) {
+            if (farZoom > sourceMinZoom) farZoom--;
+            else midZoom--;
+            extra = collect();
         }
+
+        for (const tileID of extra) {
+            seen.add(tileID.key);
+            result.push(tileID);
+        }
+
         return result;
     }
 

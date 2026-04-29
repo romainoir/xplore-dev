@@ -225,7 +225,26 @@ export function drawShadow(
     tileIDs: Array<OverscaledTileID>,
     renderOptions: RenderOptions
 ) {
+    const terrain = painter.style.map.terrain;
+    const isCoarseGlobalShadow = layer.id.toLowerCase().indexOf('coarse') !== -1;
+    const cameraRefreshHeld = typeof window !== 'undefined' && (window as any)._shadowCameraRefreshHold;
+    const cameraMoving = (painter.options.moving || cameraRefreshHeld) && !(typeof window !== 'undefined' && (window as any)._isInteractingWithTime);
+    const canUseCachedShadow = cameraMoving && isCoarseGlobalShadow && !!(terrain as any)?._shadowAtlasReady;
+
     if (painter.renderPass === 'offscreen') {
+        if (canUseCachedShadow) {
+            if (typeof window !== 'undefined' && (window as any)._shadowTileDebugEnabled) {
+                (window as any)._shadowOffscreenDebug = {
+                    layer: layer.id,
+                    skippedCachedWhileMoving: true,
+                    refreshHeld: !!cameraRefreshHeld,
+                    inputTiles: tileIDs.length,
+                    timestamp: performance.now()
+                };
+            }
+            return;
+        }
+
         // Copy 18's critical offscreen pass: ensure ALL tiles have demTexture
         // This runs BEFORE the translucent pass where neighbor tiles need textures.
         // Without this, neighbor tiles at different zoom levels may not have GPU textures.
@@ -338,6 +357,22 @@ function renderShadowTiles(
     // OPTIMIZATION: If this is the coarse shadow layer (Z12), use the Global Sweep pass.
     // This kills the O(N^2) neighbor-sampling redundancy and tile-loop overhead.
     if (layer.id.toLowerCase().indexOf('coarse') !== -1) {
+        const terrain = painter.style.map.terrain;
+        const cameraRefreshHeld = typeof window !== 'undefined' && (window as any)._shadowCameraRefreshHold;
+        const cameraMoving = (painter.options.moving || cameraRefreshHeld) && !(typeof window !== 'undefined' && (window as any)._isInteractingWithTime);
+        if (cameraMoving && !!(terrain as any)?._shadowAtlasReady) {
+            (terrain as any)._shadowAtlasReusedWhileMoving = true;
+            if (typeof window !== 'undefined' && (window as any)._shadowTileDebugEnabled) {
+                (window as any)._shadowPassDebug = {
+                    skipped: true,
+                    reason: cameraRefreshHeld ? 'cached shadow during post-move settle' : 'cached shadow while camera moving',
+                    refreshHeld: !!cameraRefreshHeld,
+                    durationMs: 0,
+                    timestamp: performance.now()
+                };
+            }
+            return;
+        }
         drawGlobalShadow(painter, layer);
         return;
     }
@@ -368,12 +403,11 @@ function renderShadowTiles(
         const shadowMode = (globalThis as any)._shadowMode || 0; // 0: 8-neighbors, 1: 3-neighbors
 
         if (shadowMode === 0 || isGPDebug) {
-            const offsets = [[0, -1], [1, -1], [1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1]];
             const gpJump = coord.canonical.z > 12 ? (1 << (coord.canonical.z - 12)) : 1;
 
-            for (let i = 0; i < 8; i++) {
+            for (let i = 0; i < 3; i++) {
                 context.activeTexture.set(gl.TEXTURE4 + i);
-                const off = offsets[i];
+                const off = neighborOffsets[i];
 
                 // If GP debug mode is on, we fetch Z12 neighbors instead of local ones
                 const info = isGPDebug
@@ -392,7 +426,7 @@ function renderShadowTiles(
                 }
             }
         } else {
-            for (let i = 0; i < 8; i++) neighborZoomInfos.push([0.0, 0.0, 0.0, 0.0]);
+            for (let i = 0; i < 3; i++) neighborZoomInfos.push([0.0, 0.0, 0.0, 0.0]);
         }
 
         // Center Tile Raw Backup -> Unit 1
@@ -472,6 +506,8 @@ export function drawGlobalShadow(
     painter: Painter,
     layer: ShadowStyleLayer
 ) {
+    const debugEnabled = typeof window !== 'undefined' && (window as any)._shadowTileDebugEnabled;
+    const debugStart = debugEnabled ? performance.now() : 0;
     const context = painter.context;
     const gl = context.gl;
     const transform = painter.transform;
@@ -512,6 +548,24 @@ export function drawGlobalShadow(
     context.viewport.set([0, 0, terrain._fboShadowTexture.size[0], terrain._fboShadowTexture.size[1]]);
     context.clear({ color: Color.transparent }); // Clear to no shadow (0)
 
+    const opacity = layer.paint.get('shadow-opacity') as number;
+    if (typeof opacity === 'number' && opacity <= 0.003 && (globalThis as any)._shadowDebugMode !== 2) {
+        context.bindFramebuffer.set(null);
+        context.viewport.set([0, 0, painter.width, painter.height]);
+        (terrain as any)._shadowAtlasReady = true;
+        (terrain as any)._shadowAtlasReusedWhileMoving = false;
+        if (debugEnabled) {
+            (window as any)._shadowPassDebug = {
+                skipped: true,
+                reason: 'shadow opacity <= 0',
+                durationMs: performance.now() - debugStart,
+                atlasPixelSize,
+                timestamp: performance.now()
+            };
+        }
+        return;
+    }
+
     // Bind Elevation Atlas to Unit 0
     context.activeTexture.set(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, terrain._fboElevationTexture.texture);
@@ -526,26 +580,40 @@ export function drawGlobalShadow(
         uniformValues, null, null, layer.id, painter.rasterBoundsBuffer,
         painter.quadTriangleIndexBuffer, painter.rasterBoundsSegments);
 
-    // 3. Apply Multi-Pass Gaussian Blur to soften edges
-    // CRISP RAYMARCHING OVERRIDE: 
-    // The user requested mathematically precise, razor-sharp aliased shadows rather than smoothed ones.
-    // By skipping the intense 2-pass 2048x2048 blur entirely, we save massive GPU cycles,
-    // which were re-invested into bumping the raymarch steps from 128 to 256 for sub-pixel precision.
-    // However, during interaction, we drop the steps to a proxy 8 (fast but blocky).
-    // So we apply the fast blur ONLY during interaction to mask the blockiness!
-
-    const isMapMoving = painter.options.moving;
+    // Optional atlas-space blur is intentionally disabled by default. Shadow
+    // contacts are cleaned in the terrain shader with derivative-aware remap
+    // and a tiny edge-only atlas filter, which preserves silhouettes better
+    // than rounding the whole atlas.
     const isTimeSliding = typeof window !== 'undefined' && (window as any)._isInteractingWithTime;
-
-    // PROGRESSIVE RENDER: Soft Gaussian blur applied when Idle or Panning.
-    // Time sliding skips blur to avoid frame lag.
-    if (!isTimeSliding) {
+    const progressivePhase = typeof window !== 'undefined' ? (window as any)._shadowProgressivePhase : '';
+    const isProgressivePreview = progressivePhase === 'preview';
+    const useEdgeCleanup = typeof window !== 'undefined' && (window as any)._shadowEdgeCleanup === true;
+    const blurStart = debugEnabled ? performance.now() : 0;
+    if (useEdgeCleanup && !isTimeSliding && !isProgressivePreview) {
         drawGlobalShadowBlur(painter);
     }
+    const blurMs = debugEnabled && useEdgeCleanup && !isTimeSliding && !isProgressivePreview ? performance.now() - blurStart : 0;
 
     // Unbind FBO to prevent feedback loop when terrain shader samples the shadow texture
     context.bindFramebuffer.set(null);
     context.viewport.set([0, 0, painter.width, painter.height]);
+    (terrain as any)._shadowAtlasReady = true;
+    (terrain as any)._shadowAtlasReusedWhileMoving = false;
+
+    if (debugEnabled) {
+        (window as any)._shadowPassDebug = {
+            durationMs: performance.now() - debugStart,
+            blurMs,
+            maxSteps: uniformValues['u_max_steps'],
+            stepMeters: uniformValues['u_step_meters'],
+            maxDistance: uniformValues['u_max_distance'],
+            atlasPixelSize,
+            metersPerPixelX,
+            metersPerPixelY,
+            progressivePhase: isProgressivePreview ? 'preview' : progressivePhase === 'full' ? 'full' : 'stable',
+            timestamp: performance.now()
+        };
+    }
 }
 
 /**
@@ -604,12 +672,14 @@ export function prepareShadow(
 ) {
     const context = painter.context;
     const gl = context.gl;
+    const prepCtx = buildNeighborContext(painter, tileManager);
 
     for (const coord of tileIDs) {
         const tile = tileManager.getTile(coord);
         const dem = tile.dem;
+        const needsPrepare = tile.needsHorizonPrepare || !tile.horizonTexture || !tile.horizonFBO;
 
-        if (!dem || !dem.data || !tile.needsHorizonPrepare) {
+        if (!dem || !dem.data || !needsPrepare) {
             continue;
         }
 
@@ -671,22 +741,31 @@ export function prepareShadow(
             const dirY = -Math.cos(primaryAzimuth);
             const neighborOffsets = getSunFacingNeighborOffsets(dirX, dirY);
 
-            const prepCtx = buildNeighborContext(painter, tileManager);
             const [lateralOff, longOff, diagOff] = neighborOffsets;
-            const lateralTile = (lateralOff[0] !== 0 || lateralOff[1] !== 0) ? getNeighborTile(prepCtx, coord, lateralOff[0], lateralOff[1]) : null;
-            const longTile = (longOff[0] !== 0 || longOff[1] !== 0) ? getNeighborTile(prepCtx, coord, longOff[0], longOff[1]) : null;
-            const diagTile = (diagOff[0] !== 0 || diagOff[1] !== 0) ? getNeighborTile(prepCtx, coord, diagOff[0], diagOff[1]) : null;
+
+            // The shader hardcodes u_dem_west to the X-axis neighbor (TEXTURE1)
+            // and u_dem_north to the Y-axis neighbor (TEXTURE2).
+            const xAxisOff = lateralOff[0] !== 0 ? lateralOff : longOff;
+            const yAxisOff = lateralOff[1] !== 0 ? lateralOff : longOff;
+
+            const xInfo = (xAxisOff[0] !== 0) ? getNeighborTileWithZoom(prepCtx, coord, xAxisOff[0], xAxisOff[1]) : { tile: null, zoomInfo: [1.0, 0.0, 0.0, 0.0] as [number, number, number, number] };
+            const yInfo = (yAxisOff[1] !== 0) ? getNeighborTileWithZoom(prepCtx, coord, yAxisOff[0], yAxisOff[1]) : { tile: null, zoomInfo: [1.0, 0.0, 0.0, 0.0] as [number, number, number, number] };
+            const diagInfo = (diagOff[0] !== 0 || diagOff[1] !== 0) ? getNeighborTileWithZoom(prepCtx, coord, diagOff[0], diagOff[1]) : { tile: null, zoomInfo: [1.0, 0.0, 0.0, 0.0] as [number, number, number, number] };
+
+            const xTile = xInfo.tile;
+            const yTile = yInfo.tile;
+            const diagTile = diagInfo.tile;
 
             context.activeTexture.set(gl.TEXTURE0);
             tile.demTexture.bind(gl.NEAREST, gl.CLAMP_TO_EDGE);
 
             context.activeTexture.set(gl.TEXTURE1);
-            const lTex = lateralTile ? ensureDemTexture(painter, lateralTile) : null;
-            if (lTex) lTex.bind(gl.NEAREST, gl.CLAMP_TO_EDGE);
+            const xTex = xTile ? ensureDemTexture(painter, xTile) : null;
+            if (xTex) xTex.bind(gl.NEAREST, gl.CLAMP_TO_EDGE);
 
             context.activeTexture.set(gl.TEXTURE2);
-            const loTex = longTile ? ensureDemTexture(painter, longTile) : null;
-            if (loTex) loTex.bind(gl.NEAREST, gl.CLAMP_TO_EDGE);
+            const yTex = yTile ? ensureDemTexture(painter, yTile) : null;
+            if (yTex) yTex.bind(gl.NEAREST, gl.CLAMP_TO_EDGE);
 
             context.activeTexture.set(gl.TEXTURE3);
             const dTex = diagTile ? ensureDemTexture(painter, diagTile) : null;
@@ -694,7 +773,8 @@ export function prepareShadow(
 
             const uniformValues = shadowPrepareUniformValues(
                 tile, dem, baseAzimuth, azimuthStep,
-                !!lateralTile, !!longTile, !!diagTile
+                !!xTex, !!yTex, !!dTex,
+                xInfo.zoomInfo, yInfo.zoomInfo, diagInfo.zoomInfo
             );
 
             program.draw(context, gl.TRIANGLES,

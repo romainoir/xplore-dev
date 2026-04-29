@@ -20,6 +20,7 @@ uniform float u_cast_shadow_mult;
 uniform float u_self_shadow_mult;
 uniform float u_ao_cast_mult;
 uniform float u_ao_self_mult;
+uniform float u_igor_relief_enabled;
 uniform float u_sun_altitude;  // Sun altitude in radians (0 = horizon, PI/2 = zenith)
 uniform vec2 u_sun_direction;  // Normalized sun direction [sin(azimuth), -cos(azimuth)]
 
@@ -28,6 +29,9 @@ uniform highp sampler2D u_dem_ao;        // DEM texture (same data as u_terrain,
 uniform highp vec4 u_dem_ao_unpack;      // DEM unpack vector
 uniform highp float u_dem_ao_dim;        // DEM dimension
 uniform highp float u_dem_ao_exag;       // terrain exaggeration
+uniform float u_dem_ao_meters_per_pixel; // source DEM GSD in meters
+uniform sampler2D u_dem_derivative;      // Prepared native hillshade derivative texture
+uniform float u_dem_derivative_available;
 uniform sampler2D u_elevation_atlas;     // seamless global elevation atlas (packed float)
 uniform float u_metersPerPixel;          // geographic scale for normal calculation
 uniform float u_max_steps;
@@ -44,6 +48,7 @@ in float v_dist_linear;
 in vec2 v_dem_coord; // Interpolated DEM coordinate from vertex shader
 
 const float gamma = 2.2;
+const float PI = 3.141592653589793;
 
 vec4 gammaToLinear(vec4 color) {
     return pow(color, vec4(gamma));
@@ -62,12 +67,76 @@ float unpackAtlas(vec2 uv) {
 }
 
 
-// Sample raw DEM elevation with pixel-exact precision (matching MapLibre hillshade-prepare)
-float sampleDemElev(vec2 coord) {
-    vec2 pos = floor(coord) + 0.5;
-    vec4 data = texture(u_dem_ao, pos / u_dem_ao_dim) * 255.0;
+float unpackDemElev(vec4 encoded) {
+    vec4 data = encoded * 255.0;
     // Standard Terrain-RGB unpack (dot product for speed and precision)
     return (dot(floor(data.rgb + 0.5), u_dem_ao_unpack.rgb) - u_dem_ao_unpack.a) * u_dem_ao_exag;
+}
+
+float sampleDemTexel(vec2 coord) {
+    float textureDim = u_dem_ao_dim + 2.0;
+    vec2 c = clamp(coord, vec2(0.5), vec2(textureDim - 0.5));
+    return unpackDemElev(texture(u_dem_ao, c / textureDim));
+}
+
+vec2 sobelGradient(
+    float a, float b, float c,
+    float d,          float f,
+    float g, float h, float i
+) {
+    return vec2(
+        (c + f + f + i) - (a + d + d + g),
+        (g + h + h + i) - (a + b + b + c)
+    );
+}
+
+// Match Igor hillshade's perceived detail: Sobel 3x3 gradients are evaluated
+// at neighboring DEM cells and then bilinearly interpolated, like sampling
+// MapLibre's prepared hillshade derivative FBO with LINEAR filtering.
+vec2 sampleDemGradient(vec2 coord) {
+    vec2 safeCoord = clamp(coord, vec2(1.0), vec2(u_dem_ao_dim));
+    vec2 base = floor(safeCoord) + 0.5;
+    vec2 f = fract(safeCoord);
+
+    float z00 = sampleDemTexel(base + vec2(-1.0, -1.0));
+    float z10 = sampleDemTexel(base + vec2( 0.0, -1.0));
+    float z20 = sampleDemTexel(base + vec2( 1.0, -1.0));
+    float z30 = sampleDemTexel(base + vec2( 2.0, -1.0));
+    float z01 = sampleDemTexel(base + vec2(-1.0,  0.0));
+    float z11 = sampleDemTexel(base + vec2( 0.0,  0.0));
+    float z21 = sampleDemTexel(base + vec2( 1.0,  0.0));
+    float z31 = sampleDemTexel(base + vec2( 2.0,  0.0));
+    float z02 = sampleDemTexel(base + vec2(-1.0,  1.0));
+    float z12 = sampleDemTexel(base + vec2( 0.0,  1.0));
+    float z22 = sampleDemTexel(base + vec2( 1.0,  1.0));
+    float z32 = sampleDemTexel(base + vec2( 2.0,  1.0));
+    float z03 = sampleDemTexel(base + vec2(-1.0,  2.0));
+    float z13 = sampleDemTexel(base + vec2( 0.0,  2.0));
+    float z23 = sampleDemTexel(base + vec2( 1.0,  2.0));
+    float z33 = sampleDemTexel(base + vec2( 2.0,  2.0));
+
+    vec2 g00 = sobelGradient(z00, z10, z20, z01, z21, z02, z12, z22);
+    vec2 g10 = sobelGradient(z10, z20, z30, z11, z31, z12, z22, z32);
+    vec2 g01 = sobelGradient(z01, z11, z21, z02, z22, z03, z13, z23);
+    vec2 g11 = sobelGradient(z11, z21, z31, z12, z32, z13, z23, z33);
+
+    vec2 gradient = mix(mix(g00, g10, f.x), mix(g01, g11, f.x), f.y);
+    return gradient / (8.0 * max(u_dem_ao_meters_per_pixel, 1.0));
+}
+
+vec2 samplePreparedDemGradient(vec2 coord) {
+    float invDim = 1.0 / max(u_dem_ao_dim, 1.0);
+    vec2 uv = clamp((coord - 1.0) * invDim, vec2(0.5 * invDim), vec2(1.0 - 0.5 * invDim));
+    vec2 encoded = texture(u_dem_derivative, uv).rg;
+    return ((encoded - 0.5) * 8.0) * u_dem_ao_exag;
+}
+
+vec2 sampleReliefGradient(vec2 coord) {
+    if (u_dem_derivative_available > 0.5) {
+        return samplePreparedDemGradient(coord);
+    }
+
+    return sampleDemGradient(coord);
 }
 
 // Safe Bilinear Fetch to prevent corrupt RGBA base-256 wrapping interpolation
@@ -84,6 +153,74 @@ float sampleElevationBilinear(vec2 uv) {
     float h11 = unpackAtlas((i + vec2(1.0, 1.0)) / dim);
     
     return mix(mix(h00, h10, f.x), mix(h01, h11, f.x), f.y);
+}
+
+float directSunAmount(float altitude) {
+    return smoothstep(radians(-2.0), radians(8.0), altitude);
+}
+
+float skyAmbientAmount(float altitude) {
+    return smoothstep(radians(-16.0), radians(6.0), altitude);
+}
+
+float hash12(vec2 p) {
+    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.x + p3.y) * p3.z);
+}
+
+vec3 applyTwilightAmbient(vec3 color, float altitude) {
+    float skyAmbient = skyAmbientAmount(altitude);
+    float lowLightBlend = 1.0 - smoothstep(radians(3.0), radians(17.0), altitude);
+    float horizonWarmth = smoothstep(radians(-6.0), radians(2.0), altitude) *
+        (1.0 - smoothstep(radians(6.0), radians(16.0), altitude));
+
+    vec3 nightColor = color * vec3(0.64, 0.68, 0.82) + vec3(0.040, 0.050, 0.075);
+    vec3 twilightColor = color * vec3(0.82, 0.84, 0.94) + vec3(0.055, 0.047, 0.040);
+    twilightColor = mix(twilightColor, color * vec3(0.92, 0.82, 0.70) + vec3(0.050, 0.035, 0.025), horizonWarmth * 0.50);
+    vec3 lowLightColor = mix(nightColor, twilightColor, skyAmbient);
+
+    return mix(color, lowLightColor, lowLightBlend);
+}
+
+float remapShadowMask(float rawMask, vec2 atlasUV) {
+    vec2 texel = vec2(1.0 / 2048.0);
+    float edgeBand = smoothstep(0.12, 0.34, rawMask) * (1.0 - smoothstep(0.78, 0.96, rawMask));
+    vec2 atlasCell = floor(atlasUV * 2048.0);
+    vec2 jitter = vec2(
+        hash12(atlasCell + vec2(17.0, 29.0)) - 0.5,
+        hash12(atlasCell + vec2(61.0, 11.0)) - 0.5
+    ) * texel * edgeBand * 0.28;
+    vec2 sampleUV = atlasUV + jitter;
+    float neighborhood =
+        rawMask * 4.0 +
+        texture(u_shadow_atlas, clamp(sampleUV + vec2(texel.x, 0.0), vec2(0.0), vec2(1.0))).r +
+        texture(u_shadow_atlas, clamp(sampleUV - vec2(texel.x, 0.0), vec2(0.0), vec2(1.0))).r +
+        texture(u_shadow_atlas, clamp(sampleUV + vec2(0.0, texel.y), vec2(0.0), vec2(1.0))).r +
+        texture(u_shadow_atlas, clamp(sampleUV - vec2(0.0, texel.y), vec2(0.0), vec2(1.0))).r +
+        texture(u_shadow_atlas, clamp(sampleUV + texel, vec2(0.0), vec2(1.0))).r * 0.5 +
+        texture(u_shadow_atlas, clamp(sampleUV - texel, vec2(0.0), vec2(1.0))).r * 0.5 +
+        texture(u_shadow_atlas, clamp(sampleUV + vec2(texel.x, -texel.y), vec2(0.0), vec2(1.0))).r * 0.5 +
+        texture(u_shadow_atlas, clamp(sampleUV + vec2(-texel.x, texel.y), vec2(0.0), vec2(1.0))).r * 0.5;
+    float filteredMask = mix(rawMask, neighborhood * 0.1, edgeBand * 0.54);
+    float edgeAA = clamp(fwidth(filteredMask) * 0.58 + 0.007, 0.007, 0.050);
+    float edgeMask = smoothstep(0.27 - edgeAA, 0.64 + edgeAA, filteredMask);
+    float interior = smoothstep(0.68, 0.86, filteredMask);
+
+    return mix(edgeMask, 1.0, interior);
+}
+
+vec2 localIgorReliefMask(vec2 gradient) {
+    vec3 normal = normalize(vec3(-gradient.x, -gradient.y, 1.0));
+    vec3 lightDir = normalize(vec3(u_sun_direction, max(tan(max(u_sun_altitude, radians(1.5))), 0.03)));
+    float lambert = dot(normal, lightDir);
+
+    float slopeStrength = atan(length(gradient) * 2.0) * 2.0 / PI;
+    float lowSunBoost = 1.0 - smoothstep(radians(18.0), radians(45.0), u_sun_altitude);
+    float shadow = slopeStrength * (1.0 - smoothstep(0.08, 0.62, lambert)) * mix(0.92, 1.16, lowSunBoost);
+    float highlight = slopeStrength * smoothstep(0.36, 0.95, lambert) * 0.42;
+
+    return clamp(vec2(shadow, highlight), 0.0, 1.0);
 }
 
 void main() {
@@ -144,120 +281,50 @@ void main() {
     // ── Global Shadow + Full-Res AO Hillshade + Time-of-Day Coloring ──
     vec2 atlasUV = v_atlas_uv;
     if (atlasUV.x >= -0.001 && atlasUV.x <= 1.001 && atlasUV.y >= -0.001 && atlasUV.y <= 1.001) {
-        // High-frequency interleaved gradient noise (IGN) directly on the look-up
-        vec3 magic = vec3(0.06711056, 0.00583715, 52.9829189);
-        float ign = fract(magic.z * fract(dot(gl_FragCoord.xy, magic.xy))) - 0.5;
-        
-        // ── True Screen-Space Raymarching (Bypass MapLibre FBO Bottleneck) ──
-        float globalShadow = 0.0;
-        float startElevation = sampleElevationBilinear(atlasUV);
-        
-        const float WORLD_CIRCUMFERENCE = 40075016.7;
-        vec2 worldStep = vec2(
-            u_sun_direction.x * u_step_meters / WORLD_CIRCUMFERENCE,
-            u_sun_direction.y * u_step_meters / WORLD_CIRCUMFERENCE
-        );
-        vec2 sampleUVStep = worldStep / (u_atlas_bounds.zw - u_atlas_bounds.xy);
-        sampleUVStep.y = -sampleUVStep.y; 
+        float shadowMask = clamp(texture(u_shadow_atlas, clamp(atlasUV, vec2(0.0), vec2(1.0))).r, 0.0, 1.0);
+        shadowMask = remapShadowMask(shadowMask, atlasUV);
+        float directSun = directSunAmount(u_sun_altitude);
+        float skyAmbient = skyAmbientAmount(u_sun_altitude);
+        float horizonWarmth = smoothstep(radians(-6.0), radians(2.0), u_sun_altitude) *
+            (1.0 - smoothstep(radians(6.0), radians(16.0), u_sun_altitude));
 
-        float zStep = u_step_meters * tan(u_sun_altitude);
+        vec3 TINT_DAY = vec3(0.08, 0.17, 0.32);
+        vec3 TINT_TWILIGHT = vec3(0.12, 0.09, 0.20);
+        vec3 TINT_NIGHT = vec3(0.11, 0.12, 0.18);
         
-        float ditherOffset = ign + 0.5; // 0..1
-        vec2 currentSampleUV = atlasUV + (sampleUVStep * ditherOffset);
-        float currentRayHeight = startElevation + (zStep * ditherOffset);
-        
-        // This mathematically ensures the short interacting ray traverses the exact same geographical 
-        // distance as the beautiful 128-step idle ray, completely eliminating truncated shadow holes!
-        float interactionScale = clamp(128.0 / u_max_steps, 1.0, 10.0);
+        float tintMix = 1.0 - smoothstep(radians(5.0), radians(22.0), u_sun_altitude);
+        vec3 lowLightShadowTint = mix(TINT_NIGHT, TINT_TWILIGHT, horizonWarmth);
+        vec3 shadowTint = mix(TINT_DAY, lowLightShadowTint, tintMix);
 
-        const float hardMaxSteps = 512.0;
-        float hitDistance = 0.0;
-        float minClearance = 1.0;
-        
-        for (float i = 1.0; i <= hardMaxSteps; i++) {
-            if (i > u_max_steps) break;
-            
-            float curAccel = 1.0 + (i * 0.015);
-            // Optimization: Fast 1-Tap Nearest-Neighbor fetch during airborne traversal!
-            // Cuts 384 texture fetches per ray. The Bisection loop will use the 4-Tap to 
-            // recalculate the exact smooth hit geometry later.
-            float elev = unpackAtlas(currentSampleUV);
-            
-            float clearance = currentRayHeight - elev;
-            float altitudeStride = clamp(clearance / 100.0, 1.0, 10.0);
-            float finalAccel = curAccel * altitudeStride * interactionScale;
-            
-            currentSampleUV += sampleUVStep * finalAccel;
-            currentRayHeight += zStep * finalAccel;
-            
-            if (currentSampleUV.x < 0.0 || currentSampleUV.x > 1.0 || currentSampleUV.y < 0.0 || currentSampleUV.y > 1.0) break;
-            if (currentRayHeight > 8900.0) break;
-            
-            elev = unpackAtlas(currentSampleUV);
-            clearance = currentRayHeight - elev;
-            
-            // --- Physically Accurate Soft Penumbra (Sphere Tracing) ---
-            // Track the "closest miss" along the ray's flight path. 
-            // Only consider geometry that is physically elevated above our starting point.
-            if (elev > startElevation + 1.0) {
-                float penumbraWidth = clamp(u_shadow_soft_base + (i * u_shadow_soft_mult), u_shadow_soft_base, u_shadow_soft_max);
-                minClearance = min(minClearance, max(0.0, clearance) / penumbraWidth);
-            }
-            
-            if (elev > currentRayHeight) {
-                float stepScale = 0.5;
-                for (int j = 0; j < 3; j++) {
-                    currentSampleUV -= (sampleUVStep * finalAccel) * stepScale;
-                    currentRayHeight -= (zStep * finalAccel) * stepScale;
-                    elev = sampleElevationBilinear(currentSampleUV);
-                    
-                    if (currentRayHeight > elev) {
-                        stepScale = -abs(stepScale) * 0.5;
-                    } else {
-                        stepScale = abs(stepScale) * 0.5;
-                    }
-                }
-                
-                // Hard Hit! The pixel is fully occluded by the mountain.
-                globalShadow = 1.0;
-                minClearance = 0.0;
-                hitDistance = i;
-                break;
-            }
-        }
-        
-        // If the ray completely flies over the mountain, but grazes the peak,
-        // minClearance will be < 1.0, casting a beautiful soft shadow gradient that fades to 0.0.
-        if (minClearance > 0.0 && minClearance < 1.0) {
-            globalShadow = 1.0 - minClearance;
+        float directShadow = min(u_shadow_intensity, directSun);
+        vec2 localRelief = vec2(0.0);
+        if (u_dem_ao_dim > 2.0 && (u_self_shadow_mult > 0.001 || u_igor_relief_enabled > 0.5)) {
+            localRelief = localIgorReliefMask(sampleReliefGradient(clamp(v_dem_coord, vec2(1.0), vec2(u_dem_ao_dim))));
         }
 
-        // ── Option O: Cartographic Layer Compositing (Multiply Blend) ──
-        // The raymarched globalShadow provides the exact areas blocked by the mountain peaks.
-        // We tint this geometry to look like scattered atmospheric sky-blue.
-        
-        // 1. Raw Shadow Mask
-        float shadowMask = clamp(globalShadow, 0.0, 1.0);
+        if (u_igor_relief_enabled > 0.5) {
+            vec3 highlightTint = mix(vec3(0.86, 0.91, 1.0), vec3(1.0, 0.94, 0.80), tintMix);
+            float reliefHighlight = localRelief.y * (0.035 + directShadow * 0.11) * mix(0.55, 1.0, skyAmbient);
+            fragColor.rgb = mix(fragColor.rgb, highlightTint, reliefHighlight);
+        }
 
-        // 2. Dynamic Sky-Synced Shadow Tint
-        vec3 TINT_DAY = vec3(0.0, 0.35, 0.55);       // Crisp Cyan (Noon)
-        vec3 TINT_TWILIGHT = vec3(0.15, 0.05, 0.35); // Rich Indigo (Sunset)
-        
-        float tintMix = smoothstep(0.45, 0.10, u_sun_altitude); 
-        vec3 shadowTint = mix(TINT_DAY, TINT_TWILIGHT, tintMix);
-
-        // 3. Composite Shadow Base
-        float baseShadow = shadowMask * 0.75;
-        
-        // Scale the shadow density overall using u_cast_shadow_mult.
-        float shadowAlpha = clamp(baseShadow * u_shadow_intensity * u_cast_shadow_mult * 0.65, 0.0, 0.85);
-
-        // --- FINAL COMPOSITION ---
-        // Alpha-blend the Shadow over the terrain imagery linearly
-        // Note: The brilliant sunlit sides of the mountain are handled entirely by the separate MapLibre hillshade raster layer.
+        float selfShadowMask = clamp(localRelief.x * u_self_shadow_mult * mix(0.36, 0.92, directShadow), 0.0, 1.0);
+        float baseShadow = max(shadowMask, selfShadowMask);
+        float shadowAlpha = clamp(baseShadow * directShadow * u_cast_shadow_mult * 0.62, 0.0, 0.74);
         fragColor.rgb = mix(fragColor.rgb, shadowTint, shadowAlpha);
 
-        // ── Debug Overlays ──
+        // Preserve fine terrain relief inside broad cast shadows. Without this
+        // post-shadow AO pass, opaque cast shadows flatten the integrated Igor detail.
+        if (u_igor_relief_enabled > 0.5) {
+            float castPresence = clamp(shadowMask * directShadow, 0.0, 1.0);
+            float ambientReliefAO = localRelief.x * (0.035 + skyAmbient * 0.040) * (1.0 - castPresence * 0.25);
+            float reliefAO = localRelief.x * (0.040 + castPresence * 0.120) + ambientReliefAO;
+            float reliefLift = localRelief.y * (0.014 + castPresence * 0.025) * mix(0.55, 1.0, skyAmbient);
+            vec3 ambientLiftTint = mix(vec3(0.72, 0.80, 1.0), vec3(1.0, 0.88, 0.66), tintMix);
+            fragColor.rgb *= 1.0 - reliefAO;
+            fragColor.rgb = mix(fragColor.rgb, ambientLiftTint, reliefLift);
+        }
+
         if (u_debug_mode > 0) {
             if (atlasUV.x >= 0.0 && atlasUV.x <= 1.0 && atlasUV.y >= 0.0 && atlasUV.y <= 1.0) {
                 if (u_debug_mode == 3) {
@@ -267,7 +334,7 @@ void main() {
                     fragColor.rgb = mix(fragColor.rgb, vec3(1.0, 1.0, 0.0), line * 0.5);
                     fragColor.rgb = mix(fragColor.rgb, vec3(atlasUV, 0.0), 0.2);
                 } else if (u_debug_mode == 2) {
-                    fragColor.rgb = mix(fragColor.rgb, vec3(globalShadow, globalShadow * 0.6, 0.0), 0.8);
+                    fragColor.rgb = mix(fragColor.rgb, vec3(shadowMask, shadowMask * 0.6, 0.0), 0.8);
                 } else if (u_debug_mode == 4) {
                     fragColor.rgb = vec3(1.0); // raw elev debug removed
                 } else if (u_debug_mode == 5) {
@@ -276,4 +343,6 @@ void main() {
             }
         }
     }
+
+    fragColor.rgb = applyTwilightAmbient(fragColor.rgb, u_sun_altitude);
 }

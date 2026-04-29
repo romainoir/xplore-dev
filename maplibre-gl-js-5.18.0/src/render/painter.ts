@@ -84,6 +84,66 @@ export type RenderOptions = {
     isRenderingGlobe: boolean;
 };
 
+type MercatorBounds = {
+    minX: number;
+    minY: number;
+    maxX: number;
+    maxY: number;
+};
+
+const WORLD_CIRCUMFERENCE = 40075016.7;
+
+function terrainTileMercatorBounds(tileID: OverscaledTileID): MercatorBounds {
+    const id = tileID.canonical;
+    const scale = 1 << id.z;
+    const span = 1 / scale;
+    return {
+        minX: tileID.wrap + id.x / scale,
+        minY: id.y / scale,
+        maxX: tileID.wrap + id.x / scale + span,
+        maxY: id.y / scale + span
+    };
+}
+
+function includeTerrainBounds(target: MercatorBounds, bounds: MercatorBounds) {
+    target.minX = Math.min(target.minX, bounds.minX);
+    target.minY = Math.min(target.minY, bounds.minY);
+    target.maxX = Math.max(target.maxX, bounds.maxX);
+    target.maxY = Math.max(target.maxY, bounds.maxY);
+}
+
+function getRenderableTerrainBounds(terrain: any): MercatorBounds | null {
+    const tiles = terrain.tileManager.getRenderableTiles();
+    const bounds: MercatorBounds = {minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity};
+
+    for (const tile of tiles) {
+        includeTerrainBounds(bounds, terrainTileMercatorBounds(tile.tileID));
+    }
+
+    return Number.isFinite(bounds.minX) && Number.isFinite(bounds.minY) &&
+        Number.isFinite(bounds.maxX) && Number.isFinite(bounds.maxY) ? bounds : null;
+}
+
+function extendBoundsForSun(bounds: MercatorBounds, directionRadians: number, meters: number): MercatorBounds {
+    const dx = Math.sin(directionRadians);
+    const dy = -Math.cos(directionRadians);
+    const extension = meters / WORLD_CIRCUMFERENCE;
+    return {
+        minX: dx >= 0 ? bounds.minX : bounds.minX - extension,
+        minY: dy >= 0 ? bounds.minY : bounds.minY - extension,
+        maxX: dx >= 0 ? bounds.maxX + extension : bounds.maxX,
+        maxY: dy >= 0 ? bounds.maxY + extension : bounds.maxY
+    };
+}
+
+function atlasBoundsContain(atlasBounds: Array<number>, requestedBounds: MercatorBounds): boolean {
+    const epsilon = 1e-12;
+    return requestedBounds.minX >= atlasBounds[0] - epsilon &&
+        requestedBounds.minY >= atlasBounds[1] - epsilon &&
+        requestedBounds.maxX <= atlasBounds[2] + epsilon &&
+        requestedBounds.maxY <= atlasBounds[3] + epsilon;
+}
+
 /**
  * @internal
  * Initialize a new painter object.
@@ -646,30 +706,70 @@ export class Painter {
         }
         const prevMatrix = this.terrainFacilitator.matrix;
         const currMatrix = this.transform.modelViewProjectionMatrix;
-
-        // Update coords/depth-framebuffer on camera movement, or tile reloading
-        let doUpdate = this.terrainFacilitator.dirty;
-        doUpdate ||= requireExact ? !mat4.exactEquals(prevMatrix, currMatrix) : !mat4.equals(prevMatrix, currMatrix);
-        doUpdate ||= this.style.map.terrain.tileManager.anyTilesAfterTime(this.terrainFacilitator.renderTime);
+        const cameraMatrixChanged = requireExact ? !mat4.exactEquals(prevMatrix, currMatrix) : !mat4.equals(prevMatrix, currMatrix);
+        const tilesChanged = this.style.map.terrain.tileManager.anyTilesAfterTime(this.terrainFacilitator.renderTime);
+        const terrain = this.style.map.terrain;
 
         // --- XploreMap Dynamic Shadow Quality & Interaction Sync ---
         const isMapMoving = this.options.moving;
         const isTimeSliding = typeof window !== 'undefined' && (window as any)._isInteractingWithTime;
-        const isInteracting = isMapMoving || isTimeSliding;
+        const isCameraRefreshHeld = typeof window !== 'undefined' && (window as any)._shadowCameraRefreshHold;
+        const progressivePhase = typeof window !== 'undefined' ? (window as any)._shadowProgressivePhase : '';
+        const isProgressiveRefresh = progressivePhase === 'preview' || progressivePhase === 'full';
+        const isInteracting = isMapMoving || isTimeSliding || isCameraRefreshHeld;
+        const wasInteracting = !!(this as any)._wasInteracting;
+        (this as any)._wasInteracting = isInteracting;
+
+        if (!requireExact && (isMapMoving || isCameraRefreshHeld) && !isTimeSliding &&
+            terrain._fboDepthTexture && terrain._fboCoordsTexture && (terrain as any)._shadowAtlasReady) {
+            (terrain as any)._shadowAtlasNeedsRefreshAfterCameraMove = true;
+            (terrain as any)._shadowAtlasReusedWhileMoving = true;
+
+            if (typeof window !== 'undefined' && (window as any)._shadowTileDebugEnabled) {
+                (window as any)._shadowCameraRefreshDebug = {
+                    moving: isMapMoving,
+                    held: !!isCameraRefreshHeld,
+                    reusedCachedAtlas: true,
+                    timestamp: performance.now()
+                };
+            }
+
+            if (typeof window !== 'undefined') {
+                if ((this as any)._terrainPreviewRefreshTimer) {
+                    window.clearTimeout((this as any)._terrainPreviewRefreshTimer);
+                    delete (this as any)._terrainPreviewRefreshTimer;
+                }
+            }
+            return;
+        }
+
+        // Update coords/depth-framebuffer on camera movement, or tile reloading
+        let doUpdate = this.terrainFacilitator.dirty;
+        doUpdate ||= cameraMatrixChanged;
+        doUpdate ||= tilesChanged;
+        doUpdate ||= !!(terrain as any)._shadowAtlasNeedsRefreshAfterCameraMove;
+        doUpdate ||= isProgressiveRefresh;
 
         // Force an update frame the moment the user stops interacting, to guarantee the Blur Shader triggers!
-        if ((this as any)._wasInteracting && !isInteracting) {
+        if (wasInteracting && !isInteracting) {
             doUpdate = true;
         }
-        (this as any)._wasInteracting = isInteracting;
 
         // Force an update frame if the Sun Direction moved (Time Slider), otherwise shadows stay falsely frozen!
         const shadowLayer = this.style.getLayer('shadow-coarse') as ShadowStyleLayer;
+        let shadowPropsChanged = false;
+        let shadowProps: ReturnType<ShadowStyleLayer['getShadowProperties']> | null = null;
         if (shadowLayer) {
-            const sunDir = shadowLayer.getShadowProperties().directionRadians;
-            if ((this as any)._prevSunDir !== sunDir) {
+            shadowProps = shadowLayer.getShadowProperties();
+            const sunDir = shadowProps.directionRadians;
+            const sunAlt = shadowProps.altitudeRadians;
+            const shadowOpacity = shadowLayer.paint.get('shadow-opacity') as number;
+            if ((this as any)._prevSunDir !== sunDir || (this as any)._prevSunAlt !== sunAlt || (this as any)._prevShadowOpacity !== shadowOpacity) {
                 doUpdate = true;
+                shadowPropsChanged = true;
                 (this as any)._prevSunDir = sunDir;
+                (this as any)._prevSunAlt = sunAlt;
+                (this as any)._prevShadowOpacity = shadowOpacity;
             }
         }
 
@@ -680,15 +780,71 @@ export class Painter {
         mat4.copy(prevMatrix, currMatrix);
         this.terrainFacilitator.renderTime = Date.now();
         this.terrainFacilitator.dirty = false;
-        drawDepth(this, this.style.map.terrain);
-        drawCoords(this, this.style.map.terrain);
+        delete (this as any)._forceTerrainRefreshAfterPreview;
+        if (typeof window !== 'undefined' && (this as any)._terrainPreviewRefreshTimer) {
+            window.clearTimeout((this as any)._terrainPreviewRefreshTimer);
+            delete (this as any)._terrainPreviewRefreshTimer;
+        }
+        drawDepth(this, terrain);
+        drawCoords(this, terrain);
 
-        // Elevation atlas and global shadow run AFTER the core depth/coords pipeline
-        drawElevation(this, this.style.map.terrain);
-        // const shadowStyleLayer = this.style.getLayer('shadow-coarse') as ShadowStyleLayer;
-        // if (shadowStyleLayer) {
-        //     drawGlobalShadow(this, shadowStyleLayer);
-        // }
+        // Elevation and shadow atlases are expensive and world-space cached. While the
+        // camera is moving, reuse the last stable atlas and refresh it once movement stops.
+        const shadowStyleLayer = shadowLayer;
+        const canReuseShadowAtlas = (isMapMoving || isCameraRefreshHeld) && !isTimeSliding && (terrain as any)._shadowAtlasReady && (terrain as any)._elevationAtlasBounds;
+        if (canReuseShadowAtlas) {
+            (terrain as any)._shadowAtlasReusedWhileMoving = true;
+            (terrain as any)._shadowAtlasNeedsRefreshAfterCameraMove = true;
+            return;
+        }
+
+        const cachedAtlasBounds = (terrain as any)._elevationAtlasBounds;
+        const cachedAtlasPhase = (terrain as any)._elevationAtlasProgressivePhase;
+        const visibleBounds = shadowStyleLayer && cachedAtlasBounds ? getRenderableTerrainBounds(terrain) : null;
+        const requestedShadowBounds = visibleBounds && shadowProps ?
+            extendBoundsForSun(visibleBounds, shadowProps.directionRadians, Math.min(shadowProps.maxDistance || 5000, 5000)) :
+            visibleBounds;
+        const fullMustRefinePreview = progressivePhase === 'full' && cachedAtlasPhase === 'preview';
+        const canReuseCoveredAtlas = !isTimeSliding &&
+            !shadowPropsChanged &&
+            !fullMustRefinePreview &&
+            !!(terrain as any)._shadowAtlasReady &&
+            Array.isArray(cachedAtlasBounds) &&
+            !!requestedShadowBounds &&
+            atlasBoundsContain(cachedAtlasBounds, requestedShadowBounds);
+
+        if (canReuseCoveredAtlas && ((terrain as any)._shadowAtlasNeedsRefreshAfterCameraMove || isProgressiveRefresh || tilesChanged)) {
+            delete (terrain as any)._shadowAtlasNeedsRefreshAfterCameraMove;
+            (terrain as any)._shadowAtlasReusedWhileMoving = false;
+            if (typeof window !== 'undefined') {
+                if ((window as any)._shadowTileDebugEnabled) {
+                    (window as any)._shadowAtlasReuseDebug = {
+                        reusedCoveredAtlas: true,
+                        progressivePhase,
+                        cachedAtlasPhase,
+                        requestedBounds: requestedShadowBounds,
+                        atlasBounds: cachedAtlasBounds,
+                        timestamp: performance.now()
+                    };
+                }
+                if (isProgressiveRefresh) {
+                    (window as any)._shadowProgressiveLastPhase = 'reused-covered-atlas';
+                    (window as any)._shadowProgressivePhase = 'stable';
+                }
+            }
+            return;
+        }
+
+        delete (terrain as any)._shadowAtlasNeedsRefreshAfterCameraMove;
+        drawElevation(this, terrain);
+        if (shadowStyleLayer && !shadowStyleLayer.isHidden(this.transform.zoom)) {
+            drawGlobalShadow(this, shadowStyleLayer);
+        }
+
+        if (typeof window !== 'undefined' && isProgressiveRefresh) {
+            (window as any)._shadowProgressiveLastPhase = progressivePhase;
+            (window as any)._shadowProgressivePhase = progressivePhase === 'preview' ? 'preview-complete' : 'stable';
+        }
     }
 
     renderLayer(painter: Painter, tileManager: TileManager, layer: StyleLayer, coords: Array<OverscaledTileID>, renderOptions: RenderOptions) {

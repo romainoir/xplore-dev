@@ -24,6 +24,9 @@ export type ShadowPrepareUniformsType = {
     'u_has_north': Uniform1f;
     'u_has_west': Uniform1f;
     'u_has_corner': Uniform1f;
+    'u_zoom_north': Uniform4f;
+    'u_zoom_west': Uniform4f;
+    'u_zoom_corner': Uniform4f;
 };
 
 const shadowPrepareUniforms = (context: Context, locations: UniformLocations): ShadowPrepareUniformsType => ({
@@ -39,6 +42,9 @@ const shadowPrepareUniforms = (context: Context, locations: UniformLocations): S
     'u_has_north': new Uniform1f(context, locations.u_has_north),
     'u_has_west': new Uniform1f(context, locations.u_has_west),
     'u_has_corner': new Uniform1f(context, locations.u_has_corner),
+    'u_zoom_north': new Uniform4f(context, locations.u_zoom_north),
+    'u_zoom_west': new Uniform4f(context, locations.u_zoom_west),
+    'u_zoom_corner': new Uniform4f(context, locations.u_zoom_corner),
 });
 
 const shadowPrepareUniformValues = (
@@ -48,11 +54,14 @@ const shadowPrepareUniformValues = (
     azimuthStep: number,
     hasLateral: boolean,
     hasLongitudinal: boolean,
-    hasDiagonal: boolean
+    hasDiagonal: boolean,
+    zoomWest: [number, number, number, number],
+    zoomNorth: [number, number, number, number],
+    zoomCorner: [number, number, number, number]
 ): UniformValues<ShadowPrepareUniformsType> => {
     const tileSize = 512;
     const worldCircumference = 40075016.7;
-    const zoom = tile.tileID.overscaledZ;
+    const zoom = tile.tileID.canonical.z;
     const metersPerPixel = worldCircumference / (tileSize * Math.pow(2, zoom));
 
     return {
@@ -68,6 +77,9 @@ const shadowPrepareUniformValues = (
         'u_has_west': hasLateral ? 1.0 : 0.0,
         'u_has_north': hasLongitudinal ? 1.0 : 0.0,
         'u_has_corner': hasDiagonal ? 1.0 : 0.0,
+        'u_zoom_west': zoomWest,
+        'u_zoom_north': zoomNorth,
+        'u_zoom_corner': zoomCorner,
     };
 };
 

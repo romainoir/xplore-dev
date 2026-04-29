@@ -68,7 +68,7 @@ export class TerrainTileManager extends Evented {
         this._sourceTileCache = {};
         this.minzoom = 0;
         this.maxzoom = 22;
-        this.deltaZoom = 1;
+        this.deltaZoom = typeof window !== 'undefined' && (window as any)._terrainNativeDemZoom === true ? 0 : 1;
         this.tileSize = tileManager._source.tileSize * 2 ** this.deltaZoom;
         tileManager.usedForTerrain = true;
         tileManager.tileSize = this.tileSize;

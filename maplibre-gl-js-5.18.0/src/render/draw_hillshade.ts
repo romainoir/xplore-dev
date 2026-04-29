@@ -25,10 +25,42 @@ export function drawHillshade(painter: Painter, tileManager: TileManager, layer:
     const colorMode = painter.colorModeForRenderPass();
 
     if (painter.renderPass === 'offscreen') {
+        const cameraRefreshHeld = typeof window !== 'undefined' && (window as any)._shadowCameraRefreshHold;
+        const cameraMoving = (painter.options.moving || cameraRefreshHeld) && !(typeof window !== 'undefined' && (window as any)._isInteractingWithTime);
+        if (layer.id === 'terrain-derivative-cache' && cameraMoving) {
+            if (typeof window !== 'undefined' && (window as any)._shadowTileDebugEnabled) {
+                (window as any)._hillshadePrepareDebug = {
+                    layer: layer.id,
+                    inputTiles: tileIDs.length,
+                    prepared: 0,
+                    skippedClean: 0,
+                    skippedNoDem: 0,
+                    skippedWhileMoving: tileIDs.length,
+                    refreshHeld: !!cameraRefreshHeld,
+                    zooms: {},
+                    durationMs: 0,
+                    timestamp: performance.now()
+                };
+            }
+            return;
+        }
+
         // Prepare tiles
         prepareHillshade(painter, tileManager, tileIDs, layer, depthMode, StencilMode.disabled, colorMode);
         context.viewport.set([0, 0, painter.width, painter.height]);
     } else if (painter.renderPass === 'translucent') {
+        if (layer.id === 'terrain-derivative-cache') {
+            if (typeof window !== 'undefined' && (window as any)._shadowTileDebugEnabled) {
+                (window as any)._hillshadeRenderDebug = {
+                    layer: layer.id,
+                    skippedVisibleDraw: true,
+                    tileIDs: tileIDs.length,
+                    timestamp: performance.now()
+                };
+            }
+            return;
+        }
+
         // Globe (or any projection with subdivision) needs two-pass rendering to avoid artifacts when rendering texture tiles.
         // See comments in draw_raster.ts for more details.
         if (useSubdivision) {
@@ -110,16 +142,29 @@ function prepareHillshade(
 
     const context = painter.context;
     const gl = context.gl;
+    const debugEnabled = typeof window !== 'undefined' && (window as any)._shadowTileDebugEnabled;
+    const debugStart = debugEnabled ? performance.now() : 0;
+    let prepared = 0;
+    let skippedClean = 0;
+    let skippedNoDem = 0;
+    let skippedWhileMoving = 0;
+    const zooms: Record<string, number> = {};
 
     for (const coord of tileIDs) {
         const tile = tileManager.getTile(coord);
         const dem = tile.dem;
+        if (debugEnabled) {
+            const z = String(coord.canonical.z);
+            zooms[z] = (zooms[z] || 0) + 1;
+        }
 
         if (!dem || !dem.data) {
+            skippedNoDem++;
             continue;
         }
 
         if (!tile.needsHillshadePrepare) {
+            skippedClean++;
             continue;
         }
 
@@ -162,5 +207,20 @@ function prepareHillshade(
             painter.quadTriangleIndexBuffer, painter.rasterBoundsSegments);
 
         tile.needsHillshadePrepare = false;
+        prepared++;
+    }
+
+    if (debugEnabled) {
+        (window as any)._hillshadePrepareDebug = {
+            layer: layer.id,
+            inputTiles: tileIDs.length,
+            prepared,
+            skippedClean,
+            skippedNoDem,
+            skippedWhileMoving,
+            zooms,
+            durationMs: performance.now() - debugStart,
+            timestamp: performance.now()
+        };
     }
 }

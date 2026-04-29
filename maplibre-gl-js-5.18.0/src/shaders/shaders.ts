@@ -44,6 +44,7 @@ import shadowVert from './shadow.vertex.glsl.g';
 import shadowPrepareFrag from './shadow_prepare.fragment.glsl.g';
 import shadowPrepareVert from './shadow_prepare.vertex.glsl.g';
 import daylightFrag from './daylight.fragment.glsl.g';
+import daylightPrepareFrag from './daylight_prepare.fragment.glsl.g';
 import daylightVert from './daylight.vertex.glsl.g';
 import lineFrag from './line.fragment.glsl.g';
 import lineVert from './line.vertex.glsl.g';
@@ -116,6 +117,7 @@ export const shaders = {
     hillshade: prepare(hillshadeFrag, hillshadeVert),
     shadow: prepare(shadowFrag, shadowVert),
     shadowPrepare: prepare(shadowPrepareFrag, shadowPrepareVert),
+    daylightPrepare: prepare(daylightPrepareFrag, shadowGlobalVert),
     daylight: prepare(daylightFrag, daylightVert),
     line: prepare(lineFrag, lineVert),
     lineGradient: prepare(lineGradientFrag, lineGradientVert),

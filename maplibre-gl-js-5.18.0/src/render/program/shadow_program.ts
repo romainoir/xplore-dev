@@ -23,6 +23,7 @@ export type ShadowGlobalUniformsType = {
     'u_inv_proj_matrix': Uniform2f; // Dummy or specific inverse projection if needed
     'u_max_steps': Uniform1f;
     'u_step_meters': Uniform1f;
+    'u_max_distance': Uniform1f;
 };
 
 export type ShadowUniformsType = {
@@ -84,6 +85,7 @@ const shadowGlobalUniforms = (context: Context, locations: UniformLocations): Sh
     'u_inv_proj_matrix': new Uniform2f(context, locations.u_inv_proj_matrix),
     'u_max_steps': new Uniform1f(context, locations.u_max_steps),
     'u_step_meters': new Uniform1f(context, locations.u_step_meters),
+    'u_max_distance': new Uniform1f(context, locations.u_max_distance),
 });
 
 const shadowUniforms = (context: Context, locations: UniformLocations): ShadowUniformsType => ({
@@ -145,7 +147,7 @@ const shadowUniformValues = (
 ): UniformValues<ShadowUniformsType> => {
     const tileSize = 512;
     const worldCircumference = 40075016.7;
-    const zoom = tile.tileID.overscaledZ;
+    const zoom = tile.tileID.canonical.z;
     const metersPerPixel = worldCircumference / (tileSize * Math.pow(2, zoom));
 
     const shadowProps = layer.getShadowProperties();
@@ -287,17 +289,42 @@ const shadowGlobalUniformValues = (
     const altRad = shadowProps.altitudeRadians;
     const dirX = Math.sin(dirRad);
     const dirY = -Math.cos(dirRad);
+    const maxDistance = Math.max(1000, shadowProps.maxDistance || 5000);
 
     const isMapMoving = painter.options.moving;
     const isTimeSliding = typeof window !== 'undefined' && (window as any)._isInteractingWithTime;
-    const isInteracting = isMapMoving || isTimeSliding;
+    const progressivePhase = typeof window !== 'undefined' ? (window as any)._shadowProgressivePhase : '';
+    const isProgressivePreview = progressivePhase === 'preview';
 
-    let maxSteps = 256.0;
-    let stepMeters = 20.0;
+    const atlasGsd = Math.max(metersPerPixelX, metersPerPixelY);
+    const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+    const passMaxDistance = isProgressivePreview ? Math.min(maxDistance, 4200.0) : maxDistance;
 
-    if (isInteracting) {
-        maxSteps = 128.0;         // Much higher quality thanks to linear acceleration
-        stepMeters = 30.0;        // Tight starting step for good contact shadows
+    const qualityScale = isProgressivePreview ? 6.0 : isTimeSliding ? 5.0 : isMapMoving ? 3.0 : 1.25;
+    const maxPreviewStep = isProgressivePreview ? 128.0 : isTimeSliding ? 96.0 : isMapMoving ? 56.0 : 18.0;
+    const minPreviewSteps = isProgressivePreview ? 18.0 : isTimeSliding ? 24.0 : isMapMoving ? 48.0 : 96.0;
+    const maxPreviewSteps = isProgressivePreview ? 56.0 : isTimeSliding ? 80.0 : isMapMoving ? 160.0 : 384.0;
+
+    let stepMeters = clamp(atlasGsd * qualityScale, isProgressivePreview ? 28.0 : isTimeSliding ? 18.0 : isMapMoving ? 10.0 : 5.0, maxPreviewStep);
+    const nearDistance = Math.min(isProgressivePreview ? 700.0 : 1100.0, passMaxDistance);
+    const midDistance = Math.min(isProgressivePreview ? 2200.0 : 3500.0, passMaxDistance);
+    const estimatedSteps =
+        nearDistance / stepMeters +
+        Math.max(0, midDistance - nearDistance) / (stepMeters * 2.75) +
+        Math.max(0, passMaxDistance - midDistance) / (stepMeters * 7.0);
+    let maxSteps = clamp(Math.ceil(estimatedSteps) + 8.0, minPreviewSteps, maxPreviewSteps);
+
+    if (typeof window !== 'undefined') {
+        (window as any)._shadowAutoQuality = {
+            atlasGsd,
+            stepMeters,
+            maxSteps,
+            maxDistance: passMaxDistance,
+            cascades: [nearDistance, midDistance, passMaxDistance],
+            progressivePhase: isProgressivePreview ? 'preview' : progressivePhase === 'full' ? 'full' : 'stable',
+            interacting: isMapMoving || isTimeSliding || isProgressivePreview,
+            timeSliding: isTimeSliding
+        };
     }
 
     return {
@@ -310,6 +337,7 @@ const shadowGlobalUniformValues = (
         'u_inv_proj_matrix': [0, 0], // Map to atlas using bounds instead
         'u_max_steps': maxSteps,
         'u_step_meters': stepMeters,
+        'u_max_distance': passMaxDistance,
     };
 };
 
