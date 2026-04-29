@@ -2,6 +2,7 @@ import { VIEW_MODES } from '../config/map-config.js';
 import { updateSunPosition } from './sun-controller.js';
 
 const DEFAULT_EXAGGERATION = 1;
+const ANALYSIS_TERRAIN_EXAGGERATION = 1;
 const DEFAULT_EASING_DURATION = 3000;
 const DEFAULT_FLATTEN_DURATION = 1200;
 const DEFAULT_ORIENTATION_DURATION = 1500;
@@ -63,6 +64,7 @@ export function createViewModeController(map, options = {}) {
   let last3DOrientation = { ...defaultOrientation };
   let currentExaggeration = currentMode === VIEW_MODES.THREED ? defaultExaggeration : 0;
   let terrainEnabled = !!map.getTerrain();
+  let analysisTerrainRequired = false;
   let rafId = null;
   let moveEndHandler = null;
   let isInternalChange = false;
@@ -72,12 +74,50 @@ export function createViewModeController(map, options = {}) {
     return typeof resolved === 'string' && resolved.length ? resolved : null;
   }
 
+  function terrainOptionsAreRaised(terrainOptions) {
+    if (!terrainOptions) return false;
+    const exaggeration = typeof terrainOptions.exaggeration === 'number' ? terrainOptions.exaggeration : 1;
+    return exaggeration > 0;
+  }
+
+  function applyTerrainForCurrentMode() {
+    const terrainSourceId = resolveTerrainSourceId();
+    if (!terrainSourceId || typeof map.setTerrain !== 'function') {
+      currentExaggeration = 0;
+      terrainEnabled = false;
+      return;
+    }
+    if (!map.getSource(terrainSourceId)) {
+      currentExaggeration = 0;
+      terrainEnabled = false;
+      return;
+    }
+
+    const is3D = currentMode === VIEW_MODES.THREED;
+    const shouldKeepAnalysisTerrain = !is3D && analysisTerrainRequired;
+
+    isInternalChange = true;
+    if (is3D) {
+      map.setTerrain({ source: terrainSourceId, exaggeration: defaultExaggeration });
+      terrainEnabled = true;
+      currentExaggeration = defaultExaggeration;
+    } else if (shouldKeepAnalysisTerrain) {
+      map.setTerrain({ source: terrainSourceId, exaggeration: ANALYSIS_TERRAIN_EXAGGERATION });
+      terrainEnabled = true;
+      currentExaggeration = ANALYSIS_TERRAIN_EXAGGERATION;
+    } else {
+      map.setTerrain(null);
+      terrainEnabled = false;
+      currentExaggeration = 0;
+    }
+    isInternalChange = false;
+  }
+
   // Listen for external terrain changes (e.g. from MapLibre TerrainControl)
   map.on('terrain', (e) => {
     if (isInternalChange) return;
 
-    const hasTerrain = !!e.terrain;
-    const targetMode = hasTerrain ? VIEW_MODES.THREED : VIEW_MODES.TWOD;
+    const targetMode = terrainOptionsAreRaised(e.terrain) ? VIEW_MODES.THREED : VIEW_MODES.TWOD;
 
     if (targetMode !== currentMode) {
       // Sync our internal mode and trigger the rest of the transition (camera, sky, etc)
@@ -186,25 +226,22 @@ export function createViewModeController(map, options = {}) {
   }
 
   function setTerrainExaggeration(value) {
-    const terrainSourceId = resolveTerrainSourceId();
-    if (!terrainSourceId || typeof map.setTerrain !== 'function') {
-      currentExaggeration = value;
-      terrainEnabled = false;
-      return;
-    }
-    if (!map.getSource(terrainSourceId)) {
-      currentExaggeration = value;
-      terrainEnabled = false;
-      return;
-    }
-    currentExaggeration = value;
+    const previousMode = currentMode;
+    currentExaggeration = Math.max(value, 0);
 
     isInternalChange = true;
     if (value <= 0) {
-      map.setTerrain(null);
-      terrainEnabled = false;
+      currentMode = VIEW_MODES.TWOD;
+      applyTerrainForCurrentMode();
+      currentMode = previousMode;
       currentExaggeration = 0;
     } else {
+      const terrainSourceId = resolveTerrainSourceId();
+      if (!terrainSourceId || !map.getSource(terrainSourceId) || typeof map.setTerrain !== 'function') {
+        terrainEnabled = false;
+        isInternalChange = false;
+        return;
+      }
       map.setTerrain({ source: terrainSourceId, exaggeration: value });
       terrainEnabled = true;
     }
@@ -324,23 +361,11 @@ export function createViewModeController(map, options = {}) {
 
     // Sync terrain state if requested
     if (syncTerrain) {
-      const terrainSourceId = resolveTerrainSourceId();
-      if (terrainSourceId && map.getSource(terrainSourceId) && typeof map.setTerrain === 'function') {
-        isInternalChange = true;
-        if (is3D) {
-          map.setTerrain({ source: terrainSourceId, exaggeration: defaultExaggeration });
-          terrainEnabled = true;
-          currentExaggeration = defaultExaggeration;
-        } else {
-          map.setTerrain(null);
-          terrainEnabled = false;
-          currentExaggeration = 0;
-
-          // Strict 2D Mode: Force Top-Down and North-Up
-          map.setPitch(0);
-          map.setBearing(0);
-        }
-        isInternalChange = false;
+      applyTerrainForCurrentMode();
+      if (!is3D) {
+        // Strict 2D Mode: Force Top-Down and North-Up
+        map.setPitch(0);
+        map.setBearing(0);
       }
     }
 
@@ -387,16 +412,19 @@ export function createViewModeController(map, options = {}) {
   }
 
   function onTerrainSourcesUpdated() {
-    const terrainSourceId = resolveTerrainSourceId();
-    if (terrainSourceId && map.getSource(terrainSourceId) && typeof map.setTerrain === 'function') {
-      if (currentMode === VIEW_MODES.THREED) {
-        map.setTerrain({ source: terrainSourceId, exaggeration: defaultExaggeration });
-        terrainEnabled = true;
-        currentExaggeration = defaultExaggeration;
-      }
-    }
+    applyTerrainForCurrentMode();
     applySky(currentMode === VIEW_MODES.THREED);
     applyHdMode();
+  }
+
+  function setAnalysisTerrainRequired(required) {
+    const nextRequired = Boolean(required);
+    if (analysisTerrainRequired === nextRequired) return;
+    analysisTerrainRequired = nextRequired;
+    if (currentMode === VIEW_MODES.TWOD) {
+      applyTerrainForCurrentMode();
+      map.triggerRepaint();
+    }
   }
 
   applyMode(currentMode, { animate: false });
@@ -404,22 +432,12 @@ export function createViewModeController(map, options = {}) {
 
   // Public method to update sky based on simulation time
   function updateSkyForTime(simulationDate) {
-    // Check if terrain is actually enabled (don't rely on currentMode which can be out of sync)
-    const hasActiveTerrain = !!map.getTerrain();
-
     // Store for glare effect updates when camera moves
     if (simulationDate) {
       lastSimulationDate = simulationDate;
     }
 
-    if (hasActiveTerrain) {
-      // Sync currentMode if it's out of sync
-      if (currentMode !== VIEW_MODES.THREED) {
-        currentMode = VIEW_MODES.THREED;
-      }
-      applySky(true, simulationDate);
-    } else if (currentMode === VIEW_MODES.THREED) {
-      // Still update sky even without terrain if we're supposed to be in 3D mode
+    if (currentMode === VIEW_MODES.THREED) {
       applySky(true, simulationDate);
     }
   }
@@ -430,6 +448,7 @@ export function createViewModeController(map, options = {}) {
     getMode: () => currentMode,
     applyCurrentMode: (options = {}) => applyMode(currentMode, options),
     onTerrainSourcesUpdated,
+    setAnalysisTerrainRequired,
     setHdEnabled,
     refreshHdMode: applyHdMode,
     updateSkyForTime  // New: update sky based on time

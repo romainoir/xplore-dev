@@ -41,8 +41,9 @@ function loadPlugin() {
 
 /** Toggle line layers based on terrain state */
 function syncVisibility(map) {
-    const hasTerrain = !!map.getTerrain();
-    const lineVis = hasTerrain ? 'none' : 'visible';
+    const mode = window.viewModeController?.getMode?.();
+    const hasRaisedTerrain = mode === '3d';
+    const lineVis = hasRaisedTerrain ? 'none' : 'visible';
     // Lines: hidden in 3D (shader draws them), visible in 2D
     [LINE_MINOR, LINE_MAJOR].forEach(id => {
         if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', lineVis);

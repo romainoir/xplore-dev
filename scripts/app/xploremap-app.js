@@ -75,6 +75,7 @@ async function init() {
     baseStyleOverlayLayerIds,
     baseStyleUnderlayLayerIds,
     baseStyleFillLayerIds,
+    viewModeController,
     updateAnalyticalLegends: () => renderAnalyticalLegends(map, imagery.imageryState, shadowCtrl.updateShadowTime),
   });
 

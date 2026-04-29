@@ -236,6 +236,7 @@ export function createImageryManager(map, deps = {}) {
         baseStyleFillLayerIds = [],
         bringDebugNetworkToFront = () => { },
         updateAnalyticalLegends = () => { },
+        viewModeController = null,
     } = deps;
 
     // ─── State ───
@@ -451,10 +452,14 @@ export function createImageryManager(map, deps = {}) {
     }
 
     function applyImageryState() {
+        let sunAnalysisRequiresTerrain = false;
         IMAGERY_OPTIONS.forEach((option) => {
             const state = imageryState.get(option.id);
             const opacity = clampOpacity(state?.opacity ?? 0);
             const visible = Boolean(state?.enabled && opacity > 0);
+            if ((option.id === 'shadow' || option.id === 'daylight') && visible) {
+                sunAnalysisRequiresTerrain = true;
+            }
             if (option.type === 'osm-overlay') { setLayerSequenceOpacity(map, baseStyleOverlayLayerIds, visible ? opacity : 0); return; }
             if (option.type === 'osm-background') { setLayerSequenceOpacity(map, baseStyleUnderlayLayerIds, visible ? opacity : 0); return; }
             if (option.type === 'vector-fills') { setLayerSequenceOpacity(map, baseStyleFillLayerIds, visible ? opacity : 0); return; }
@@ -492,6 +497,9 @@ export function createImageryManager(map, deps = {}) {
             map.setPaintProperty(option.layerId, 'raster-opacity', opacity);
             map.setLayoutProperty(option.layerId, 'visibility', visible ? 'visible' : 'none');
         });
+        if (typeof viewModeController?.setAnalysisTerrainRequired === 'function') {
+            viewModeController.setAnalysisTerrainRequired(sunAnalysisRequiresTerrain);
+        }
         updateAnalyticalLegends();
     }
 
