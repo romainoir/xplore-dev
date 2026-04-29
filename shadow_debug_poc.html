@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Shadow Debug POC - refactor 20260427</title>
     <link href="maplibre-gl-js-5.18.0/src/css/maplibre-gl.css" rel="stylesheet">
-    <script src="scripts/map/maplibre-gl-dev.js?v=20260429-shadow-poc-47"></script>
+    <script src="scripts/map/maplibre-gl-dev.js?v=20260429-shadow-poc-55"></script>
     <style>
         :root {
             color-scheme: dark;
@@ -115,7 +115,8 @@
             accent-color: var(--blue);
         }
 
-        input[type="date"] {
+        input[type="date"],
+        select {
             width: 100%;
             padding: 6px 8px;
             color: var(--text);
@@ -362,6 +363,23 @@
             <label for="tile-log-toggle" style="color:#d7e0ea;">Show Tile/FPS Log</label>
         </div>
 
+        <div class="row section">
+            <label for="horizon-quality">Shadow Quality</label>
+            <select id="horizon-quality">
+                <option value="fast">Fast</option>
+                <option value="balanced" selected>Balanced</option>
+                <option value="high">High</option>
+            </select>
+        </div>
+        <div class="row">
+            <label for="edge-softness">Edge Softness: <span class="value" id="edge-softness-val">1.00</span></label>
+            <input type="range" id="edge-softness" min="0.5" max="1.8" step="0.05" value="1">
+        </div>
+        <div class="row">
+            <label for="edge-naturalness">Edge Dither: <span class="value" id="edge-naturalness-val">0.00</span></label>
+            <input type="range" id="edge-naturalness" min="0" max="1.2" step="0.02" value="0">
+        </div>
+
         <button id="reload-btn" class="reload-button">Hard Reload Page</button>
         <button id="show-atlas-btn" class="atlas-button">Show Internal Elevation Atlas</button>
     </section>
@@ -418,6 +436,11 @@
                 satelliteToggle: document.getElementById('satellite-toggle'),
                 daylightToggle: document.getElementById('daylight-toggle'),
                 tileLogToggle: document.getElementById('tile-log-toggle'),
+                horizonQuality: document.getElementById('horizon-quality'),
+                edgeSoftness: document.getElementById('edge-softness'),
+                edgeSoftnessVal: document.getElementById('edge-softness-val'),
+                edgeNaturalness: document.getElementById('edge-naturalness'),
+                edgeNaturalnessVal: document.getElementById('edge-naturalness-val'),
                 reload: document.getElementById('reload-btn'),
                 showAtlas: document.getElementById('show-atlas-btn'),
                 closeAtlas: document.getElementById('close-atlas-btn'),
@@ -467,6 +490,15 @@
             window._castShadowMult = 1.45;
             window._selfShadowMult = 1.0;
             window._terrainNativeDemZoom = true;
+            window._horizonQualityPreset = 'balanced';
+            window._horizonDirectionBins = 16;
+            window._horizonEdgeSoftness = 1.0;
+            window._horizonEdgeNaturalness = 0.0;
+            const HORIZON_UI_PRESETS = {
+                fast: { bins: 8, edgeSoftness: 1.10, edgeNaturalness: 0.00 },
+                balanced: { bins: 16, edgeSoftness: 1.00, edgeNaturalness: 0.00 },
+                high: { bins: 16, edgeSoftness: 0.85, edgeNaturalness: 0.00 }
+            };
             const rangeBindings = [];
 
             function clamp(value, min, max) {
@@ -826,6 +858,42 @@
                 apply();
             }
 
+            function invalidateHorizonDerivedCaches(includeHorizon) {
+                const terrain = state.map?.terrain;
+                if (terrain) {
+                    if (includeHorizon) {
+                        terrain._horizonAtlasReady = false;
+                        terrain._horizonAtlasKey = null;
+                    }
+                    terrain._daylightAtlasReady = false;
+                    terrain._daylightAtlasKey = null;
+                }
+                state.map?.triggerRepaint();
+            }
+
+            function applyHorizonQualityPreset(presetName) {
+                const preset = HORIZON_UI_PRESETS[presetName] || HORIZON_UI_PRESETS.balanced;
+                window._horizonQualityPreset = presetName in HORIZON_UI_PRESETS ? presetName : 'balanced';
+                window._horizonDirectionBins = preset.bins;
+                window._horizonEdgeSoftness = preset.edgeSoftness;
+                window._horizonEdgeNaturalness = preset.edgeNaturalness;
+                dom.edgeSoftness.value = String(preset.edgeSoftness);
+                dom.edgeNaturalness.value = String(preset.edgeNaturalness);
+                dom.edgeSoftnessVal.textContent = preset.edgeSoftness.toFixed(2);
+                dom.edgeNaturalnessVal.textContent = preset.edgeNaturalness.toFixed(2);
+                invalidateHorizonDerivedCaches(true);
+            }
+
+            function applyHorizonEdgeControls() {
+                const softness = Number.parseFloat(dom.edgeSoftness.value);
+                const naturalness = Number.parseFloat(dom.edgeNaturalness.value);
+                window._horizonEdgeSoftness = Number.isFinite(softness) ? softness : 1.0;
+                window._horizonEdgeNaturalness = Number.isFinite(naturalness) ? naturalness : 0.0;
+                dom.edgeSoftnessVal.textContent = window._horizonEdgeSoftness.toFixed(2);
+                dom.edgeNaturalnessVal.textContent = window._horizonEdgeNaturalness.toFixed(2);
+                invalidateHorizonDerivedCaches(false);
+            }
+
             function clearRuntimeDebugGlobals() {
                 [
                     '_terrainTileDebug',
@@ -835,6 +903,7 @@
                     '_shadowPassDebug',
                     '_shadowOffscreenDebug',
                     '_shadowCameraRefreshDebug',
+                    '_horizonPrepareDebug',
                     '_daylightPrepareDebug',
                     '_daylightDebug'
                 ].forEach(key => {
@@ -903,6 +972,12 @@
                     setTileDebugEnabled(event.target.checked);
                 });
                 setTileDebugEnabled(false);
+                dom.horizonQuality.addEventListener('change', event => {
+                    applyHorizonQualityPreset(event.target.value);
+                });
+                dom.edgeSoftness.addEventListener('input', applyHorizonEdgeControls);
+                dom.edgeNaturalness.addEventListener('input', applyHorizonEdgeControls);
+                applyHorizonQualityPreset(dom.horizonQuality.value);
 
                 dom.reload.addEventListener('click', () => window.location.reload());
                 dom.showAtlas.addEventListener('click', openAtlasDebug);
@@ -1041,17 +1116,19 @@
                     source: 'terrainSource',
                     layout: { visibility: 'none' },
                     paint: {
-                        'daylight-opacity': 0.62,
+                        'daylight-opacity': 0.78,
                         'daylight-color-ramp': [
                             'interpolate',
                             ['linear'],
                             ['line-progress'],
-                            0, '#172033',
-                            0.18, '#264875',
-                            0.42, '#2f8c9d',
-                            0.68, '#c6b65c',
-                            0.88, '#f0d27c',
-                            1.0, '#fff4cc'
+                            0.0, '#440154',
+                            0.15, '#46327e',
+                            0.32, '#365c8d',
+                            0.50, '#277f8e',
+                            0.64, '#2fb47c',
+                            0.78, '#b8de29',
+                            0.90, '#fdae32',
+                            1.0, '#d7191c'
                         ]
                     }
                 });
@@ -1287,6 +1364,7 @@
                 const atlasReuse = window._shadowAtlasReuseDebug || {};
                 const shadow = window._shadowPassDebug || {};
                 const shadowOffscreen = window._shadowOffscreenDebug || {};
+                const horizonPrepare = window._horizonPrepareDebug || {};
                 const hillshade = window._hillshadePrepareDebug || {};
                 const hillshadeRender = window._hillshadeRenderDebug || {};
                 const daylightPrepare = window._daylightPrepareDebug || {};
@@ -1312,7 +1390,7 @@
                     `map moving=${moving} shadowDeferred=${state.cameraShadowDeferred} refreshHold=${state.cameraShadowRefreshHold} preview=${state.cameraShadowPreviewActive} phase=${progressivePhase} zoom=${state.map ? state.map.getZoom().toFixed(2) : '-'}`,
                     `debug ui=${fmtMs(state.lastTileDebugUiMs)} panelRate=${TILE_DEBUG_PANEL_REFRESH_MS}ms longTask=${lastLongTask ? fmtMs(lastLongTask.duration) : '-'}`,
                     '',
-                    `terrain draw ${fmtMs(terrain.durationMs)} tiles=${terrain.renderTiles ?? '-'} moving=${terrain.moving ?? '-'}`,
+                    `terrain draw ${fmtMs(terrain.durationMs)} tiles=${terrain.renderTiles ?? '-'} moving=${terrain.moving ?? '-'} horizon=${terrain.horizonReady === true}`,
                     `terrain z ${formatCounts(terrain.terrainZooms)}`,
                     `source z  ${formatCounts(terrain.sourceZooms)} missingDEM=${terrain.missingDem ?? '-'}`,
                     `deriv ready=${terrain.derivativeReady ?? '-'} missing=${terrain.derivativeMissing ?? '-'} manualPrepare=${terrain.derivativeManualPrepare ?? '-'} skippedMoving=${terrain.derivativeSkippedMoving ?? '-'} prep=${fmtMs(terrain.derivativePrepareMs)}`,
@@ -1329,8 +1407,9 @@
                     `atlas capture z ${formatCounts(atlas.captureZooms)}`,
                     `atlas source z ${formatCounts(atlas.sourceZooms)}`,
                     '',
-                    `shadow ${shadow.skipped ? `skipped ${shadow.reason}` : fmtMs(shadow.durationMs)} size=${shadow.atlasPixelSize ?? '-'} blur=${fmtMs(shadow.blurMs)} steps=${shadow.maxSteps ?? '-'} step=${shadow.stepMeters ?? '-'} offscreenSkip=${shadowOffscreen.skippedCachedWhileMoving === true}`,
-                    `daylight atlas ${daylightPrepare.skipped ? `skipped ${daylightPrepare.reason}` : fmtMs(daylightPrepare.durationMs)} prepared=${daylightPrepare.prepared ?? '-'} clean=${daylightPrepare.clean ?? '-'} size=${daylightPrepare.daylightAtlasSize ?? daylight.daylightAtlasSize ?? '-'}/${daylightPrepare.elevationAtlasSize ?? daylight.elevationAtlasSize ?? '-'} steps=${daylightPrepare.maxSteps ?? '-'} step=${daylightPrepare.stepMeters ? daylightPrepare.stepMeters.toFixed(1) : '-'}`,
+                    `shadow ${shadow.skipped ? `skipped ${shadow.reason}` : fmtMs(shadow.durationMs)} size=${shadow.atlasPixelSize ?? '-'} blur=${fmtMs(shadow.blurMs)} steps=${shadow.maxSteps ?? '-'} step=${shadow.stepMeters ?? '-'} offscreenSkip=${shadowOffscreen.skippedCachedWhileMoving === true || shadowOffscreen.skippedHorizonCurrentShadow === true}`,
+                    `horizon atlas ${horizonPrepare.skipped ? `skipped ${horizonPrepare.reason}` : fmtMs(horizonPrepare.durationMs)} preset=${horizonPrepare.preset ?? window._horizonQualityPreset ?? '-'} prepared=${horizonPrepare.prepared ?? '-'} clean=${horizonPrepare.clean ?? '-'} size=${horizonPrepare.size ?? '-'} bins=${horizonPrepare.bins ?? '-'} steps=${horizonPrepare.maxSteps ?? '-'} step=${horizonPrepare.stepMeters ? horizonPrepare.stepMeters.toFixed(1) : '-'}`,
+                    `daylight atlas ${daylightPrepare.skipped ? `skipped ${daylightPrepare.reason}` : fmtMs(daylightPrepare.durationMs)} prepared=${daylightPrepare.prepared ?? '-'} clean=${daylightPrepare.clean ?? '-'} size=${daylightPrepare.daylightAtlasSize ?? daylight.daylightAtlasSize ?? '-'}/${daylightPrepare.horizonAtlasSize ?? daylight.horizonAtlasSize ?? '-'}`,
                     `daylight draw tiles=${daylight.inputTiles ?? '-'} drawn=${daylight.drawnTiles ?? '-'} skipped=${daylight.skippedTiles ?? '-'} atlasReady=${daylight.atlasReady === true} samples=${daylightPrepare.samples ?? daylight.samples ?? '-'} stepMin=${daylightPrepare.timeWeightMins ? daylightPrepare.timeWeightMins.toFixed(1) : '-'} date=${daylight.date ? daylight.date.slice(0, 10) : '-'}`
                 ];
 
@@ -1353,6 +1432,7 @@
                     atlasReuse,
                     shadow,
                     shadowOffscreen,
+                    horizonPrepare,
                     daylightPrepare,
                     daylight
                 };
@@ -1372,7 +1452,10 @@
                         atlas,
                         atlasReuse,
                         shadow,
-                        shadowOffscreen
+                        shadowOffscreen,
+                        horizonPrepare,
+                        daylightPrepare,
+                        daylight
                     });
                 }
             }

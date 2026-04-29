@@ -4,6 +4,7 @@ import { CullFaceMode } from '../gl/cull_face_mode';
 import { ColorMode } from '../gl/color_mode';
 import { shadowUniformValues, shadowGlobalUniformValues, shadowBlurUniforms } from './program/shadow_program';
 import { drawElevation } from './draw_terrain';
+import { prepareHorizonAtlasForCurrentView } from './draw_daylight';
 import { shadowPrepareUniformValues } from './program/shadow_prepare_program';
 // calculateTileKey no longer needed — using canonical z/x/y index instead
 import { Color } from '@maplibre/maplibre-gl-style-spec';
@@ -229,9 +230,22 @@ export function drawShadow(
     const isCoarseGlobalShadow = layer.id.toLowerCase().indexOf('coarse') !== -1;
     const cameraRefreshHeld = typeof window !== 'undefined' && (window as any)._shadowCameraRefreshHold;
     const cameraMoving = (painter.options.moving || cameraRefreshHeld) && !(typeof window !== 'undefined' && (window as any)._isInteractingWithTime);
-    const canUseCachedShadow = cameraMoving && isCoarseGlobalShadow && !!(terrain as any)?._shadowAtlasReady;
+    const useHorizonCurrentShadow = typeof window === 'undefined' || (window as any)._shadowUseHorizonCurrent !== false;
+    const canUseCachedShadow = cameraMoving && isCoarseGlobalShadow && (!!(terrain as any)?._shadowAtlasReady || !!(terrain as any)?._horizonAtlasReady);
 
     if (painter.renderPass === 'offscreen') {
+        if (isCoarseGlobalShadow && useHorizonCurrentShadow && !!(terrain as any)?._elevationAtlasBounds) {
+            if (typeof window !== 'undefined' && (window as any)._shadowTileDebugEnabled) {
+                (window as any)._shadowOffscreenDebug = {
+                    layer: layer.id,
+                    skippedHorizonCurrentShadow: true,
+                    inputTiles: tileIDs.length,
+                    timestamp: performance.now()
+                };
+            }
+            return;
+        }
+
         if (canUseCachedShadow) {
             if (typeof window !== 'undefined' && (window as any)._shadowTileDebugEnabled) {
                 (window as any)._shadowOffscreenDebug = {
@@ -360,7 +374,7 @@ function renderShadowTiles(
         const terrain = painter.style.map.terrain;
         const cameraRefreshHeld = typeof window !== 'undefined' && (window as any)._shadowCameraRefreshHold;
         const cameraMoving = (painter.options.moving || cameraRefreshHeld) && !(typeof window !== 'undefined' && (window as any)._isInteractingWithTime);
-        if (cameraMoving && !!(terrain as any)?._shadowAtlasReady) {
+        if (cameraMoving && (!!(terrain as any)?._shadowAtlasReady || !!(terrain as any)?._horizonAtlasReady)) {
             (terrain as any)._shadowAtlasReusedWhileMoving = true;
             if (typeof window !== 'undefined' && (window as any)._shadowTileDebugEnabled) {
                 (window as any)._shadowPassDebug = {
@@ -521,6 +535,27 @@ export function drawGlobalShadow(
     const colorMode = painter.colorModeForRenderPass();
     const depthMode = DepthMode.disabled;
     const stencilMode = StencilMode.disabled;
+
+    const useHorizonCurrentShadow = typeof window === 'undefined' || (window as any)._shadowUseHorizonCurrent !== false;
+    if (useHorizonCurrentShadow) {
+        const horizonKey = prepareHorizonAtlasForCurrentView(painter, depthMode, stencilMode, colorMode);
+        if (horizonKey && (terrain as any)._horizonAtlasReady) {
+            context.bindFramebuffer.set(null);
+            context.viewport.set([0, 0, painter.width, painter.height]);
+            (terrain as any)._shadowAtlasReady = true;
+            (terrain as any)._shadowAtlasReusedWhileMoving = false;
+            if (debugEnabled) {
+                (window as any)._shadowPassDebug = {
+                    skipped: true,
+                    reason: 'current shadow from horizon atlas',
+                    horizonKey,
+                    durationMs: performance.now() - debugStart,
+                    timestamp: performance.now()
+                };
+            }
+            return;
+        }
+    }
 
     const program = painter.useProgram('shadowGlobal');
 
@@ -707,7 +742,7 @@ export function prepareShadow(
             context.activeTexture.set(gl.TEXTURE0);
 
             const renderTexture = new Texture(context, { width: atlasWidth, height: atlasHeight, data: null }, gl.RGBA);
-            // Use NEAREST filtering to prevent bleeding between adjacent atlas rows 
+            // Use NEAREST filtering to prevent bleeding between adjacent atlas rows
             // at the Y-boundaries of the tiles.
             renderTexture.bind(gl.NEAREST, gl.CLAMP_TO_EDGE);
 

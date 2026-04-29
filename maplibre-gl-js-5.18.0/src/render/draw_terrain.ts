@@ -368,6 +368,7 @@ function drawElevation(painter: Painter, terrain: Terrain) {
     (terrain as any)._elevationAtlasVisibleBounds = [visibleBounds.minX, visibleBounds.minY, visibleBounds.maxX, visibleBounds.maxY];
     (terrain as any)._elevationAtlasProgressivePhase = previewAtlas ? 'preview' : progressivePhase === 'full' ? 'full' : 'stable';
     (terrain as any)._daylightAtlasReady = false;
+    (terrain as any)._horizonAtlasReady = false;
 
     const orthoMatrix = mat4.create();
     mat4.ortho(orthoMatrix, minX, maxX, maxY, minY, -10000, 10000); // Reversed Y for Mercator
@@ -601,6 +602,23 @@ function drawTerrain(painter: Painter, terrain: Terrain, tiles: Array<Tile>, ren
         if (terrain._fboShadowTexture) {
             gl.bindTexture(gl.TEXTURE_2D, terrain._fboShadowTexture.texture);
         }
+        // Horizon atlases: current-time terrain shadow can update from uniforms only.
+        context.activeTexture.set(gl.TEXTURE8);
+        if ((terrain as any)._fboHorizon0Texture) {
+            (terrain as any)._fboHorizon0Texture.bind(gl.LINEAR, gl.CLAMP_TO_EDGE);
+        }
+        context.activeTexture.set(gl.TEXTURE9);
+        if ((terrain as any)._fboHorizon1Texture) {
+            (terrain as any)._fboHorizon1Texture.bind(gl.LINEAR, gl.CLAMP_TO_EDGE);
+        }
+        context.activeTexture.set(gl.TEXTURE10);
+        if ((terrain as any)._fboHorizon2Texture) {
+            (terrain as any)._fboHorizon2Texture.bind(gl.LINEAR, gl.CLAMP_TO_EDGE);
+        }
+        context.activeTexture.set(gl.TEXTURE11);
+        if ((terrain as any)._fboHorizon3Texture) {
+            (terrain as any)._fboHorizon3Texture.bind(gl.LINEAR, gl.CLAMP_TO_EDGE);
+        }
         // Prepared Igor/Sobel derivatives. This mirrors the native hillshade
         // pipeline and avoids running a Sobel kernel per terrain fragment.
         context.activeTexture.set(gl.TEXTURE12);
@@ -666,6 +684,7 @@ function drawTerrain(painter: Painter, terrain: Terrain, tiles: Array<Tile>, ren
             rotating: painter.options.rotating,
             refreshHeld: !!cameraRefreshHeld,
             atlasReady: !!(terrain as any)._shadowAtlasReady,
+            horizonReady: !!(terrain as any)._horizonAtlasReady,
             atlasReusedWhileMoving: !!(terrain as any)._shadowAtlasReusedWhileMoving,
             durationMs: performance.now() - debugStart,
             timestamp: performance.now()

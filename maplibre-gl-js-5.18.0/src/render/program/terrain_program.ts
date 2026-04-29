@@ -41,9 +41,17 @@ export type TerrainUniformsType = {
     'u_zoom': Uniform1f;
     'u_tile_zoom': Uniform1f;
     'u_shadow_atlas': Uniform1i;
+    'u_horizon0': Uniform1i;
+    'u_horizon1': Uniform1i;
+    'u_horizon2': Uniform1i;
+    'u_horizon3': Uniform1i;
     'u_atlas_bounds': Uniform4f;
     'u_tile_id': Uniform3f;
     'u_shadow_intensity': Uniform1f;
+    'u_horizon_available': Uniform1f;
+    'u_horizon_bins': Uniform1f;
+    'u_horizon_edge_softness': Uniform1f;
+    'u_horizon_edge_naturalness': Uniform1f;
     'u_debug_mode': Uniform1i;
     'u_cast_shadow_mult': Uniform1f;
     'u_igor_relief_enabled': Uniform1f;
@@ -106,9 +114,17 @@ const terrainUniforms = (context: Context, locations: UniformLocations): Terrain
     'u_zoom': new Uniform1f(context, locations.u_zoom),
     'u_tile_zoom': new Uniform1f(context, locations.u_tile_zoom),
     'u_shadow_atlas': new Uniform1i(context, locations.u_shadow_atlas),
+    'u_horizon0': new Uniform1i(context, locations.u_horizon0),
+    'u_horizon1': new Uniform1i(context, locations.u_horizon1),
+    'u_horizon2': new Uniform1i(context, locations.u_horizon2),
+    'u_horizon3': new Uniform1i(context, locations.u_horizon3),
     'u_atlas_bounds': new Uniform4f(context, locations.u_atlas_bounds),
     'u_tile_id': new Uniform3f(context, locations.u_tile_id),
     'u_shadow_intensity': new Uniform1f(context, locations.u_shadow_intensity),
+    'u_horizon_available': new Uniform1f(context, locations.u_horizon_available),
+    'u_horizon_bins': new Uniform1f(context, locations.u_horizon_bins),
+    'u_horizon_edge_softness': new Uniform1f(context, locations.u_horizon_edge_softness),
+    'u_horizon_edge_naturalness': new Uniform1f(context, locations.u_horizon_edge_naturalness),
     'u_debug_mode': new Uniform1i(context, locations.u_debug_mode),
     'u_cast_shadow_mult': new Uniform1f(context, locations.u_cast_shadow_mult),
     'u_igor_relief_enabled': new Uniform1f(context, locations.u_igor_relief_enabled),
@@ -205,6 +221,10 @@ const terrainUniformValues = (
         'u_zoom': zoom,
         'u_tile_zoom': 0,
         'u_shadow_atlas': 15, // Bind shadow atlas to unit 15
+        'u_horizon0': 8,
+        'u_horizon1': 9,
+        'u_horizon2': 10,
+        'u_horizon3': 11,
         'u_atlas_bounds': (painter.style.map.terrain as any)?._elevationAtlasBounds || [0, 0, 1, 1],
         'u_tile_id': tile ? [tile.tileID.canonical.z, tile.tileID.canonical.x, tile.tileID.canonical.y] : [0, 0, 0],
         'u_shadow_intensity': (() => {
@@ -213,6 +233,13 @@ const terrainUniformValues = (
             const opacity = sl.getPaintProperty('shadow-opacity');
             return typeof opacity === 'number' ? opacity : 1.0;
         })(),
+        'u_horizon_available': (() => {
+            const terrain = painter?.style?.map?.terrain as any;
+            return terrain?._horizonAtlasReady && terrain?._fboHorizon0Texture && terrain?._fboHorizon1Texture ? 1.0 : 0.0;
+        })(),
+        'u_horizon_bins': (typeof window !== 'undefined' && (window as any)._horizonDirectionBins) ? (window as any)._horizonDirectionBins : 16.0,
+        'u_horizon_edge_softness': (typeof window !== 'undefined' && (window as any)._horizonEdgeSoftness !== undefined) ? (window as any)._horizonEdgeSoftness : 1.0,
+        'u_horizon_edge_naturalness': (typeof window !== 'undefined' && (window as any)._horizonEdgeNaturalness !== undefined) ? (window as any)._horizonEdgeNaturalness : 0.0,
         'u_debug_mode': (typeof window !== 'undefined' && (window as any)._shadowDebugMode) ? (window as any)._shadowDebugMode : 0,
         'u_cast_shadow_mult': (typeof window !== 'undefined' && (window as any)._castShadowMult !== undefined) ? (window as any)._castShadowMult : 1.8,
         'u_igor_relief_enabled': 1.0,

@@ -9,6 +9,7 @@ import { colorReliefUniforms } from './color_relief_program';
 import { shadowUniforms, shadowGlobalUniforms, shadowBlurUniforms } from './shadow_program';
 import { shadowPrepareUniforms } from './shadow_prepare_program';
 import { daylightUniforms, daylightPrepareUniforms } from './daylight_program';
+import { horizonPrepareUniforms } from './horizon_program';
 import { lineUniforms, lineGradientUniforms, linePatternUniforms, lineSDFUniforms, lineGradientSDFUniforms } from './line_program';
 import { rasterUniforms } from './raster_program';
 import { symbolIconUniforms, symbolSDFUniforms, symbolTextAndIconUniforms } from './symbol_program';
@@ -42,6 +43,7 @@ export const programUniforms = {
     shadowGlobal: shadowGlobalUniforms,
     shadowPrepare: shadowPrepareUniforms,
     shadowBlur: shadowBlurUniforms,
+    horizonPrepare: horizonPrepareUniforms,
     daylightPrepare: daylightPrepareUniforms,
     daylight: daylightUniforms,
     line: lineUniforms,

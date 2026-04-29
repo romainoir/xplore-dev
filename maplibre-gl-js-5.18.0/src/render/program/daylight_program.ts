@@ -1,7 +1,6 @@
 import {
     Uniform1i,
     Uniform1f,
-    Uniform2f,
     Uniform3f,
     Uniform4f
 } from '../uniform_binding';
@@ -19,13 +18,12 @@ export type DaylightUniformsType = {
 };
 
 export type DaylightPrepareUniformsType = {
-    'u_image': Uniform1i;
-    'u_metersPerPixel': Uniform2f;
-    'u_atlas_bounds': Uniform4f;
-    'u_dimension': Uniform2f;
-    'u_max_steps': Uniform1f;
-    'u_step_meters': Uniform1f;
-    'u_max_distance': Uniform1f;
+    'u_horizon0': Uniform1i;
+    'u_horizon1': Uniform1i;
+    'u_horizon2': Uniform1i;
+    'u_horizon3': Uniform1i;
+    'u_horizon_bins': Uniform1f;
+    'u_horizon_edge_softness': Uniform1f;
     'u_time_weight': Uniform1f;
     'u_solar_lut_0': Uniform4f;
     'u_solar_lut_1': Uniform4f;
@@ -54,13 +52,12 @@ const daylightUniforms = (context: Context, locations: UniformLocations): Daylig
 });
 
 const daylightPrepareUniforms = (context: Context, locations: UniformLocations): DaylightPrepareUniformsType => ({
-    'u_image': new Uniform1i(context, locations.u_image),
-    'u_metersPerPixel': new Uniform2f(context, locations.u_metersPerPixel),
-    'u_atlas_bounds': new Uniform4f(context, locations.u_atlas_bounds),
-    'u_dimension': new Uniform2f(context, locations.u_dimension),
-    'u_max_steps': new Uniform1f(context, locations.u_max_steps),
-    'u_step_meters': new Uniform1f(context, locations.u_step_meters),
-    'u_max_distance': new Uniform1f(context, locations.u_max_distance),
+    'u_horizon0': new Uniform1i(context, locations.u_horizon0),
+    'u_horizon1': new Uniform1i(context, locations.u_horizon1),
+    'u_horizon2': new Uniform1i(context, locations.u_horizon2),
+    'u_horizon3': new Uniform1i(context, locations.u_horizon3),
+    'u_horizon_bins': new Uniform1f(context, locations.u_horizon_bins),
+    'u_horizon_edge_softness': new Uniform1f(context, locations.u_horizon_edge_softness),
     'u_time_weight': new Uniform1f(context, locations.u_time_weight),
     'u_solar_lut_0': new Uniform4f(context, locations.u_solar_lut_0),
     'u_solar_lut_1': new Uniform4f(context, locations.u_solar_lut_1),
@@ -99,21 +96,15 @@ const daylightUniformValues = (
 const daylightPrepareUniformValues = (
     solarLUT: Float32Array,
     timeWeightMins: number,
-    metersPerPixelX: number,
-    metersPerPixelY: number,
-    atlasBounds: [number, number, number, number],
-    dimension: number,
-    maxDistance: number,
-    stepMeters: number,
-    maxSteps: number
+    horizonBins: number,
+    horizonEdgeSoftness: number
 ): UniformValues<DaylightPrepareUniformsType> => ({
-    'u_image': 0,
-    'u_metersPerPixel': [metersPerPixelX, metersPerPixelY],
-    'u_atlas_bounds': atlasBounds,
-    'u_dimension': [dimension, dimension],
-    'u_max_steps': maxSteps,
-    'u_step_meters': stepMeters,
-    'u_max_distance': maxDistance,
+    'u_horizon0': 0,
+    'u_horizon1': 1,
+    'u_horizon2': 2,
+    'u_horizon3': 3,
+    'u_horizon_bins': horizonBins,
+    'u_horizon_edge_softness': horizonEdgeSoftness,
     'u_time_weight': timeWeightMins,
     'u_solar_lut_0': [solarLUT[0], solarLUT[1], solarLUT[2], solarLUT[3]],
     'u_solar_lut_1': [solarLUT[4], solarLUT[5], solarLUT[6], solarLUT[7]],

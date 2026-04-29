@@ -125,7 +125,6 @@ void main() {
         }
         
         if (margin > 0.0) {
-            float hitMargin = margin;
             vec2 loUV = previousUV;
             vec2 hiUV = currentUV;
             float loRayHeight = previousRayHeight;
@@ -151,9 +150,7 @@ void main() {
             }
             
             float distanceFade = 1.0 - smoothstep(u_max_distance * 0.94, u_max_distance, hiDistance);
-            float blockerStrength = smoothstep(0.0, max(8.0, u_step_meters * 1.05), hitMargin);
-            float contactFade = smoothstep(0.0, max(18.0, u_step_meters * 1.4), hiDistance);
-            shadow = mix(0.50, 1.0, blockerStrength) * mix(0.90, 1.0, contactFade) * distanceFade;
+            shadow = distanceFade;
             break;
         }
 
