@@ -261,6 +261,16 @@ function createShadowLegend(map, updateShadowTime) {
     const tSl = content.querySelector('#shadowTimeSlider');
     const tLb = content.querySelector('#shadowTimeLabel');
     const nBtn = content.querySelector('#shadowNowBtn');
+    let timeInteractionTimer = null;
+
+    const markTimeInteraction = () => {
+        window._isInteractingWithTime = true;
+        clearTimeout(timeInteractionTimer);
+        timeInteractionTimer = window.setTimeout(() => {
+            window._isInteractingWithTime = false;
+            if (map) map.triggerRepaint();
+        }, 180);
+    };
 
     const updateTimeGradient = (date) => {
         if (!map || !date) return;
@@ -285,6 +295,7 @@ function createShadowLegend(map, updateShadowTime) {
     };
 
     const syncUi = () => {
+        markTimeInteraction();
         const d = buildDate();
         if (dLb) dLb.textContent = formatDate(d);
         if (tLb) tLb.textContent = `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
@@ -333,6 +344,7 @@ function createShadowLegend(map, updateShadowTime) {
 
     // Initial gradient
     updateTimeGradient(now);
+    if (updateShadowTime) updateShadowTime(now);
 
     return content;
 }
@@ -410,4 +422,3 @@ function getActiveAnalysisLayer(imageryState) {
     if (imageryState.get('aspect')?.enabled) return 'aspect';
     return null;
 }
-

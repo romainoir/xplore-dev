@@ -36,8 +36,8 @@ function createTilePreviewUrl(template, coords = WMTS_PREVIEW_COORDS) {
 
 // ─── IMAGERY_OPTIONS ───
 export const IMAGERY_OPTIONS = Object.freeze([
-    { id: 'shadow', label: 'Shadows', type: 'shadow-layer', linkedLayerIds: ['shadow-coarse', 'shadow-detail', 'detail-native'], previewImage: './data/icons_Xmap/shadow.png', defaultOpacity: 0.8, defaultVisible: false },
-    { id: 'daylight', label: 'Sunlight Hours', type: 'native-layer', layerId: 'daylight-native', previewImage: './data/icons_Xmap/daylight.png', defaultOpacity: 0.8, defaultVisible: false },
+    { id: 'shadow', label: 'Shadows', type: 'shadow-layer', linkedLayerIds: ['shadow-coarse'], previewImage: './data/icons_Xmap/shadow.png', defaultOpacity: 1.0, defaultVisible: false },
+    { id: 'daylight', label: 'Sunlight Hours', type: 'native-layer', layerId: 'daylight-native', previewImage: './data/icons_Xmap/daylight.png', defaultOpacity: 0.78, defaultVisible: false },
     {
         id: 'contours',
         label: 'Contours',
@@ -365,7 +365,7 @@ export function createImageryManager(map, deps = {}) {
         }
 
         // 2. Terrain analysis & snow layers — above basemaps
-        const terrainNativeLayers = ['normalmap', 'snow-native', 'snow-depth', 'aspect-native', 'slope-native', 'avalanche-native', 'detail-native', 'shadow-native', 'daylight-native'];
+        const terrainNativeLayers = ['normalmap', 'snow-native', 'snow-depth', 'aspect-native', 'slope-native', 'avalanche-native', 'shadow-coarse', 'daylight-native'];
         if (topLabelId) {
             terrainNativeLayers.forEach(layerId => { if (map.getLayer(layerId)) map.moveLayer(layerId, topLabelId); });
         }
@@ -465,7 +465,11 @@ export function createImageryManager(map, deps = {}) {
                 if (map.getLayer(option.layerId)) {
                     try {
                         map.setLayoutProperty(option.layerId, 'visibility', visible ? 'visible' : 'none');
-                        map.setPaintProperty(option.layerId, 'hillshade-exaggeration', visible ? Math.min(opacity, 1.0) : 0);
+                        if (option.id === 'daylight') {
+                            map.setPaintProperty(option.layerId, 'daylight-opacity', visible ? Math.min(opacity, 1.0) : 0);
+                        } else {
+                            map.setPaintProperty(option.layerId, 'hillshade-exaggeration', visible ? Math.min(opacity, 1.0) : 0);
+                        }
                     } catch (_) { }
                 }
                 return;

@@ -17,9 +17,7 @@ import {
 import {
     IMAGERY_OPTIONS,
     DEM_SOURCE_MAX_ZOOM,
-    SHADOW_DEM_MAX_ZOOM,
     clampOpacity,
-    scaleExpression,
 
 } from './imagery-manager.js';
 
@@ -63,8 +61,6 @@ export function getOverlayDefinitions() {
     const sources = {
         terrainSource: { ...demConfig, maxzoom: DEM_SOURCE_MAX_ZOOM },
         hillshadeSource: { ...demConfig, maxzoom: DEM_SOURCE_MAX_ZOOM },
-        shadowDemSource: { ...demConfig, maxzoom: 15 },
-        coarseShadowDemSource: { ...demConfig, maxzoom: 12 },
         reliefDem: { ...demConfig, maxzoom: DEM_SOURCE_MAX_ZOOM },
     };
 
@@ -78,10 +74,8 @@ export function getOverlayDefinitions() {
         { id: 'aspect-native', ...nativeConfig },
         { id: 'slope-native', ...nativeConfig },
         { id: 'avalanche-native', ...nativeConfig },
-        { id: 'detail-native', type: 'hillshade', source: 'hillshadeSource', layout: { visibility: 'none' }, paint: { 'hillshade-exaggeration': 1.0, 'hillshade-illumination-anchor': 'map', 'hillshade-accent-color': '#00ff00' } },
-        { id: 'shadow-native', type: 'hillshade', source: 'shadowDemSource', layout: { visibility: 'none' }, paint: { 'hillshade-exaggeration': 1.0, 'hillshade-illumination-anchor': 'map' } },
-        // NOTE: shadow-cast (type:'shadow') is NOT included here because the style-spec diff engine
-        // doesn't recognize the 'shadow' type. It's added dynamically in applyOverlays() instead.
+        // NOTE: custom shadow/daylight layers are added dynamically in applyOverlays().
+        // Keeping them out of injected style JSON avoids style-diff fallback issues.
     ];
 
     return { sources, layers };
@@ -145,6 +139,7 @@ export function applyOverlays(map, deps = {}) {
         if (Array.isArray(option.linkedLayerIds)) option.linkedLayerIds.forEach(id => { if (typeof id === 'string') layerIds.push(id); });
         layerIds.forEach(rmL);
     });
+    ['shadow-detail', 'shadow-native', 'detail-native'].forEach(rmL);
 
     // Remove existing imagery sources (but NOT DEM sources — preserved by injection)
     IMAGERY_OPTIONS.forEach(option => {
@@ -158,8 +153,6 @@ export function applyOverlays(map, deps = {}) {
     const demConfig = { type: 'raster-dem', tiles: [MAPTERHORN_TILE_URL], encoding: 'terrarium', tileSize: 512, attribution: MAPTERHORN_ATTRIBUTION };
     ensureS('terrainSource', { ...demConfig, maxzoom: DEM_SOURCE_MAX_ZOOM });
     ensureS('hillshadeSource', { ...demConfig, maxzoom: DEM_SOURCE_MAX_ZOOM });
-    ensureS('shadowDemSource', { ...demConfig, maxzoom: 15, tileZoomOffset: 0 });
-    ensureS('coarseShadowDemSource', { ...demConfig, maxzoom: 12, tileZoomOffset: 0 });
     ensureS('reliefDem', { ...demConfig, maxzoom: DEM_SOURCE_MAX_ZOOM });
 
     // Background (covers hillshade tile gaps)
@@ -198,55 +191,47 @@ export function applyOverlays(map, deps = {}) {
     ensureL({ id: 'aspect-native', ...nativeConfig }, topLabelId || undefined);
     ensureL({ id: 'slope-native', ...nativeConfig }, topLabelId || undefined);
     ensureL({ id: 'avalanche-native', ...nativeConfig }, topLabelId || undefined);
-    ensureL({ id: 'detail-native', type: 'hillshade', source: 'hillshadeSource', layout: { 'visibility': 'none' }, paint: { 'hillshade-exaggeration': 1.0, 'hillshade-illumination-anchor': 'map', 'hillshade-accent-color': '#00ff00' } }, topLabelId || undefined);
-    ensureL({ id: 'shadow-native', type: 'hillshade', source: 'shadowDemSource', layout: { 'visibility': 'none' }, paint: { 'hillshade-exaggeration': 1.0, 'hillshade-illumination-anchor': 'map' } }, topLabelId || undefined);
 
-    // ─── True native daylight layer (H4 Engine - Sun Duration) ───
+    // ─── Horizon-atlas daylight layer, sharing the same DEM atlas as cast shadows ───
     ensureL({
         id: 'daylight-native',
         type: 'daylight',
-        source: 'shadowDemSource', // Reuses the horizon map built by the shadowDemSource
+        source: 'terrainSource',
         layout: { 'visibility': 'none' },
         paint: {
-            'daylight-opacity': 0.8,
+            'daylight-opacity': 0.78,
             'daylight-color-ramp': [
                 'interpolate',
                 ['linear'],
                 ['line-progress'],
-                0, '#020024',
-                0.2, '#090979',
-                0.5, '#00d4ff',
-                0.8, '#f5d300',
-                1.0, '#fffff0'
+                0.0, '#440154',
+                0.15, '#46327e',
+                0.32, '#365c8d',
+                0.50, '#277f8e',
+                0.64, '#2fb47c',
+                0.78, '#b8de29',
+                0.90, '#fdae32',
+                1.0, '#d7191c'
             ]
         }
     }, topLabelId || undefined);
 
-    // ─── Dual-Cascade Raymarched Shadow Engine ───
+    // ─── Horizon-backed cast shadows. The terrain shader samples the same horizon atlas
+    // for current shadows, so this layer mainly drives visibility, sun direction, and opacity.
     ensureL({
         id: 'shadow-coarse',
         type: 'shadow',
-        source: 'coarseShadowDemSource',
+        source: 'terrainSource',
         layout: { 'visibility': 'none' },
         paint: {
-            'shadow-opacity': 0.6,
+            'shadow-opacity': 1.0,
             'shadow-color': '#000000',
+            'shadow-shadow-color': '#000000',
+            'shadow-highlight-color': '#ffffff',
             'shadow-direction': 315,
-            'shadow-altitude': 45
-        }
-    });
-
-    ensureL({
-        id: 'shadow-detail',
-        type: 'shadow',
-        source: 'hillshadeSource',
-        minzoom: 12,
-        layout: { 'visibility': 'none' },
-        paint: {
-            'shadow-opacity': 0.6,
-            'shadow-color': '#000000',
-            'shadow-direction': 315,
-            'shadow-altitude': 45
+            'shadow-altitude': 45,
+            'shadow-max-distance': 8000,
+            'shadow-penumbra': 1.0
         }
     });
 
