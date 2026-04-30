@@ -65,7 +65,7 @@ function setDefaultGlobal(name, value) {
 
 function ensureShadowRuntimeDefaults() {
     setDefaultGlobal('_shadowTileDebugEnabled', false);
-    setDefaultGlobal('_shadowUseHorizonCurrent', true);
+    setDefaultGlobal('_shadowUseHorizonCurrent', false);
     setDefaultGlobal('_terrainNativeDemZoom', true);
     setDefaultGlobal('_castShadowMult', 1.45);
     setDefaultGlobal('_selfShadowMult', 1.0);
@@ -245,6 +245,8 @@ export function createShadowController(map, deps = {}) {
             safeSetPaint('shadow-coarse', 'shadow-altitude', renderAltitude);
             safeSetPaint('shadow-coarse', 'shadow-shadow-color', colors.shadow);
             safeSetPaint('shadow-coarse', 'shadow-highlight-color', colors.highlight);
+            safeSetPaint('terrain-derivative-cache', 'hillshade-illumination-direction', sunAzi);
+            safeSetPaint('terrain-derivative-cache', 'hillshade-illumination-altitude', renderAltitude);
 
             if (map.getLayer('hillshade')) {
                 map.setPaintProperty('hillshade', 'hillshade-illumination-direction', [sunAzi, (sunAzi + 45) % 360, (sunAzi - 45 + 360) % 360, (sunAzi + 180) % 360]);

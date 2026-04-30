@@ -60256,6 +60256,8 @@ const terrainUniformValues = (eleDelta, fogMatrix, sky, pitch, isGlobeMode, zoom
         })(),
         'u_horizon_available': (() => {
             var _a, _b;
+            if (typeof window === 'undefined' || window._shadowUseHorizonCurrent !== true)
+                return 0.0;
             const terrain = (_b = (_a = painter === null || painter === void 0 ? void 0 : painter.style) === null || _a === void 0 ? void 0 : _a.map) === null || _b === void 0 ? void 0 : _b.terrain;
             return (terrain === null || terrain === void 0 ? void 0 : terrain._horizonAtlasReady) && (terrain === null || terrain === void 0 ? void 0 : terrain._fboHorizon0Texture) && (terrain === null || terrain === void 0 ? void 0 : terrain._fboHorizon1Texture) ? 1.0 : 0.0;
         })(),
@@ -65578,8 +65580,11 @@ function drawShadow(painter, tileManager, layer, tileIDs, renderOptions) {
     const isCoarseGlobalShadow = layer.id.toLowerCase().indexOf('coarse') !== -1;
     const cameraRefreshHeld = typeof window !== 'undefined' && window._shadowCameraRefreshHold;
     const cameraMoving = (painter.options.moving || cameraRefreshHeld) && !(typeof window !== 'undefined' && window._isInteractingWithTime);
-    const useHorizonCurrentShadow = typeof window === 'undefined' || window._shadowUseHorizonCurrent !== false;
-    const canUseCachedShadow = cameraMoving && isCoarseGlobalShadow && (!!(terrain === null || terrain === void 0 ? void 0 : terrain._shadowAtlasReady) || !!(terrain === null || terrain === void 0 ? void 0 : terrain._horizonAtlasReady));
+    const useHorizonCurrentShadow = typeof window !== 'undefined' && window._shadowUseHorizonCurrent === true;
+    const shadowAtlasReady = !!(terrain === null || terrain === void 0 ? void 0 : terrain._shadowAtlasReady);
+    const horizonAtlasReady = !!(terrain === null || terrain === void 0 ? void 0 : terrain._horizonAtlasReady);
+    const hasReusableCurrentShadow = shadowAtlasReady || (useHorizonCurrentShadow && horizonAtlasReady);
+    const canUseCachedShadow = cameraMoving && isCoarseGlobalShadow && hasReusableCurrentShadow;
     if (painter.renderPass === 'offscreen') {
         if (isCoarseGlobalShadow && useHorizonCurrentShadow && !!(terrain === null || terrain === void 0 ? void 0 : terrain._elevationAtlasBounds)) {
             if (typeof window !== 'undefined' && window._shadowTileDebugEnabled) {
@@ -65706,7 +65711,11 @@ function renderShadowTiles(painter, tileManager, layer, coords, stencilModes, de
         const terrain = painter.style.map.terrain;
         const cameraRefreshHeld = typeof window !== 'undefined' && window._shadowCameraRefreshHold;
         const cameraMoving = (painter.options.moving || cameraRefreshHeld) && !(typeof window !== 'undefined' && window._isInteractingWithTime);
-        if (cameraMoving && (!!(terrain === null || terrain === void 0 ? void 0 : terrain._shadowAtlasReady) || !!(terrain === null || terrain === void 0 ? void 0 : terrain._horizonAtlasReady))) {
+        const useHorizonCurrentShadow = typeof window !== 'undefined' && window._shadowUseHorizonCurrent === true;
+        const shadowAtlasReady = !!(terrain === null || terrain === void 0 ? void 0 : terrain._shadowAtlasReady);
+        const horizonAtlasReady = !!(terrain === null || terrain === void 0 ? void 0 : terrain._horizonAtlasReady);
+        const hasReusableCurrentShadow = shadowAtlasReady || (useHorizonCurrentShadow && horizonAtlasReady);
+        if (cameraMoving && hasReusableCurrentShadow) {
             terrain._shadowAtlasReusedWhileMoving = true;
             if (typeof window !== 'undefined' && window._shadowTileDebugEnabled) {
                 window._shadowPassDebug = {
@@ -65845,7 +65854,7 @@ function drawGlobalShadow(painter, layer) {
     const colorMode = painter.colorModeForRenderPass();
     const depthMode = DepthMode.disabled;
     const stencilMode = StencilMode.disabled;
-    const useHorizonCurrentShadow = typeof window === 'undefined' || window._shadowUseHorizonCurrent !== false;
+    const useHorizonCurrentShadow = typeof window !== 'undefined' && window._shadowUseHorizonCurrent === true;
     if (useHorizonCurrentShadow) {
         const horizonKey = prepareHorizonAtlasForCurrentView(painter, depthMode, stencilMode, colorMode);
         if (horizonKey && terrain._horizonAtlasReady) {

@@ -234,6 +234,7 @@ const terrainUniformValues = (
             return typeof opacity === 'number' ? opacity : 1.0;
         })(),
         'u_horizon_available': (() => {
+            if (typeof window === 'undefined' || (window as any)._shadowUseHorizonCurrent !== true) return 0.0;
             const terrain = painter?.style?.map?.terrain as any;
             return terrain?._horizonAtlasReady && terrain?._fboHorizon0Texture && terrain?._fboHorizon1Texture ? 1.0 : 0.0;
         })(),

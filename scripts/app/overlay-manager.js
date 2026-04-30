@@ -65,10 +65,26 @@ export function getOverlayDefinitions() {
     };
 
     const nativeConfig = { type: 'hillshade', source: 'hillshadeSource', layout: { visibility: 'none' }, paint: { 'hillshade-exaggeration': 1.0 } };
+    const terrainDerivativeCache = {
+        id: 'terrain-derivative-cache',
+        type: 'hillshade',
+        source: 'terrainSource',
+        layout: { visibility: 'visible' },
+        paint: {
+            'hillshade-method': 'igor',
+            'hillshade-exaggeration': 1.0,
+            'hillshade-illumination-direction': 315,
+            'hillshade-illumination-altitude': 45,
+            'hillshade-shadow-color': 'rgba(0,0,0,0)',
+            'hillshade-highlight-color': 'rgba(255,255,255,0)',
+            'hillshade-accent-color': 'rgba(255,255,255,0)'
+        }
+    };
     const layers = [
         { id: 'terrain-bg', type: 'background', paint: { 'background-color': '#e8e8e8', 'background-opacity': 1 } },
         { id: 'hillshade2', type: 'hillshade', source: 'reliefDem', paint: { 'hillshade-highlight-color': 'rgba(255,255,255,0.6)', 'hillshade-accent-color': 'rgba(0,0,0,0.3)', 'hillshade-exaggeration': 0.15, 'hillshade-shadow-color': 'rgba(0,0,0,0.4)' } },
         { id: 'hillshade', type: 'hillshade', source: 'hillshadeSource', paint: { 'hillshade-highlight-color': 'rgba(255,255,255,0.9)', 'hillshade-accent-color': 'rgba(0,0,0,0.55)', 'hillshade-exaggeration': 0.23, 'hillshade-shadow-color': 'rgba(0,0,0,0.55)' } },
+        terrainDerivativeCache,
         { id: 'normalmap', ...nativeConfig },
         { id: 'snow-native', ...nativeConfig },
         { id: 'aspect-native', ...nativeConfig },
@@ -191,6 +207,21 @@ export function applyOverlays(map, deps = {}) {
     ensureL({ id: 'aspect-native', ...nativeConfig }, topLabelId || undefined);
     ensureL({ id: 'slope-native', ...nativeConfig }, topLabelId || undefined);
     ensureL({ id: 'avalanche-native', ...nativeConfig }, topLabelId || undefined);
+    ensureL({
+        id: 'terrain-derivative-cache',
+        type: 'hillshade',
+        source: 'terrainSource',
+        layout: { visibility: 'visible' },
+        paint: {
+            'hillshade-method': 'igor',
+            'hillshade-exaggeration': 1.0,
+            'hillshade-illumination-direction': 315,
+            'hillshade-illumination-altitude': 45,
+            'hillshade-shadow-color': 'rgba(0,0,0,0)',
+            'hillshade-highlight-color': 'rgba(255,255,255,0)',
+            'hillshade-accent-color': 'rgba(255,255,255,0)'
+        }
+    }, topLabelId || undefined);
 
     // ─── Horizon-atlas daylight layer, sharing the same DEM atlas as cast shadows ───
     ensureL({
@@ -216,8 +247,8 @@ export function applyOverlays(map, deps = {}) {
         }
     }, topLabelId || undefined);
 
-    // ─── Horizon-backed cast shadows. The terrain shader samples the same horizon atlas
-    // for current shadows, so this layer mainly drives visibility, sun direction, and opacity.
+    // ─── Raymarched cast shadows. Keep this on the same terrainSource path as
+    // shadow_debug_poc.html; horizon atlases are reserved for daylight duration.
     ensureL({
         id: 'shadow-coarse',
         type: 'shadow',
