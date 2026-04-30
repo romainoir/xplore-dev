@@ -33,7 +33,7 @@ import { drawRaster } from './draw_raster';
 import { drawBackground } from './draw_background';
 import { drawDebug, drawDebugPadding, selectDebugSource } from './draw_debug';
 import { drawCustom } from './draw_custom';
-import { drawDepth, drawElevation, drawCoords } from './draw_terrain';
+import { drawDepth, drawElevation, drawCoords, getShadowAtlasVisibleBounds } from './draw_terrain';
 import { type OverscaledTileID } from '../tile/tile_id';
 import { drawSky, drawAtmosphere } from './draw_sky';
 import { Mesh } from './mesh';
@@ -92,37 +92,6 @@ type MercatorBounds = {
 };
 
 const WORLD_CIRCUMFERENCE = 40075016.7;
-
-function terrainTileMercatorBounds(tileID: OverscaledTileID): MercatorBounds {
-    const id = tileID.canonical;
-    const scale = 1 << id.z;
-    const span = 1 / scale;
-    return {
-        minX: tileID.wrap + id.x / scale,
-        minY: id.y / scale,
-        maxX: tileID.wrap + id.x / scale + span,
-        maxY: id.y / scale + span
-    };
-}
-
-function includeTerrainBounds(target: MercatorBounds, bounds: MercatorBounds) {
-    target.minX = Math.min(target.minX, bounds.minX);
-    target.minY = Math.min(target.minY, bounds.minY);
-    target.maxX = Math.max(target.maxX, bounds.maxX);
-    target.maxY = Math.max(target.maxY, bounds.maxY);
-}
-
-function getRenderableTerrainBounds(terrain: any): MercatorBounds | null {
-    const tiles = terrain.tileManager.getRenderableTiles();
-    const bounds: MercatorBounds = {minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity};
-
-    for (const tile of tiles) {
-        includeTerrainBounds(bounds, terrainTileMercatorBounds(tile.tileID));
-    }
-
-    return Number.isFinite(bounds.minX) && Number.isFinite(bounds.minY) &&
-        Number.isFinite(bounds.maxX) && Number.isFinite(bounds.maxY) ? bounds : null;
-}
 
 function extendBoundsForSun(bounds: MercatorBounds, directionRadians: number, meters: number): MercatorBounds {
     const dx = Math.sin(directionRadians);
@@ -800,7 +769,8 @@ export class Painter {
 
         const cachedAtlasBounds = (terrain as any)._elevationAtlasBounds;
         const cachedAtlasPhase = (terrain as any)._elevationAtlasProgressivePhase;
-        const visibleBounds = shadowStyleLayer && cachedAtlasBounds ? getRenderableTerrainBounds(terrain) : null;
+        const atlasVisible = shadowStyleLayer && cachedAtlasBounds ? getShadowAtlasVisibleBounds(this, terrain) : null;
+        const visibleBounds = atlasVisible?.bounds || null;
         const requestedShadowBounds = visibleBounds && shadowProps ?
             extendBoundsForSun(visibleBounds, shadowProps.directionRadians, Math.min(shadowProps.maxDistance || 5000, 5000)) :
             visibleBounds;

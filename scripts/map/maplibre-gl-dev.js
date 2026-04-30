@@ -66446,6 +66446,9 @@ const SHADOW_REACH_METERS = 5000;
 const MID_SHADOW_REACH_METERS = 2200;
 const MAX_ELEVATION_ATLAS_TILES = 72;
 const MAX_CORE_ATLAS_TILES = 32;
+const FOREGROUND_ATLAS_PITCH_START = 42;
+const FOREGROUND_ATLAS_PITCH_RANGE = 18;
+const FOREGROUND_ATLAS_TOP_FRACTION = 0.42;
 function clamp(value, min, max) {
     return Math.max(min, Math.min(max, value));
 }
@@ -66474,6 +66477,77 @@ function includeBounds(target, tileBounds) {
     target.minY = Math.min(target.minY, tileBounds.minY);
     target.maxX = Math.max(target.maxX, tileBounds.maxX);
     target.maxY = Math.max(target.maxY, tileBounds.maxY);
+}
+function intersectBounds(a, b) {
+    const bounds = {
+        minX: Math.max(a.minX, b.minX),
+        minY: Math.max(a.minY, b.minY),
+        maxX: Math.min(a.maxX, b.maxX),
+        maxY: Math.min(a.maxY, b.maxY)
+    };
+    return bounds.maxX > bounds.minX && bounds.maxY > bounds.minY ? bounds : null;
+}
+function expandBounds(bounds, margin) {
+    return {
+        minX: bounds.minX - margin,
+        minY: bounds.minY - margin,
+        maxX: bounds.maxX + margin,
+        maxY: bounds.maxY + margin
+    };
+}
+function finiteBounds(bounds) {
+    return Number.isFinite(bounds.minX) && Number.isFinite(bounds.minY) &&
+        Number.isFinite(bounds.maxX) && Number.isFinite(bounds.maxY);
+}
+function getShadowAtlasVisibleBounds(painter, terrain, renderableTiles = terrain.tileManager.getRenderableTiles()) {
+    const fullBounds = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
+    for (const tile of renderableTiles) {
+        includeBounds(fullBounds, tileMercatorBounds(tile.tileID));
+    }
+    if (!finiteBounds(fullBounds))
+        return null;
+    const tr = painter.transform;
+    const pitch = tr.pitch;
+    const enabled = typeof window === 'undefined' || window._shadowForegroundAtlas !== false;
+    const pitchFactor = enabled ? clamp((pitch - FOREGROUND_ATLAS_PITCH_START) / FOREGROUND_ATLAS_PITCH_RANGE, 0, 1) : 0;
+    if (pitchFactor <= 0.001) {
+        return { bounds: fullBounds, fullBounds, screenClamped: false, screenTop: 0, pitch };
+    }
+    const screenTop = FOREGROUND_ATLAS_TOP_FRACTION * pitchFactor;
+    const sampleBounds = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
+    const width = tr.width;
+    const height = tr.height;
+    const xs = [0.04, 0.20, 0.50, 0.80, 0.96];
+    const ys = [
+        screenTop,
+        screenTop + (1 - screenTop) * 0.25,
+        screenTop + (1 - screenTop) * 0.50,
+        screenTop + (1 - screenTop) * 0.75,
+        0.98
+    ];
+    for (const yf of ys) {
+        for (const xf of xs) {
+            const coord = tr.screenPointToMercatorCoordinate(new Point(clamp(width * xf, 0, Math.max(width - 1, 0)), clamp(height * yf, 0, Math.max(height - 1, 0))));
+            if (coord && Number.isFinite(coord.x) && Number.isFinite(coord.y)) {
+                includeBounds(sampleBounds, { minX: coord.x, minY: coord.y, maxX: coord.x, maxY: coord.y });
+            }
+        }
+    }
+    if (!finiteBounds(sampleBounds)) {
+        return { bounds: fullBounds, fullBounds, screenClamped: false, screenTop: 0, pitch };
+    }
+    const sampledWidth = sampleBounds.maxX - sampleBounds.minX;
+    const sampledHeight = sampleBounds.maxY - sampleBounds.minY;
+    const minMargin = 1200 / WORLD_CIRCUMFERENCE$1;
+    const margin = Math.max(Math.max(sampledWidth, sampledHeight) * 0.18, minMargin);
+    const clampedBounds = intersectBounds(expandBounds(sampleBounds, margin), fullBounds);
+    return {
+        bounds: clampedBounds || fullBounds,
+        fullBounds,
+        screenClamped: !!clampedBounds,
+        screenTop,
+        pitch
+    };
 }
 function extendBoundsTowardSun(bounds, dx, dy, meters) {
     const extension = meters / WORLD_CIRCUMFERENCE$1;
@@ -66669,26 +66743,27 @@ function drawElevation(painter, terrain) {
     const sunDir = shadowLayer ? shadowLayer.getShadowProperties() : { directionRadians: 0 };
     const dxRes = Math.sin(sunDir.directionRadians);
     const dyRes = -Math.cos(sunDir.directionRadians);
-    // 1. Compute Bounding Box of visible tiles in WebMercator space
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    // 1. Compute the atlas footprint. At high pitch, the renderable tile set
+    // can run all the way to the horizon, which would squeeze the foreground
+    // into a tiny part of the atlas. Clamp the core footprint to the lower
+    // screen region and let LOD bands handle sun-facing casters.
     const renderableTiles = terrain.tileManager.getRenderableTiles();
-    const visibleBounds = { minX, minY, maxX, maxY };
+    const atlasVisible = getShadowAtlasVisibleBounds(painter, terrain, renderableTiles);
     const visibleZooms = {};
     for (const tile of renderableTiles) {
-        includeBounds(visibleBounds, tileMercatorBounds(tile.tileID));
         if (debugEnabled) {
             incrementCount(visibleZooms, tile.tileID.canonical.z);
         }
     }
-    if (!Number.isFinite(visibleBounds.minX) || !Number.isFinite(visibleBounds.minY) ||
-        !Number.isFinite(visibleBounds.maxX) || !Number.isFinite(visibleBounds.maxY)) {
+    if (!atlasVisible) {
         console.warn('[ATLAS] drawElevation: no visible terrain tiles, skipping elevation atlas render');
         return;
     }
-    minX = visibleBounds.minX;
-    minY = visibleBounds.minY;
-    maxX = visibleBounds.maxX;
-    maxY = visibleBounds.maxY;
+    const visibleBounds = atlasVisible.bounds;
+    let minX = visibleBounds.minX;
+    let minY = visibleBounds.minY;
+    let maxX = visibleBounds.maxX;
+    let maxY = visibleBounds.maxY;
     // 3. Quantize the atlas to deterministic LOD bands. The visible core stays
     // detailed, while farther sun-facing caster regions fall back to parent cells.
     const source = terrain.tileManager.getSource();
@@ -66728,6 +66803,9 @@ function drawElevation(painter, terrain) {
     // Store Atlas Bounds in terrain object for the shadow raymarcher to use
     terrain._elevationAtlasBounds = [minX, minY, maxX, maxY];
     terrain._elevationAtlasVisibleBounds = [visibleBounds.minX, visibleBounds.minY, visibleBounds.maxX, visibleBounds.maxY];
+    terrain._elevationAtlasFullVisibleBounds = [atlasVisible.fullBounds.minX, atlasVisible.fullBounds.minY, atlasVisible.fullBounds.maxX, atlasVisible.fullBounds.maxY];
+    terrain._elevationAtlasScreenClamped = atlasVisible.screenClamped;
+    terrain._elevationAtlasScreenTop = atlasVisible.screenTop;
     terrain._elevationAtlasProgressivePhase = previewAtlas ? 'preview' : progressivePhase === 'full' ? 'full' : 'stable';
     terrain._daylightAtlasReady = false;
     terrain._horizonAtlasReady = false;
@@ -66788,6 +66866,15 @@ function drawElevation(painter, terrain) {
             progressivePhase: previewAtlas ? 'preview' : progressivePhase === 'full' ? 'full' : 'stable',
             parentFallbackCount,
             flatFallbackCount,
+            screenClamped: atlasVisible.screenClamped,
+            screenTop: atlasVisible.screenTop,
+            pitch: atlasVisible.pitch,
+            fullVisibleBounds: [
+                atlasVisible.fullBounds.minX,
+                atlasVisible.fullBounds.minY,
+                atlasVisible.fullBounds.maxX,
+                atlasVisible.fullBounds.maxY
+            ],
             visibleTiles: renderableTiles.length,
             visibleZooms,
             captureZooms,
@@ -67669,7 +67756,8 @@ class Painter {
         }
         const cachedAtlasBounds = terrain._elevationAtlasBounds;
         const cachedAtlasPhase = terrain._elevationAtlasProgressivePhase;
-        const visibleBounds = shadowStyleLayer && cachedAtlasBounds ? getRenderableTerrainBounds(terrain) : null;
+        const atlasVisible = shadowStyleLayer && cachedAtlasBounds ? getShadowAtlasVisibleBounds(this, terrain) : null;
+        const visibleBounds = (atlasVisible === null || atlasVisible === void 0 ? void 0 : atlasVisible.bounds) || null;
         const requestedShadowBounds = visibleBounds && shadowProps ?
             extendBoundsForSun(visibleBounds, shadowProps.directionRadians, Math.min(shadowProps.maxDistance || 5000, 5000)) :
             visibleBounds;

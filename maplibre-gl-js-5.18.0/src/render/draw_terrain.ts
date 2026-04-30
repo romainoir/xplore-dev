@@ -1,4 +1,5 @@
 import { mat4 } from 'gl-matrix';
+import Point from '@mapbox/point-geometry';
 import { StencilMode } from '../gl/stencil_mode';
 import { DepthMode } from '../gl/depth_mode';
 import { terrainUniforms, terrainDepthUniforms, terrainElevationUniforms, terrainCoordsUniformValues, terrainCoordsUniforms, terrainUniformValues, terrainDepthUniformValues, terrainElevationUniformValues } from './program/terrain_program';
@@ -35,6 +36,9 @@ const SHADOW_REACH_METERS = 5000;
 const MID_SHADOW_REACH_METERS = 2200;
 const MAX_ELEVATION_ATLAS_TILES = 72;
 const MAX_CORE_ATLAS_TILES = 32;
+const FOREGROUND_ATLAS_PITCH_START = 42;
+const FOREGROUND_ATLAS_PITCH_RANGE = 18;
+const FOREGROUND_ATLAS_TOP_FRACTION = 0.42;
 
 function clamp(value: number, min: number, max: number): number {
     return Math.max(min, Math.min(max, value));
@@ -69,6 +73,98 @@ function includeBounds(target: MercatorBounds, tileBounds: MercatorBounds) {
     target.minY = Math.min(target.minY, tileBounds.minY);
     target.maxX = Math.max(target.maxX, tileBounds.maxX);
     target.maxY = Math.max(target.maxY, tileBounds.maxY);
+}
+
+function intersectBounds(a: MercatorBounds, b: MercatorBounds): MercatorBounds | null {
+    const bounds = {
+        minX: Math.max(a.minX, b.minX),
+        minY: Math.max(a.minY, b.minY),
+        maxX: Math.min(a.maxX, b.maxX),
+        maxY: Math.min(a.maxY, b.maxY)
+    };
+
+    return bounds.maxX > bounds.minX && bounds.maxY > bounds.minY ? bounds : null;
+}
+
+function expandBounds(bounds: MercatorBounds, margin: number): MercatorBounds {
+    return {
+        minX: bounds.minX - margin,
+        minY: bounds.minY - margin,
+        maxX: bounds.maxX + margin,
+        maxY: bounds.maxY + margin
+    };
+}
+
+function finiteBounds(bounds: MercatorBounds): boolean {
+    return Number.isFinite(bounds.minX) && Number.isFinite(bounds.minY) &&
+        Number.isFinite(bounds.maxX) && Number.isFinite(bounds.maxY);
+}
+
+export function getShadowAtlasVisibleBounds(painter: Painter, terrain: Terrain, renderableTiles: Array<Tile> = terrain.tileManager.getRenderableTiles()): {
+    bounds: MercatorBounds;
+    fullBounds: MercatorBounds;
+    screenClamped: boolean;
+    screenTop: number;
+    pitch: number;
+} | null {
+    const fullBounds: MercatorBounds = {minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity};
+    for (const tile of renderableTiles) {
+        includeBounds(fullBounds, tileMercatorBounds(tile.tileID));
+    }
+
+    if (!finiteBounds(fullBounds)) return null;
+
+    const tr = painter.transform;
+    const pitch = tr.pitch;
+    const enabled = typeof window === 'undefined' || (window as any)._shadowForegroundAtlas !== false;
+    const pitchFactor = enabled ? clamp((pitch - FOREGROUND_ATLAS_PITCH_START) / FOREGROUND_ATLAS_PITCH_RANGE, 0, 1) : 0;
+
+    if (pitchFactor <= 0.001) {
+        return {bounds: fullBounds, fullBounds, screenClamped: false, screenTop: 0, pitch};
+    }
+
+    const screenTop = FOREGROUND_ATLAS_TOP_FRACTION * pitchFactor;
+    const sampleBounds: MercatorBounds = {minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity};
+    const width = tr.width;
+    const height = tr.height;
+    const xs = [0.04, 0.20, 0.50, 0.80, 0.96];
+    const ys = [
+        screenTop,
+        screenTop + (1 - screenTop) * 0.25,
+        screenTop + (1 - screenTop) * 0.50,
+        screenTop + (1 - screenTop) * 0.75,
+        0.98
+    ];
+
+    for (const yf of ys) {
+        for (const xf of xs) {
+            const coord = tr.screenPointToMercatorCoordinate(new Point(
+                clamp(width * xf, 0, Math.max(width - 1, 0)),
+                clamp(height * yf, 0, Math.max(height - 1, 0))
+            ));
+            if (coord && Number.isFinite(coord.x) && Number.isFinite(coord.y)) {
+                includeBounds(sampleBounds, {minX: coord.x, minY: coord.y, maxX: coord.x, maxY: coord.y});
+            }
+        }
+    }
+
+    if (!finiteBounds(sampleBounds)) {
+        return {bounds: fullBounds, fullBounds, screenClamped: false, screenTop: 0, pitch};
+    }
+
+    const sampledWidth = sampleBounds.maxX - sampleBounds.minX;
+    const sampledHeight = sampleBounds.maxY - sampleBounds.minY;
+    const minMargin = 1200 / WORLD_CIRCUMFERENCE;
+    const margin = Math.max(Math.max(sampledWidth, sampledHeight) * 0.18, minMargin);
+    const clampedBounds = intersectBounds(expandBounds(sampleBounds, margin), fullBounds);
+
+    return {
+        bounds: clampedBounds || fullBounds,
+        fullBounds,
+        screenClamped: !!clampedBounds,
+        screenTop,
+        pitch
+    };
 }
 
 function extendBoundsTowardSun(bounds: MercatorBounds, dx: number, dy: number, meters: number): MercatorBounds {
@@ -289,29 +385,30 @@ function drawElevation(painter: Painter, terrain: Terrain) {
     const dxRes = Math.sin(sunDir.directionRadians);
     const dyRes = -Math.cos(sunDir.directionRadians);
 
-    // 1. Compute Bounding Box of visible tiles in WebMercator space
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    // 1. Compute the atlas footprint. At high pitch, the renderable tile set
+    // can run all the way to the horizon, which would squeeze the foreground
+    // into a tiny part of the atlas. Clamp the core footprint to the lower
+    // screen region and let LOD bands handle sun-facing casters.
     const renderableTiles = terrain.tileManager.getRenderableTiles();
-    const visibleBounds: MercatorBounds = { minX, minY, maxX, maxY };
+    const atlasVisible = getShadowAtlasVisibleBounds(painter, terrain, renderableTiles);
     const visibleZooms: Record<string, number> = {};
 
     for (const tile of renderableTiles) {
-        includeBounds(visibleBounds, tileMercatorBounds(tile.tileID));
         if (debugEnabled) {
             incrementCount(visibleZooms, tile.tileID.canonical.z);
         }
     }
 
-    if (!Number.isFinite(visibleBounds.minX) || !Number.isFinite(visibleBounds.minY) ||
-        !Number.isFinite(visibleBounds.maxX) || !Number.isFinite(visibleBounds.maxY)) {
+    if (!atlasVisible) {
         console.warn('[ATLAS] drawElevation: no visible terrain tiles, skipping elevation atlas render');
         return;
     }
 
-    minX = visibleBounds.minX;
-    minY = visibleBounds.minY;
-    maxX = visibleBounds.maxX;
-    maxY = visibleBounds.maxY;
+    const visibleBounds = atlasVisible.bounds;
+    let minX = visibleBounds.minX;
+    let minY = visibleBounds.minY;
+    let maxX = visibleBounds.maxX;
+    let maxY = visibleBounds.maxY;
 
     // 3. Quantize the atlas to deterministic LOD bands. The visible core stays
     // detailed, while farther sun-facing caster regions fall back to parent cells.
@@ -366,6 +463,9 @@ function drawElevation(painter: Painter, terrain: Terrain) {
     // Store Atlas Bounds in terrain object for the shadow raymarcher to use
     (terrain as any)._elevationAtlasBounds = [minX, minY, maxX, maxY];
     (terrain as any)._elevationAtlasVisibleBounds = [visibleBounds.minX, visibleBounds.minY, visibleBounds.maxX, visibleBounds.maxY];
+    (terrain as any)._elevationAtlasFullVisibleBounds = [atlasVisible.fullBounds.minX, atlasVisible.fullBounds.minY, atlasVisible.fullBounds.maxX, atlasVisible.fullBounds.maxY];
+    (terrain as any)._elevationAtlasScreenClamped = atlasVisible.screenClamped;
+    (terrain as any)._elevationAtlasScreenTop = atlasVisible.screenTop;
     (terrain as any)._elevationAtlasProgressivePhase = previewAtlas ? 'preview' : progressivePhase === 'full' ? 'full' : 'stable';
     (terrain as any)._daylightAtlasReady = false;
     (terrain as any)._horizonAtlasReady = false;
@@ -433,6 +533,15 @@ function drawElevation(painter: Painter, terrain: Terrain) {
             progressivePhase: previewAtlas ? 'preview' : progressivePhase === 'full' ? 'full' : 'stable',
             parentFallbackCount,
             flatFallbackCount,
+            screenClamped: atlasVisible.screenClamped,
+            screenTop: atlasVisible.screenTop,
+            pitch: atlasVisible.pitch,
+            fullVisibleBounds: [
+                atlasVisible.fullBounds.minX,
+                atlasVisible.fullBounds.minY,
+                atlasVisible.fullBounds.maxX,
+                atlasVisible.fullBounds.maxY
+            ],
             visibleTiles: renderableTiles.length,
             visibleZooms,
             captureZooms,
