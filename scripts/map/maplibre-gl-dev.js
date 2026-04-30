@@ -74248,7 +74248,8 @@ const LAYERS_TO_TEXTURES = {
     line: true,
     raster: true,
     hillshade: true,
-    'color-relief': true
+    'color-relief': true,
+    daylight: true
 };
 /**
  * @internal

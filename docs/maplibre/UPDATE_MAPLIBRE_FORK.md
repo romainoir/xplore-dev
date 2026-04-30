@@ -99,6 +99,7 @@ Shadow/daylight:
 - `src/webgl/program/program_uniforms.ts` and `src/shaders/shaders.ts` must register every custom program/shader pair.
 - `src/render/painter.ts` must call the elevation/depth/coordinate atlas path and dispatch shadow/daylight render layers.
 - `src/render/terrain.ts` must own and destroy the custom atlas/framebuffer resources.
+- `src/webgl/render_to_texture.ts` must include `daylight: true` in `LAYERS_TO_TEXTURES`. Otherwise Sunlight Hours, First Sun, and Last Sun bypass terrain render-to-texture and appear as flat overlays at pitch, even if their draw shader uses terrain projection flags.
 - `src/webgl/draw/draw_daylight.ts` must render Sunlight Hours, First Sun, and Last Sun with the same terrain-aware projection contract as raster/hillshade/shadow: call `getTerrainData(coord)` and use `getProjectionData({overscaledTileID: coord, aligned: !painter.options.moving, applyGlobeMatrix: !isRenderingToTexture, applyTerrainMatrix: true})`. If `applyGlobeMatrix` is forced off, the duration layers render as flat overlays instead of conforming to pitched terrain.
 
 MapLibre 5.24 projection caveat:
