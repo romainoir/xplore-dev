@@ -8,7 +8,7 @@
 
 // ─── Module imports ───
 import { createMap, getBaseStyleLayerBuckets, parseAndCacheBaseStyleLayers } from './map-init.js';
-import { createImageryManager, IMAGERY_OPTIONS, LAYER_GROUPS, LAYER_GROUP_BY_MEMBER_ID, clampOpacity } from './imagery-manager.js';
+import { createImageryManager, IMAGERY_OPTIONS, LAYER_GROUP_BY_MEMBER_ID } from './imagery-manager.js';
 import { applyOverlays, applyHillshadeAppearance, injectOverlaysIntoStyle } from './overlay-manager.js';
 import { createRoutingOrchestrator } from './routing-orchestrator.js';
 import { createShadowController } from './shadow-controller.js';
@@ -31,7 +31,6 @@ import { Toast } from '../ui/toast.js';
 
 // ─── Config imports ───
 import {
-  MAPTERHORN_TILE_URL,
   SKY_SETTINGS,
   VIEW_MODES,
   DEFAULT_3D_ORIENTATION,

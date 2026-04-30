@@ -4,19 +4,14 @@
  */
 
 import {
-    S2C_URL,
-    S2_FADE_DURATION,
-    S2_OPACITY,
     TILE_FADE_DURATION,
 } from '../config/map-config.js';
 import { setWikimediaPhotosEnabled } from '../map/wikimedia-photos.js';
 
 // ─── Attribution constants ───
 const IGN_ATTRIBUTION = '<a href="https://www.ign.fr/">© IGN</a>';
-const EOX_ATTRIBUTION = '<a href="https://www.eox.at/">© EOX</a>';
 const WMTS_PREVIEW_COORDS = Object.freeze({ z: 14, x: 8508, y: 5911 });
 export const DEM_SOURCE_MAX_ZOOM = 15;
-export const SHADOW_DEM_MAX_ZOOM = 11;
 
 function createIgnTileTemplate(layerName, format = 'image/png') {
     const encodedFormat = encodeURIComponent(format);
@@ -74,7 +69,6 @@ export const IMAGERY_OPTIONS = Object.freeze([
     { id: 'ign-cosia', label: 'IGN Kosia 2021-2023', sourceId: 'ign-cosia', layerId: 'ign-cosia', tileTemplate: createIgnTileTemplate('IGNF_COSIA_2021-2023', 'image/png'), tileSize: 256, attribution: IGN_ATTRIBUTION, defaultVisible: false, defaultOpacity: 1 },
     { id: 'ign-forest-inventory', label: 'IGN Forest Inventory', sourceId: 'ign-forest-inventory', layerId: 'ign-forest-inventory', tileTemplate: createIgnTileTemplate('LANDCOVER.FORESTINVENTORY.V2', 'image/png'), tileSize: 256, attribution: IGN_ATTRIBUTION, defaultVisible: false, defaultOpacity: 1 },
     { id: 'ign-orthophotos', label: 'IGN Orthophotos', sourceId: 'ign-orthophotos', layerId: 'ign-orthophotos', tileTemplate: createIgnTileTemplate('ORTHOIMAGERY.ORTHOPHOTOS.BDORTHO', 'image/jpeg'), tileSize: 256, attribution: IGN_ATTRIBUTION, defaultVisible: false, defaultOpacity: 1, previewImage: './data/france.png' },
-    // { id: 'eox-s2', label: 'EOX Satellite', sourceId: 's2cloudless', layerId: 's2cloudless', tileTemplate: S2C_URL, tileSize: 256, attribution: EOX_ATTRIBUTION, defaultVisible: false, defaultOpacity: 1, paint: { 'raster-opacity': S2_OPACITY, 'raster-fade-duration': S2_FADE_DURATION } },
     { id: 'eox-s2', label: 'World Imagery', sourceId: 'world-imagery', layerId: 'world-imagery', tileTemplate: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', tileSize: 256, attribution: '© Esri', defaultVisible: false, defaultOpacity: 1, previewImage: './data/worldwide.png' },
     { id: 'ign-lidar-hd-mns-shadow', label: 'MNS', sourceId: 'ign-lidar-hd-mns-shadow', layerId: 'ign-lidar-hd-mns-shadow', tileTemplate: createIgnTileTemplate('IGNF_LIDAR-HD_MNS_ELEVATION.ELEVATIONGRIDCOVERAGE.SHADOW', 'image/png'), tileSize: 256, attribution: IGN_ATTRIBUTION, defaultVisible: false, defaultOpacity: 1 },
     { id: 'ign-lidar-hd-mnt-shadow', label: 'MNT', sourceId: 'ign-lidar-hd-mnt-shadow', layerId: 'ign-lidar-hd-mnt-shadow', tileTemplate: createIgnTileTemplate('IGNF_LIDAR-HD_MNT_ELEVATION.ELEVATIONGRIDCOVERAGE.SHADOW', 'image/png'), tileSize: 256, attribution: IGN_ATTRIBUTION, defaultVisible: false, defaultOpacity: 1 },
@@ -102,70 +96,12 @@ LAYER_GROUPS.forEach(group => {
     group.members.forEach(memberId => LAYER_GROUP_BY_MEMBER_ID.set(memberId, group));
 });
 
-export const IMAGERY_LAYER_IDS = new Set(
-    IMAGERY_OPTIONS.flatMap(option => {
-        const ids = [];
-        if (typeof option.layerId === 'string') ids.push(option.layerId);
-        if (Array.isArray(option.linkedLayerIds)) option.linkedLayerIds.forEach(id => { if (typeof id === 'string') ids.push(id); });
-        return ids;
-    })
-);
-
-export const ROUTE_LAYER_IDS = new Set([
-    'route-line', 'route-line-casing', 'route-segment-hover', 'distance-markers',
-    'waypoints', 'waypoints-hit-area', 'waypoint-hover-drag', 'route-hover-point', 'segment-markers'
-]);
-
 export const ROUTE_LAYER_ORDER_TOP_TO_BOTTOM = Object.freeze([
     'route-hover-point', 'waypoint-hover-drag', 'waypoints', 'segment-markers',
     'waypoints-hit-area', 'distance-markers', 'route-segment-hover', 'route-line', 'route-line-casing'
 ]);
 
 export const IMAGERY_OPTIONS_BY_ID = new Map(IMAGERY_OPTIONS.map(o => [o.id, o]));
-export const HILLSHADE_OPTION_ID = 'hillshade';
-
-// ─── Expression utilities ───
-export const CONTOUR_LINE_BASE_OPACITY = Object.freeze([
-    'interpolate', ['linear'], ['zoom'], 13.4, 0, 13.5, 0.45, 15, 0.85, 17, 1
-]);
-
-export const CONTOUR_TEXT_BASE_OPACITY = Object.freeze([
-    'interpolate', ['linear'], ['zoom'], 13.4, 0, 13.6, 0.5, 14.2, 0.9
-]);
-
-export function cloneExpression(expression) {
-    if (Array.isArray(expression)) return expression.map(item => cloneExpression(item));
-    if (expression && typeof expression === 'object') {
-        return Object.fromEntries(Object.entries(expression).map(([k, v]) => [k, cloneExpression(v)]));
-    }
-    return expression;
-}
-
-export function scaleExpression(expression, factor) {
-    if (typeof expression === 'number') return expression * factor;
-    if (!Array.isArray(expression) || expression.length === 0) return ['*', cloneExpression(expression), factor];
-    const [operator, ...rest] = expression;
-    if (operator === 'interpolate') {
-        if (rest.length < 2) return ['*', cloneExpression(expression), factor];
-        const [curve, input, ...stops] = rest;
-        const scaledStops = stops.map((value, index) => index % 2 === 0 ? cloneExpression(value) : scaleExpression(value, factor));
-        return ['interpolate', cloneExpression(curve), cloneExpression(input), ...scaledStops];
-    }
-    if (operator === 'step') {
-        if (rest.length < 1) return ['*', cloneExpression(expression), factor];
-        const [input, ...stops] = rest;
-        if (!stops.length) return ['*', cloneExpression(expression), factor];
-        const [baseOutput, ...remaining] = stops;
-        const scaledStops = [scaleExpression(baseOutput, factor)];
-        for (let i = 0; i < remaining.length; i += 2) {
-            if (typeof remaining[i] === 'undefined' || typeof remaining[i + 1] === 'undefined') break;
-            scaledStops.push(cloneExpression(remaining[i]));
-            scaledStops.push(scaleExpression(remaining[i + 1], factor));
-        }
-        return ['step', cloneExpression(input), ...scaledStops];
-    }
-    return ['*', cloneExpression(expression), factor];
-}
 
 export function clampOpacity(value) {
     if (typeof value !== 'number' || Number.isNaN(value)) return 0;
@@ -199,30 +135,6 @@ export function setLayerSequenceOpacity(map, layerIds, alpha) {
             case 'raster': setIf('raster-opacity', alpha); break;
         }
     });
-}
-
-// ─── Hillshade method support ───
-export function getAvailableHillshadeMethods() {
-    const styleSpec = typeof maplibregl !== 'undefined' ? maplibregl?.styleSpec : null;
-    const methodDefinition = styleSpec?.paint_hillshade?.['hillshade-method'];
-    const { values } = methodDefinition ?? {};
-    if (!values) return [];
-    if (Array.isArray(values)) {
-        return values.map(entry => {
-            if (typeof entry === 'string') return entry;
-            if (entry && typeof entry === 'object' && 'value' in entry) return entry.value;
-            return null;
-        }).filter(v => typeof v === 'string' && v.length);
-    }
-    if (typeof values === 'object') return Object.keys(values).filter(k => typeof k === 'string' && k.length);
-    return [];
-}
-
-export function formatHillshadeMethodName(method) {
-    if (typeof method !== 'string' || !method.length) return '';
-    const overrides = { standard: 'Standard', basic: 'Basic', combined: 'Combined', igor: 'Igor', multidirectional: 'Multi-directional', 'multi-directional': 'Multi-directional', mapbox: 'Mapbox', default: 'Default' };
-    if (overrides[method.toLowerCase()]) return overrides[method.toLowerCase()];
-    return method.replace(/[-_]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
 
 /**
