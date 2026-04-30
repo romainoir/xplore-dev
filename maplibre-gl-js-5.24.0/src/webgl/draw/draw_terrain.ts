@@ -505,11 +505,10 @@ function drawElevation(painter: Painter, terrain: Terrain) {
         const finalMatrix = mat4.create();
         mat4.multiply(finalMatrix, orthoMatrix, tileMatrix);
 
-        // Use standard projection data but override projection matrices with our ortho projection
-        // projectTileFor3D() uses u_projection_matrix, not u_matrix!
+        // Use standard projection data but override the 5.24 projection matrix
+        // consumed by projectTileFor3D().
         const projectionData = tr.getProjectionData({ overscaledTileID: tileID, applyTerrainMatrix: false, applyGlobeMatrix: false });
-        projectionData['u_matrix'] = finalMatrix as any;
-        projectionData['mainMatrix'] = finalMatrix as any; // This maps to u_projection_matrix in the shader
+        projectionData.mainMatrix = finalMatrix as any;
 
         const uniformValues = terrainElevationUniformValues(0);
         program.draw(context, gl.TRIANGLES, depthMode, StencilMode.disabled, colorMode, CullFaceMode.backCCW, uniformValues, terrainData, projectionData, 'terrain', mesh.vertexBuffer, mesh.indexBuffer, mesh.segments);
