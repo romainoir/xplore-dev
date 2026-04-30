@@ -42,6 +42,14 @@ export type DaylightPrepareUniformsType = {
     'u_solar_lut_13': Uniform4f;
     'u_solar_lut_14': Uniform4f;
     'u_solar_lut_15': Uniform4f;
+    'u_sunrise_lut_0': Uniform4f;
+    'u_sunrise_lut_1': Uniform4f;
+    'u_sunrise_lut_2': Uniform4f;
+    'u_sunrise_lut_3': Uniform4f;
+    'u_sunset_lut_0': Uniform4f;
+    'u_sunset_lut_1': Uniform4f;
+    'u_sunset_lut_2': Uniform4f;
+    'u_sunset_lut_3': Uniform4f;
 };
 
 const daylightUniforms = (context: Context, locations: UniformLocations): DaylightUniformsType => ({
@@ -77,6 +85,14 @@ const daylightPrepareUniforms = (context: Context, locations: UniformLocations):
     'u_solar_lut_13': new Uniform4f(context, locations.u_solar_lut_13),
     'u_solar_lut_14': new Uniform4f(context, locations.u_solar_lut_14),
     'u_solar_lut_15': new Uniform4f(context, locations.u_solar_lut_15),
+    'u_sunrise_lut_0': new Uniform4f(context, locations.u_sunrise_lut_0),
+    'u_sunrise_lut_1': new Uniform4f(context, locations.u_sunrise_lut_1),
+    'u_sunrise_lut_2': new Uniform4f(context, locations.u_sunrise_lut_2),
+    'u_sunrise_lut_3': new Uniform4f(context, locations.u_sunrise_lut_3),
+    'u_sunset_lut_0': new Uniform4f(context, locations.u_sunset_lut_0),
+    'u_sunset_lut_1': new Uniform4f(context, locations.u_sunset_lut_1),
+    'u_sunset_lut_2': new Uniform4f(context, locations.u_sunset_lut_2),
+    'u_sunset_lut_3': new Uniform4f(context, locations.u_sunset_lut_3),
 });
 
 const daylightUniformValues = (
@@ -101,6 +117,8 @@ const daylightUniformValues = (
 const daylightPrepareUniformValues = (
     solarLUT: Float32Array,
     timeWeightMins: number,
+    sunriseWindowLUT: Float32Array,
+    sunsetWindowLUT: Float32Array,
     horizonBins: number,
     horizonEdgeSoftness: number
 ): UniformValues<DaylightPrepareUniformsType> => ({
@@ -127,6 +145,14 @@ const daylightPrepareUniformValues = (
     'u_solar_lut_13': [solarLUT[52], solarLUT[53], solarLUT[54], solarLUT[55]],
     'u_solar_lut_14': [solarLUT[56], solarLUT[57], solarLUT[58], solarLUT[59]],
     'u_solar_lut_15': [solarLUT[60], solarLUT[61], solarLUT[62], solarLUT[63]],
+    'u_sunrise_lut_0': [sunriseWindowLUT[0], sunriseWindowLUT[1], sunriseWindowLUT[2], sunriseWindowLUT[3]],
+    'u_sunrise_lut_1': [sunriseWindowLUT[4], sunriseWindowLUT[5], sunriseWindowLUT[6], sunriseWindowLUT[7]],
+    'u_sunrise_lut_2': [sunriseWindowLUT[8], sunriseWindowLUT[9], sunriseWindowLUT[10], sunriseWindowLUT[11]],
+    'u_sunrise_lut_3': [sunriseWindowLUT[12], sunriseWindowLUT[13], sunriseWindowLUT[14], sunriseWindowLUT[15]],
+    'u_sunset_lut_0': [sunsetWindowLUT[0], sunsetWindowLUT[1], sunsetWindowLUT[2], sunsetWindowLUT[3]],
+    'u_sunset_lut_1': [sunsetWindowLUT[4], sunsetWindowLUT[5], sunsetWindowLUT[6], sunsetWindowLUT[7]],
+    'u_sunset_lut_2': [sunsetWindowLUT[8], sunsetWindowLUT[9], sunsetWindowLUT[10], sunsetWindowLUT[11]],
+    'u_sunset_lut_3': [sunsetWindowLUT[12], sunsetWindowLUT[13], sunsetWindowLUT[14], sunsetWindowLUT[15]],
 });
 
 export {

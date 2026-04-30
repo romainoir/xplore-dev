@@ -53266,7 +53266,7 @@ var shadowPrepareVert = 'in vec2 a_pos;out vec2 v_pos;void main() {vec2 pos=a_po
 var daylightFrag = "// Daylight / Sun Duration display shader\n// The expensive horizon visibility integration is cached in u_daylight.\n\nuniform sampler2D u_daylight;\nuniform sampler2D u_color_ramp;\nuniform float u_opacity;\nuniform float u_daylight_mode;\n\nin vec2 v_pos;\nin vec2 v_atlas_uv;\n\n#ifndef HAS_UNIFORM_u_color_ramp\n#define HAS_UNIFORM_u_color_ramp\n#endif\n\nvoid main() {\n    if (v_atlas_uv.x < 0.0 || v_atlas_uv.x > 1.0 || v_atlas_uv.y < 0.0 || v_atlas_uv.y > 1.0) {\n        fragColor = vec4(0.0);\n        return;\n    }\n\n    vec4 daylight = texture(u_daylight, v_atlas_uv);\n    float rampPos = clamp(daylight.r, 0.0, 1.0);\n\n    if (u_daylight_mode > 0.5) {\n        float timingScore = clamp(u_daylight_mode > 1.5 ? daylight.b : daylight.g, 0.0, 1.0);\n        float hasSun = step(0.001, rampPos);\n        float durationWeight = mix(0.58, 1.0, smoothstep(0.18, 0.92, rampPos));\n        float score = pow(clamp(timingScore * durationWeight * hasSun, 0.0, 1.0), 1.42);\n        vec3 cold = vec3(0.12, 0.00, 0.01);\n        vec3 low = vec3(0.36, 0.02, 0.01);\n        vec3 mid = vec3(0.82, 0.03, 0.01);\n        vec3 hot = vec3(1.00, 0.72, 0.03);\n        vec3 peak = vec3(1.00, 0.98, 0.55);\n        vec3 color = mix(low, mid, smoothstep(0.05, 0.48, score));\n        color = mix(color, hot, smoothstep(0.42, 0.84, score));\n        color = mix(color, peak, smoothstep(0.82, 1.0, score));\n        color = mix(cold, color, hasSun * smoothstep(0.0, 0.08, rampPos));\n        float alpha = u_opacity * hasSun * (0.16 + 0.84 * smoothstep(0.04, 0.92, score));\n        fragColor = vec4(color, alpha);\n        return;\n    }\n\n    vec4 color = texture(u_color_ramp, vec2(rampPos, 0.5));\n    color.a *= u_opacity;\n    fragColor = color;\n}\n";
 
 // This file is generated. Edit build/generate-shaders.ts, then run `npm run codegen`.
-var daylightPrepareFrag = "// Daylight / Sun Duration atlas prepare shader.\n// Integrates direct-sun visibility from cached directional horizon angles.\n\nuniform sampler2D u_horizon0; // bins 0..3: N, NE, E, SE\nuniform sampler2D u_horizon1; // bins 4..7: S, SW, W, NW\nuniform sampler2D u_horizon2; // bins 8..11 when using 16-bin quality\nuniform sampler2D u_horizon3; // bins 12..15 when using 16-bin quality\nuniform float u_horizon_bins;\nuniform float u_horizon_edge_softness;\nuniform float u_time_weight; // minutes per solar sample\n\nuniform vec4 u_solar_lut_0;\nuniform vec4 u_solar_lut_1;\nuniform vec4 u_solar_lut_2;\nuniform vec4 u_solar_lut_3;\nuniform vec4 u_solar_lut_4;\nuniform vec4 u_solar_lut_5;\nuniform vec4 u_solar_lut_6;\nuniform vec4 u_solar_lut_7;\nuniform vec4 u_solar_lut_8;\nuniform vec4 u_solar_lut_9;\nuniform vec4 u_solar_lut_10;\nuniform vec4 u_solar_lut_11;\nuniform vec4 u_solar_lut_12;\nuniform vec4 u_solar_lut_13;\nuniform vec4 u_solar_lut_14;\nuniform vec4 u_solar_lut_15;\n\nin vec2 v_pos;\n\nconst float PI = 3.141592653589793;\nconst float SOLAR_SAMPLES = 32.0;\n\nfloat channelValue(vec4 packed, float channel) {\n    if (channel < 0.5) return packed.r;\n    if (channel < 1.5) return packed.g;\n    if (channel < 2.5) return packed.b;\n    return packed.a;\n}\n\nfloat horizonBin(float bin, vec2 uv) {\n    float wrappedBin = mod(bin + u_horizon_bins, u_horizon_bins);\n    if (wrappedBin < 4.0) {\n        return channelValue(texture(u_horizon0, uv), wrappedBin);\n    }\n    if (wrappedBin < 8.0) {\n        return channelValue(texture(u_horizon1, uv), wrappedBin - 4.0);\n    }\n    if (wrappedBin < 12.0) {\n        return channelValue(texture(u_horizon2, uv), wrappedBin - 8.0);\n    }\n    return channelValue(texture(u_horizon3, uv), wrappedBin - 12.0);\n}\n\nfloat sampleHorizonAngle(float azimuth, vec2 uv) {\n    float bin = mod(azimuth, PI * 2.0) / ((PI * 2.0) / max(u_horizon_bins, 1.0));\n    float bin0 = floor(bin);\n    float bin1 = mod(bin0 + 1.0, u_horizon_bins);\n    float t = fract(bin);\n    float h0 = horizonBin(bin0, uv);\n    float h1 = horizonBin(bin1, uv);\n    return mix(h0, h1, t) * (PI * 0.5);\n}\n\nfloat sunVisibility(vec2 sunPos, vec2 uv) {\n    float sunAzimuth = sunPos.x;\n    float sunAltitude = sunPos.y;\n    float aboveHorizon = smoothstep(radians(-0.5), radians(1.2), sunAltitude);\n    if (aboveHorizon <= 0.0) return 0.0;\n\n    float terrainHorizon = sampleHorizonAngle(sunAzimuth, uv);\n    float edgeSoftness = radians(0.70) * max(u_horizon_edge_softness, 0.25);\n    edgeSoftness = max(edgeSoftness, fwidth(terrainHorizon) * 1.35 + radians(0.12));\n    return aboveHorizon * smoothstep(terrainHorizon - edgeSoftness, terrainHorizon + edgeSoftness, sunAltitude);\n}\n\nvoid accumulateVisibility(vec4 packedSunPositions, vec2 uv, float baseIndex, float oneHourSamples, inout float visibleSamples, inout float morningScore, inout float morningNorm, inout float eveningScore, inout float eveningNorm) {\n    float v0 = sunVisibility(packedSunPositions.xy, uv);\n    float v1 = sunVisibility(packedSunPositions.zw, uv);\n    visibleSamples += v0 + v1;\n\n    float idx0 = baseIndex;\n    float idx1 = baseIndex + 1.0;\n    float morning0 = 1.0 - smoothstep(0.0, oneHourSamples, idx0);\n    float morning1 = 1.0 - smoothstep(0.0, oneHourSamples, idx1);\n    float evening0 = 1.0 - smoothstep(0.0, oneHourSamples, (SOLAR_SAMPLES - 1.0) - idx0);\n    float evening1 = 1.0 - smoothstep(0.0, oneHourSamples, (SOLAR_SAMPLES - 1.0) - idx1);\n\n    morningScore += v0 * morning0 + v1 * morning1;\n    morningNorm += morning0 + morning1;\n    eveningScore += v0 * evening0 + v1 * evening1;\n    eveningNorm += evening0 + evening1;\n}\n\nvoid main() {\n    float visibleSamples = 0.0;\n    float oneHourSamples = clamp(60.0 / max(u_time_weight, 1.0), 1.0, SOLAR_SAMPLES);\n    float morningScore = 0.0;\n    float morningNorm = 0.0;\n    float eveningScore = 0.0;\n    float eveningNorm = 0.0;\n    accumulateVisibility(u_solar_lut_0, v_pos, 0.0, oneHourSamples, visibleSamples, morningScore, morningNorm, eveningScore, eveningNorm);\n    accumulateVisibility(u_solar_lut_1, v_pos, 2.0, oneHourSamples, visibleSamples, morningScore, morningNorm, eveningScore, eveningNorm);\n    accumulateVisibility(u_solar_lut_2, v_pos, 4.0, oneHourSamples, visibleSamples, morningScore, morningNorm, eveningScore, eveningNorm);\n    accumulateVisibility(u_solar_lut_3, v_pos, 6.0, oneHourSamples, visibleSamples, morningScore, morningNorm, eveningScore, eveningNorm);\n    accumulateVisibility(u_solar_lut_4, v_pos, 8.0, oneHourSamples, visibleSamples, morningScore, morningNorm, eveningScore, eveningNorm);\n    accumulateVisibility(u_solar_lut_5, v_pos, 10.0, oneHourSamples, visibleSamples, morningScore, morningNorm, eveningScore, eveningNorm);\n    accumulateVisibility(u_solar_lut_6, v_pos, 12.0, oneHourSamples, visibleSamples, morningScore, morningNorm, eveningScore, eveningNorm);\n    accumulateVisibility(u_solar_lut_7, v_pos, 14.0, oneHourSamples, visibleSamples, morningScore, morningNorm, eveningScore, eveningNorm);\n    accumulateVisibility(u_solar_lut_8, v_pos, 16.0, oneHourSamples, visibleSamples, morningScore, morningNorm, eveningScore, eveningNorm);\n    accumulateVisibility(u_solar_lut_9, v_pos, 18.0, oneHourSamples, visibleSamples, morningScore, morningNorm, eveningScore, eveningNorm);\n    accumulateVisibility(u_solar_lut_10, v_pos, 20.0, oneHourSamples, visibleSamples, morningScore, morningNorm, eveningScore, eveningNorm);\n    accumulateVisibility(u_solar_lut_11, v_pos, 22.0, oneHourSamples, visibleSamples, morningScore, morningNorm, eveningScore, eveningNorm);\n    accumulateVisibility(u_solar_lut_12, v_pos, 24.0, oneHourSamples, visibleSamples, morningScore, morningNorm, eveningScore, eveningNorm);\n    accumulateVisibility(u_solar_lut_13, v_pos, 26.0, oneHourSamples, visibleSamples, morningScore, morningNorm, eveningScore, eveningNorm);\n    accumulateVisibility(u_solar_lut_14, v_pos, 28.0, oneHourSamples, visibleSamples, morningScore, morningNorm, eveningScore, eveningNorm);\n    accumulateVisibility(u_solar_lut_15, v_pos, 30.0, oneHourSamples, visibleSamples, morningScore, morningNorm, eveningScore, eveningNorm);\n\n    float totalHours = visibleSamples * u_time_weight / 60.0;\n    float daylightHours = max(u_time_weight * SOLAR_SAMPLES / 60.0, 1.0);\n    float rampPos = smoothstep(0.0, 1.0, clamp(totalHours / daylightHours, 0.0, 1.0));\n    morningScore = clamp(morningScore / max(morningNorm, 0.0001), 0.0, 1.0);\n    eveningScore = clamp(eveningScore / max(eveningNorm, 0.0001), 0.0, 1.0);\n    fragColor = vec4(rampPos, morningScore, eveningScore, 1.0);\n}\n";
+var daylightPrepareFrag = "// Daylight / Sun Duration atlas prepare shader.\n// Integrates direct-sun visibility from cached directional horizon angles.\n\nuniform sampler2D u_horizon0; // bins 0..3: N, NE, E, SE\nuniform sampler2D u_horizon1; // bins 4..7: S, SW, W, NW\nuniform sampler2D u_horizon2; // bins 8..11 when using 16-bin quality\nuniform sampler2D u_horizon3; // bins 12..15 when using 16-bin quality\nuniform float u_horizon_bins;\nuniform float u_horizon_edge_softness;\nuniform float u_time_weight; // minutes per solar sample\n\nuniform vec4 u_solar_lut_0;\nuniform vec4 u_solar_lut_1;\nuniform vec4 u_solar_lut_2;\nuniform vec4 u_solar_lut_3;\nuniform vec4 u_solar_lut_4;\nuniform vec4 u_solar_lut_5;\nuniform vec4 u_solar_lut_6;\nuniform vec4 u_solar_lut_7;\nuniform vec4 u_solar_lut_8;\nuniform vec4 u_solar_lut_9;\nuniform vec4 u_solar_lut_10;\nuniform vec4 u_solar_lut_11;\nuniform vec4 u_solar_lut_12;\nuniform vec4 u_solar_lut_13;\nuniform vec4 u_solar_lut_14;\nuniform vec4 u_solar_lut_15;\nuniform vec4 u_sunrise_lut_0;\nuniform vec4 u_sunrise_lut_1;\nuniform vec4 u_sunrise_lut_2;\nuniform vec4 u_sunrise_lut_3;\nuniform vec4 u_sunset_lut_0;\nuniform vec4 u_sunset_lut_1;\nuniform vec4 u_sunset_lut_2;\nuniform vec4 u_sunset_lut_3;\n\nin vec2 v_pos;\n\nconst float PI = 3.141592653589793;\nconst float SOLAR_SAMPLES = 32.0;\nconst float SUN_WINDOW_SAMPLES = 8.0;\nconst float SUNRISE_PRE_MINS = 10.0;\nconst float SUNRISE_POST_MINS = 20.0;\nconst float SUNSET_PRE_MINS = 20.0;\nconst float SUNSET_POST_MINS = 10.0;\n\nfloat channelValue(vec4 packed, float channel) {\n    if (channel < 0.5) return packed.r;\n    if (channel < 1.5) return packed.g;\n    if (channel < 2.5) return packed.b;\n    return packed.a;\n}\n\nfloat horizonBin(float bin, vec2 uv) {\n    float wrappedBin = mod(bin + u_horizon_bins, u_horizon_bins);\n    if (wrappedBin < 4.0) {\n        return channelValue(texture(u_horizon0, uv), wrappedBin);\n    }\n    if (wrappedBin < 8.0) {\n        return channelValue(texture(u_horizon1, uv), wrappedBin - 4.0);\n    }\n    if (wrappedBin < 12.0) {\n        return channelValue(texture(u_horizon2, uv), wrappedBin - 8.0);\n    }\n    return channelValue(texture(u_horizon3, uv), wrappedBin - 12.0);\n}\n\nfloat sampleHorizonAngle(float azimuth, vec2 uv) {\n    float bin = mod(azimuth, PI * 2.0) / ((PI * 2.0) / max(u_horizon_bins, 1.0));\n    float bin0 = floor(bin);\n    float bin1 = mod(bin0 + 1.0, u_horizon_bins);\n    float t = fract(bin);\n    float h0 = horizonBin(bin0, uv);\n    float h1 = horizonBin(bin1, uv);\n    return mix(h0, h1, t) * (PI * 0.5);\n}\n\nfloat sunVisibility(vec2 sunPos, vec2 uv) {\n    float sunAzimuth = sunPos.x;\n    float sunAltitude = sunPos.y;\n    float aboveHorizon = smoothstep(radians(-0.5), radians(1.2), sunAltitude);\n    if (aboveHorizon <= 0.0) return 0.0;\n\n    float terrainHorizon = sampleHorizonAngle(sunAzimuth, uv);\n    float edgeSoftness = radians(0.70) * max(u_horizon_edge_softness, 0.25);\n    edgeSoftness = max(edgeSoftness, fwidth(terrainHorizon) * 1.35 + radians(0.12));\n    return aboveHorizon * smoothstep(terrainHorizon - edgeSoftness, terrainHorizon + edgeSoftness, sunAltitude);\n}\n\nfloat sunWindowWeight(float sampleOffsetMins, float preMins, float postMins) {\n    if (sampleOffsetMins < 0.0) {\n        return clamp(1.0 + sampleOffsetMins / max(preMins, 0.001), 0.0, 1.0);\n    }\n    return clamp(1.0 - sampleOffsetMins / max(postMins, 0.001), 0.0, 1.0);\n}\n\nvoid accumulateDurationVisibility(vec4 packedSunPositions, vec2 uv, inout float visibleSamples) {\n    float v0 = sunVisibility(packedSunPositions.xy, uv);\n    float v1 = sunVisibility(packedSunPositions.zw, uv);\n    visibleSamples += v0 + v1;\n}\n\nvoid accumulateSunWindow(vec4 packedSunPositions, vec2 uv, float baseIndex, float windowStartOffsetMins, float windowStepMins, float preMins, float postMins, inout float score, inout float norm) {\n    float v0 = sunVisibility(packedSunPositions.xy, uv);\n    float v1 = sunVisibility(packedSunPositions.zw, uv);\n    float idx0 = baseIndex;\n    float idx1 = baseIndex + 1.0;\n    float offset0 = windowStartOffsetMins + (idx0 + 0.5) * windowStepMins;\n    float offset1 = windowStartOffsetMins + (idx1 + 0.5) * windowStepMins;\n    float w0 = sunWindowWeight(offset0, preMins, postMins);\n    float w1 = sunWindowWeight(offset1, preMins, postMins);\n\n    score += v0 * w0 + v1 * w1;\n    norm += w0 + w1;\n}\n\nvoid main() {\n    float visibleSamples = 0.0;\n    float morningScore = 0.0;\n    float morningNorm = 0.0;\n    float eveningScore = 0.0;\n    float eveningNorm = 0.0;\n    accumulateDurationVisibility(u_solar_lut_0, v_pos, visibleSamples);\n    accumulateDurationVisibility(u_solar_lut_1, v_pos, visibleSamples);\n    accumulateDurationVisibility(u_solar_lut_2, v_pos, visibleSamples);\n    accumulateDurationVisibility(u_solar_lut_3, v_pos, visibleSamples);\n    accumulateDurationVisibility(u_solar_lut_4, v_pos, visibleSamples);\n    accumulateDurationVisibility(u_solar_lut_5, v_pos, visibleSamples);\n    accumulateDurationVisibility(u_solar_lut_6, v_pos, visibleSamples);\n    accumulateDurationVisibility(u_solar_lut_7, v_pos, visibleSamples);\n    accumulateDurationVisibility(u_solar_lut_8, v_pos, visibleSamples);\n    accumulateDurationVisibility(u_solar_lut_9, v_pos, visibleSamples);\n    accumulateDurationVisibility(u_solar_lut_10, v_pos, visibleSamples);\n    accumulateDurationVisibility(u_solar_lut_11, v_pos, visibleSamples);\n    accumulateDurationVisibility(u_solar_lut_12, v_pos, visibleSamples);\n    accumulateDurationVisibility(u_solar_lut_13, v_pos, visibleSamples);\n    accumulateDurationVisibility(u_solar_lut_14, v_pos, visibleSamples);\n    accumulateDurationVisibility(u_solar_lut_15, v_pos, visibleSamples);\n\n    float sunriseStepMins = (SUNRISE_PRE_MINS + SUNRISE_POST_MINS) / SUN_WINDOW_SAMPLES;\n    float sunsetStepMins = (SUNSET_PRE_MINS + SUNSET_POST_MINS) / SUN_WINDOW_SAMPLES;\n    accumulateSunWindow(u_sunrise_lut_0, v_pos, 0.0, -SUNRISE_PRE_MINS, sunriseStepMins, SUNRISE_PRE_MINS, SUNRISE_POST_MINS, morningScore, morningNorm);\n    accumulateSunWindow(u_sunrise_lut_1, v_pos, 2.0, -SUNRISE_PRE_MINS, sunriseStepMins, SUNRISE_PRE_MINS, SUNRISE_POST_MINS, morningScore, morningNorm);\n    accumulateSunWindow(u_sunrise_lut_2, v_pos, 4.0, -SUNRISE_PRE_MINS, sunriseStepMins, SUNRISE_PRE_MINS, SUNRISE_POST_MINS, morningScore, morningNorm);\n    accumulateSunWindow(u_sunrise_lut_3, v_pos, 6.0, -SUNRISE_PRE_MINS, sunriseStepMins, SUNRISE_PRE_MINS, SUNRISE_POST_MINS, morningScore, morningNorm);\n    accumulateSunWindow(u_sunset_lut_0, v_pos, 0.0, -SUNSET_PRE_MINS, sunsetStepMins, SUNSET_PRE_MINS, SUNSET_POST_MINS, eveningScore, eveningNorm);\n    accumulateSunWindow(u_sunset_lut_1, v_pos, 2.0, -SUNSET_PRE_MINS, sunsetStepMins, SUNSET_PRE_MINS, SUNSET_POST_MINS, eveningScore, eveningNorm);\n    accumulateSunWindow(u_sunset_lut_2, v_pos, 4.0, -SUNSET_PRE_MINS, sunsetStepMins, SUNSET_PRE_MINS, SUNSET_POST_MINS, eveningScore, eveningNorm);\n    accumulateSunWindow(u_sunset_lut_3, v_pos, 6.0, -SUNSET_PRE_MINS, sunsetStepMins, SUNSET_PRE_MINS, SUNSET_POST_MINS, eveningScore, eveningNorm);\n\n    float totalHours = visibleSamples * u_time_weight / 60.0;\n    float daylightHours = max(u_time_weight * SOLAR_SAMPLES / 60.0, 1.0);\n    float rampPos = smoothstep(0.0, 1.0, clamp(totalHours / daylightHours, 0.0, 1.0));\n    morningScore = clamp(morningScore / max(morningNorm, 0.0001), 0.0, 1.0);\n    eveningScore = clamp(eveningScore / max(eveningNorm, 0.0001), 0.0, 1.0);\n    fragColor = vec4(rampPos, morningScore, eveningScore, 1.0);\n}\n";
 
 // This file is generated. Edit build/generate-shaders.ts, then run `npm run codegen`.
 var daylightVert = 'uniform mat4 u_matrix;uniform vec3 u_tile_id;uniform vec4 u_atlas_bounds;in vec2 a_pos;out vec2 v_pos;out vec2 v_atlas_uv;void main() {gl_Position=projectTile(a_pos,a_pos);v_pos=a_pos/8192.0;float world_scale=pow(2.0,u_tile_id.x);vec2 world_uv=(u_tile_id.yz+a_pos/8192.0)/world_scale;v_atlas_uv=(world_uv-u_atlas_bounds.xy)/(u_atlas_bounds.zw-u_atlas_bounds.xy);v_atlas_uv.y=1.0-v_atlas_uv.y;v_pos.y=1.0-v_pos.y;if (a_pos.y <-32767.5) {v_pos.y=1.0;}if (a_pos.y > 32766.5) {v_pos.y=0.0;}}';
@@ -62048,6 +62048,14 @@ const daylightPrepareUniforms = (context, locations) => ({
     'u_solar_lut_13': new performance$1.Uniform4f(context, locations.u_solar_lut_13),
     'u_solar_lut_14': new performance$1.Uniform4f(context, locations.u_solar_lut_14),
     'u_solar_lut_15': new performance$1.Uniform4f(context, locations.u_solar_lut_15),
+    'u_sunrise_lut_0': new performance$1.Uniform4f(context, locations.u_sunrise_lut_0),
+    'u_sunrise_lut_1': new performance$1.Uniform4f(context, locations.u_sunrise_lut_1),
+    'u_sunrise_lut_2': new performance$1.Uniform4f(context, locations.u_sunrise_lut_2),
+    'u_sunrise_lut_3': new performance$1.Uniform4f(context, locations.u_sunrise_lut_3),
+    'u_sunset_lut_0': new performance$1.Uniform4f(context, locations.u_sunset_lut_0),
+    'u_sunset_lut_1': new performance$1.Uniform4f(context, locations.u_sunset_lut_1),
+    'u_sunset_lut_2': new performance$1.Uniform4f(context, locations.u_sunset_lut_2),
+    'u_sunset_lut_3': new performance$1.Uniform4f(context, locations.u_sunset_lut_3),
 });
 const daylightUniformValues = (layer, tileID, atlasBounds) => {
     var _a;
@@ -62063,7 +62071,7 @@ const daylightUniformValues = (layer, tileID, atlasBounds) => {
         'u_atlas_bounds': atlasBounds,
     };
 };
-const daylightPrepareUniformValues = (solarLUT, timeWeightMins, horizonBins, horizonEdgeSoftness) => ({
+const daylightPrepareUniformValues = (solarLUT, timeWeightMins, sunriseWindowLUT, sunsetWindowLUT, horizonBins, horizonEdgeSoftness) => ({
     'u_horizon0': 0,
     'u_horizon1': 1,
     'u_horizon2': 2,
@@ -62087,6 +62095,14 @@ const daylightPrepareUniformValues = (solarLUT, timeWeightMins, horizonBins, hor
     'u_solar_lut_13': [solarLUT[52], solarLUT[53], solarLUT[54], solarLUT[55]],
     'u_solar_lut_14': [solarLUT[56], solarLUT[57], solarLUT[58], solarLUT[59]],
     'u_solar_lut_15': [solarLUT[60], solarLUT[61], solarLUT[62], solarLUT[63]],
+    'u_sunrise_lut_0': [sunriseWindowLUT[0], sunriseWindowLUT[1], sunriseWindowLUT[2], sunriseWindowLUT[3]],
+    'u_sunrise_lut_1': [sunriseWindowLUT[4], sunriseWindowLUT[5], sunriseWindowLUT[6], sunriseWindowLUT[7]],
+    'u_sunrise_lut_2': [sunriseWindowLUT[8], sunriseWindowLUT[9], sunriseWindowLUT[10], sunriseWindowLUT[11]],
+    'u_sunrise_lut_3': [sunriseWindowLUT[12], sunriseWindowLUT[13], sunriseWindowLUT[14], sunriseWindowLUT[15]],
+    'u_sunset_lut_0': [sunsetWindowLUT[0], sunsetWindowLUT[1], sunsetWindowLUT[2], sunsetWindowLUT[3]],
+    'u_sunset_lut_1': [sunsetWindowLUT[4], sunsetWindowLUT[5], sunsetWindowLUT[6], sunsetWindowLUT[7]],
+    'u_sunset_lut_2': [sunsetWindowLUT[8], sunsetWindowLUT[9], sunsetWindowLUT[10], sunsetWindowLUT[11]],
+    'u_sunset_lut_3': [sunsetWindowLUT[12], sunsetWindowLUT[13], sunsetWindowLUT[14], sunsetWindowLUT[15]],
 });
 
 const horizonPrepareUniforms = (context, locations) => ({
@@ -65023,6 +65039,12 @@ let cachedCenterLat = 0;
 let cachedCenterLng = 0;
 const SOLAR_LUT_STEPS = 32;
 const SOLAR_LUT_FLOATS = SOLAR_LUT_STEPS * 2;
+const SUN_WINDOW_LUT_STEPS = 8;
+const SUN_WINDOW_LUT_FLOATS = SUN_WINDOW_LUT_STEPS * 2;
+const SUN_WINDOW_SUNRISE_PRE_MINS = 10;
+const SUN_WINDOW_SUNRISE_POST_MINS = 20;
+const SUN_WINDOW_SUNSET_PRE_MINS = 20;
+const SUN_WINDOW_SUNSET_POST_MINS = 10;
 const HORIZON_QUALITY_PRESETS = {
     fast: {
         preset: 'fast',
@@ -65059,6 +65081,8 @@ const HORIZON_QUALITY_PRESETS = {
     }
 };
 let cachedSolarLUT = new Float32Array(SOLAR_LUT_FLOATS); // azimuth/altitude vec2s
+let cachedSunriseWindowLUT = new Float32Array(SUN_WINDOW_LUT_FLOATS);
+let cachedSunsetWindowLUT = new Float32Array(SUN_WINDOW_LUT_FLOATS);
 let cachedTimeWeightMins = 0;
 function numberGlobal(name, fallback) {
     const value = typeof window !== 'undefined' ? window[name] : undefined;
@@ -65073,11 +65097,26 @@ function getHorizonQualitySettings() {
  * Builds a solar lookup table (LUT) for the given day and location.
  * Converts SunCalc's (azimuth, altitude) into the Float32Array expected by the shader.
  */
+function writeSunPosition(lut, index, date, lat, lng) {
+    const pos = SunCalc.getPosition(date, lat, lng);
+    // SunCalc azimuth: 0 is South, + is West.
+    // MapLibre / Shader Azimuth: 0 is North, increases clockwise.
+    let azimuth = pos.azimuth + Math.PI;
+    if (azimuth > 2 * Math.PI)
+        azimuth -= 2 * Math.PI;
+    lut[index * 2] = azimuth;
+    lut[index * 2 + 1] = pos.altitude;
+}
 function buildSolarLUT(date, lat, lng) {
     const dateStr = date.toDateString();
     // Simple cache check to avoid rebuilding every frame
     if (dateStr === cachedDateStr && Math.abs(lat - cachedCenterLat) < 0.1 && Math.abs(lng - cachedCenterLng) < 0.1) {
-        return { lut: cachedSolarLUT, weight: cachedTimeWeightMins };
+        return {
+            lut: cachedSolarLUT,
+            weight: cachedTimeWeightMins,
+            sunriseWindowLUT: cachedSunriseWindowLUT,
+            sunsetWindowLUT: cachedSunsetWindowLUT
+        };
     }
     // Get sunrise and sunset times
     const times = SunCalc.getTimes(date, lat, lng);
@@ -65085,9 +65124,13 @@ function buildSolarLUT(date, lat, lng) {
     const sunset = times.sunset;
     // Default to zeroed array if sun doesn't rise (e.g. polar night)
     const lut = new Float32Array(SOLAR_LUT_FLOATS);
+    const sunriseWindowLUT = new Float32Array(SUN_WINDOW_LUT_FLOATS);
+    const sunsetWindowLUT = new Float32Array(SUN_WINDOW_LUT_FLOATS);
     let weight = 0;
     if (sunrise && sunset && !isNaN(sunrise.getTime()) && !isNaN(sunset.getTime())) {
-        const daylightDurationMs = sunset.getTime() - sunrise.getTime();
+        const sunriseMs = sunrise.getTime();
+        const sunsetMs = sunset.getTime();
+        const daylightDurationMs = sunsetMs - sunriseMs;
         const daylightMins = daylightDurationMs / 60000;
         // Evaluate enough positions to show mountain-shadow duration, while keeping
         // the draw shader cheap enough for an interactive analysis overlay.
@@ -65096,24 +65139,26 @@ function buildSolarLUT(date, lat, lng) {
         const stepMs = daylightDurationMs / steps;
         for (let i = 0; i < steps; i++) {
             // Sample exactly in the middle of each time chunk
-            const sampleTime = new Date(sunrise.getTime() + (i + 0.5) * stepMs);
-            const pos = SunCalc.getPosition(sampleTime, lat, lng);
-            // SunCalc azimuth: 0 is South, + is West.
-            // MapLibre / Shader Azimuth: 0 is North, increases clockwise.
-            let azimuth = pos.azimuth + Math.PI;
-            if (azimuth > 2 * Math.PI)
-                azimuth -= 2 * Math.PI;
-            // Pack into Float32Array: [Az, Alt, Az, Alt, ...]
-            lut[i * 2] = azimuth;
-            lut[i * 2 + 1] = pos.altitude;
+            const sampleTime = new Date(sunriseMs + (i + 0.5) * stepMs);
+            writeSunPosition(lut, i, sampleTime, lat, lng);
+        }
+        const sunriseWindowStartMs = sunriseMs - SUN_WINDOW_SUNRISE_PRE_MINS * 60000;
+        const sunriseWindowStepMs = (SUN_WINDOW_SUNRISE_PRE_MINS + SUN_WINDOW_SUNRISE_POST_MINS) * 60000 / SUN_WINDOW_LUT_STEPS;
+        const sunsetWindowStartMs = sunsetMs - SUN_WINDOW_SUNSET_PRE_MINS * 60000;
+        const sunsetWindowStepMs = (SUN_WINDOW_SUNSET_PRE_MINS + SUN_WINDOW_SUNSET_POST_MINS) * 60000 / SUN_WINDOW_LUT_STEPS;
+        for (let i = 0; i < SUN_WINDOW_LUT_STEPS; i++) {
+            writeSunPosition(sunriseWindowLUT, i, new Date(sunriseWindowStartMs + (i + 0.5) * sunriseWindowStepMs), lat, lng);
+            writeSunPosition(sunsetWindowLUT, i, new Date(sunsetWindowStartMs + (i + 0.5) * sunsetWindowStepMs), lat, lng);
         }
     }
     cachedDateStr = dateStr;
     cachedCenterLat = lat;
     cachedCenterLng = lng;
     cachedSolarLUT = lut;
+    cachedSunriseWindowLUT = sunriseWindowLUT;
+    cachedSunsetWindowLUT = sunsetWindowLUT;
     cachedTimeWeightMins = weight;
-    return { lut, weight };
+    return { lut, weight, sunriseWindowLUT, sunsetWindowLUT };
 }
 function getDaylightDate() {
     const daylightDateMs = typeof window !== 'undefined' ? window._daylightDateMs : undefined;
@@ -65121,7 +65166,7 @@ function getDaylightDate() {
 }
 function getDaylightCacheKey(date, lat, lng, atlasBounds, horizonKey) {
     const settings = getHorizonQualitySettings();
-    return `${date.toDateString()}:${lat.toFixed(1)}:${lng.toFixed(1)}:${atlasBounds.map(v => v.toFixed(7)).join(':')}:${SOLAR_LUT_STEPS}:${horizonKey}:edge${settings.edgeSoftness.toFixed(3)}`;
+    return `${date.toDateString()}:${lat.toFixed(1)}:${lng.toFixed(1)}:${atlasBounds.map(v => v.toFixed(7)).join(':')}:${SOLAR_LUT_STEPS}:sunwindow-${SUN_WINDOW_SUNRISE_PRE_MINS}-${SUN_WINDOW_SUNRISE_POST_MINS}-${SUN_WINDOW_SUNSET_PRE_MINS}-${SUN_WINDOW_SUNSET_POST_MINS}:${horizonKey}:edge${settings.edgeSoftness.toFixed(3)}`;
 }
 function getHorizonCacheKey(atlasBounds, horizonSize, horizonBins, maxDistance, stepMeters, maxSteps) {
     return `${atlasBounds.map(v => v.toFixed(7)).join(':')}:${horizonSize}:${horizonBins}:${maxDistance}:${stepMeters.toFixed(2)}:${maxSteps}`;
@@ -65234,7 +65279,7 @@ function prepareHorizonAtlasForCurrentView(painter, depthMode, stencilMode, colo
         ? horizonKey
         : null;
 }
-function prepareDaylightDuration(painter, layer, solarLUT, timeWeightMins, daylightKey, horizonBins, horizonEdgeSoftness, depthMode, stencilMode, colorMode) {
+function prepareDaylightDuration(painter, layer, solarLUT, timeWeightMins, sunriseWindowLUT, sunsetWindowLUT, daylightKey, horizonBins, horizonEdgeSoftness, depthMode, stencilMode, colorMode) {
     var _a, _b, _c;
     const debugEnabled = typeof window !== 'undefined' && window._shadowTileDebugEnabled;
     const start = debugEnabled ? performance.now() : 0;
@@ -65260,6 +65305,7 @@ function prepareDaylightDuration(painter, layer, solarLUT, timeWeightMins, dayli
                 prepared: 0,
                 clean: 1,
                 samples: SOLAR_LUT_STEPS,
+                sunWindowSamples: SUN_WINDOW_LUT_STEPS,
                 timeWeightMins,
                 daylightKey,
                 preset: getHorizonQualitySettings().preset,
@@ -65287,7 +65333,7 @@ function prepareDaylightDuration(painter, layer, solarLUT, timeWeightMins, dayli
     context.activeTexture.set(gl.TEXTURE3);
     if (terrain._fboHorizon3Texture)
         terrain._fboHorizon3Texture.bind(gl.LINEAR, gl.CLAMP_TO_EDGE);
-    program.draw(context, gl.TRIANGLES, depthMode, stencilMode, colorMode, CullFaceMode.disabled, daylightPrepareUniformValues(solarLUT, timeWeightMins, horizonBins, horizonEdgeSoftness), null, null, `${layer.id}-prepare`, painter.rasterBoundsBuffer, painter.quadTriangleIndexBuffer, painter.rasterBoundsSegments);
+    program.draw(context, gl.TRIANGLES, depthMode, stencilMode, colorMode, CullFaceMode.disabled, daylightPrepareUniformValues(solarLUT, timeWeightMins, sunriseWindowLUT, sunsetWindowLUT, horizonBins, horizonEdgeSoftness), null, null, `${layer.id}-prepare`, painter.rasterBoundsBuffer, painter.quadTriangleIndexBuffer, painter.rasterBoundsSegments);
     context.bindFramebuffer.set(null);
     context.viewport.set([0, 0, painter.width, painter.height]);
     terrain._daylightAtlasReady = true;
@@ -65298,6 +65344,7 @@ function prepareDaylightDuration(painter, layer, solarLUT, timeWeightMins, dayli
             prepared: 1,
             clean: 0,
             samples: SOLAR_LUT_STEPS,
+            sunWindowSamples: SUN_WINDOW_LUT_STEPS,
             timeWeightMins,
             daylightKey,
             preset: getHorizonQualitySettings().preset,
@@ -65318,12 +65365,12 @@ function drawDaylight(painter, tileManager, layer, tileIDs, renderOptions // esl
     if (painter.renderPass === 'offscreen') {
         const center = painter.transform.center;
         const date = getDaylightDate();
-        const { lut, weight } = buildSolarLUT(date, center.lat, center.lng);
+        const { lut, weight, sunriseWindowLUT, sunsetWindowLUT } = buildSolarLUT(date, center.lat, center.lng);
         const terrain = painter.style.map.terrain;
         const atlasBounds = terrain === null || terrain === void 0 ? void 0 : terrain._elevationAtlasBounds;
         if (!atlasBounds) {
             const settings = getHorizonQualitySettings();
-            prepareDaylightDuration(painter, layer, lut, weight, 'missing-atlas', settings.bins, settings.edgeSoftness, painter.getDepthModeForSublayer(0, DepthMode.ReadOnly), StencilMode.disabled, painter.colorModeForRenderPass());
+            prepareDaylightDuration(painter, layer, lut, weight, sunriseWindowLUT, sunsetWindowLUT, 'missing-atlas', settings.bins, settings.edgeSoftness, painter.getDepthModeForSublayer(0, DepthMode.ReadOnly), StencilMode.disabled, painter.colorModeForRenderPass());
             return;
         }
         const depthMode = painter.getDepthModeForSublayer(0, DepthMode.ReadOnly);
@@ -65334,7 +65381,7 @@ function drawDaylight(painter, tileManager, layer, tileIDs, renderOptions // esl
         }
         const settings = getHorizonQualitySettings();
         const daylightKey = getDaylightCacheKey(date, center.lat, center.lng, atlasBounds, horizonKey);
-        prepareDaylightDuration(painter, layer, lut, weight, daylightKey, settings.bins, settings.edgeSoftness, depthMode, StencilMode.disabled, colorMode);
+        prepareDaylightDuration(painter, layer, lut, weight, sunriseWindowLUT, sunsetWindowLUT, daylightKey, settings.bins, settings.edgeSoftness, depthMode, StencilMode.disabled, colorMode);
         painter.context.viewport.set([0, 0, painter.width, painter.height]);
         return;
     }

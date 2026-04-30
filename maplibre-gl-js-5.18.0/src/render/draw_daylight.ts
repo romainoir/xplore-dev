@@ -21,6 +21,19 @@ let cachedCenterLat = 0;
 let cachedCenterLng = 0;
 const SOLAR_LUT_STEPS = 32;
 const SOLAR_LUT_FLOATS = SOLAR_LUT_STEPS * 2;
+const SUN_WINDOW_LUT_STEPS = 8;
+const SUN_WINDOW_LUT_FLOATS = SUN_WINDOW_LUT_STEPS * 2;
+const SUN_WINDOW_SUNRISE_PRE_MINS = 10;
+const SUN_WINDOW_SUNRISE_POST_MINS = 20;
+const SUN_WINDOW_SUNSET_PRE_MINS = 20;
+const SUN_WINDOW_SUNSET_POST_MINS = 10;
+
+type SolarLUTResult = {
+    lut: Float32Array;
+    weight: number;
+    sunriseWindowLUT: Float32Array;
+    sunsetWindowLUT: Float32Array;
+};
 
 type HorizonQualitySettings = {
     preset: string;
@@ -71,6 +84,8 @@ const HORIZON_QUALITY_PRESETS: Record<string, HorizonQualitySettings> = {
 };
 
 let cachedSolarLUT = new Float32Array(SOLAR_LUT_FLOATS); // azimuth/altitude vec2s
+let cachedSunriseWindowLUT = new Float32Array(SUN_WINDOW_LUT_FLOATS);
+let cachedSunsetWindowLUT = new Float32Array(SUN_WINDOW_LUT_FLOATS);
 let cachedTimeWeightMins = 0;
 
 function numberGlobal(name: string, fallback: number): number {
@@ -92,12 +107,29 @@ function getHorizonQualitySettings(): HorizonQualitySettings {
  * Builds a solar lookup table (LUT) for the given day and location.
  * Converts SunCalc's (azimuth, altitude) into the Float32Array expected by the shader.
  */
-function buildSolarLUT(date: Date, lat: number, lng: number): { lut: Float32Array, weight: number } { // eslint-disable-line
+function writeSunPosition(lut: Float32Array, index: number, date: Date, lat: number, lng: number) {
+    const pos = SunCalc.getPosition(date, lat, lng);
+
+    // SunCalc azimuth: 0 is South, + is West.
+    // MapLibre / Shader Azimuth: 0 is North, increases clockwise.
+    let azimuth = pos.azimuth + Math.PI;
+    if (azimuth > 2 * Math.PI) azimuth -= 2 * Math.PI;
+
+    lut[index * 2] = azimuth;
+    lut[index * 2 + 1] = pos.altitude;
+}
+
+function buildSolarLUT(date: Date, lat: number, lng: number): SolarLUTResult { // eslint-disable-line
     const dateStr = date.toDateString();
 
     // Simple cache check to avoid rebuilding every frame
     if (dateStr === cachedDateStr && Math.abs(lat - cachedCenterLat) < 0.1 && Math.abs(lng - cachedCenterLng) < 0.1) {
-        return { lut: cachedSolarLUT, weight: cachedTimeWeightMins };
+        return {
+            lut: cachedSolarLUT,
+            weight: cachedTimeWeightMins,
+            sunriseWindowLUT: cachedSunriseWindowLUT,
+            sunsetWindowLUT: cachedSunsetWindowLUT
+        };
     }
 
     // Get sunrise and sunset times
@@ -107,10 +139,14 @@ function buildSolarLUT(date: Date, lat: number, lng: number): { lut: Float32Arra
 
     // Default to zeroed array if sun doesn't rise (e.g. polar night)
     const lut = new Float32Array(SOLAR_LUT_FLOATS);
+    const sunriseWindowLUT = new Float32Array(SUN_WINDOW_LUT_FLOATS);
+    const sunsetWindowLUT = new Float32Array(SUN_WINDOW_LUT_FLOATS);
     let weight = 0;
 
     if (sunrise && sunset && !isNaN(sunrise.getTime()) && !isNaN(sunset.getTime())) {
-        const daylightDurationMs = sunset.getTime() - sunrise.getTime();
+        const sunriseMs = sunrise.getTime();
+        const sunsetMs = sunset.getTime();
+        const daylightDurationMs = sunsetMs - sunriseMs;
         const daylightMins = daylightDurationMs / 60000;
 
         // Evaluate enough positions to show mountain-shadow duration, while keeping
@@ -122,17 +158,17 @@ function buildSolarLUT(date: Date, lat: number, lng: number): { lut: Float32Arra
 
         for (let i = 0; i < steps; i++) {
             // Sample exactly in the middle of each time chunk
-            const sampleTime = new Date(sunrise.getTime() + (i + 0.5) * stepMs);
-            const pos = SunCalc.getPosition(sampleTime, lat, lng);
+            const sampleTime = new Date(sunriseMs + (i + 0.5) * stepMs);
+            writeSunPosition(lut, i, sampleTime, lat, lng);
+        }
 
-            // SunCalc azimuth: 0 is South, + is West.
-            // MapLibre / Shader Azimuth: 0 is North, increases clockwise.
-            let azimuth = pos.azimuth + Math.PI;
-            if (azimuth > 2 * Math.PI) azimuth -= 2 * Math.PI;
-
-            // Pack into Float32Array: [Az, Alt, Az, Alt, ...]
-            lut[i * 2] = azimuth;
-            lut[i * 2 + 1] = pos.altitude;
+        const sunriseWindowStartMs = sunriseMs - SUN_WINDOW_SUNRISE_PRE_MINS * 60000;
+        const sunriseWindowStepMs = (SUN_WINDOW_SUNRISE_PRE_MINS + SUN_WINDOW_SUNRISE_POST_MINS) * 60000 / SUN_WINDOW_LUT_STEPS;
+        const sunsetWindowStartMs = sunsetMs - SUN_WINDOW_SUNSET_PRE_MINS * 60000;
+        const sunsetWindowStepMs = (SUN_WINDOW_SUNSET_PRE_MINS + SUN_WINDOW_SUNSET_POST_MINS) * 60000 / SUN_WINDOW_LUT_STEPS;
+        for (let i = 0; i < SUN_WINDOW_LUT_STEPS; i++) {
+            writeSunPosition(sunriseWindowLUT, i, new Date(sunriseWindowStartMs + (i + 0.5) * sunriseWindowStepMs), lat, lng);
+            writeSunPosition(sunsetWindowLUT, i, new Date(sunsetWindowStartMs + (i + 0.5) * sunsetWindowStepMs), lat, lng);
         }
     }
 
@@ -140,9 +176,11 @@ function buildSolarLUT(date: Date, lat: number, lng: number): { lut: Float32Arra
     cachedCenterLat = lat;
     cachedCenterLng = lng;
     cachedSolarLUT = lut;
+    cachedSunriseWindowLUT = sunriseWindowLUT;
+    cachedSunsetWindowLUT = sunsetWindowLUT;
     cachedTimeWeightMins = weight;
 
-    return { lut, weight };
+    return { lut, weight, sunriseWindowLUT, sunsetWindowLUT };
 }
 
 function getDaylightDate(): Date {
@@ -152,7 +190,7 @@ function getDaylightDate(): Date {
 
 function getDaylightCacheKey(date: Date, lat: number, lng: number, atlasBounds: [number, number, number, number], horizonKey: string): string {
     const settings = getHorizonQualitySettings();
-    return `${date.toDateString()}:${lat.toFixed(1)}:${lng.toFixed(1)}:${atlasBounds.map(v => v.toFixed(7)).join(':')}:${SOLAR_LUT_STEPS}:${horizonKey}:edge${settings.edgeSoftness.toFixed(3)}`;
+    return `${date.toDateString()}:${lat.toFixed(1)}:${lng.toFixed(1)}:${atlasBounds.map(v => v.toFixed(7)).join(':')}:${SOLAR_LUT_STEPS}:sunwindow-${SUN_WINDOW_SUNRISE_PRE_MINS}-${SUN_WINDOW_SUNRISE_POST_MINS}-${SUN_WINDOW_SUNSET_PRE_MINS}-${SUN_WINDOW_SUNSET_POST_MINS}:${horizonKey}:edge${settings.edgeSoftness.toFixed(3)}`;
 }
 
 function getHorizonCacheKey(
@@ -321,6 +359,8 @@ function prepareDaylightDuration(
     layer: DaylightStyleLayer,
     solarLUT: Float32Array,
     timeWeightMins: number,
+    sunriseWindowLUT: Float32Array,
+    sunsetWindowLUT: Float32Array,
     daylightKey: string,
     horizonBins: number,
     horizonEdgeSoftness: number,
@@ -354,6 +394,7 @@ function prepareDaylightDuration(
                 prepared: 0,
                 clean: 1,
                 samples: SOLAR_LUT_STEPS,
+                sunWindowSamples: SUN_WINDOW_LUT_STEPS,
                 timeWeightMins,
                 daylightKey,
                 preset: getHorizonQualitySettings().preset,
@@ -388,6 +429,8 @@ function prepareDaylightDuration(
         daylightPrepareUniformValues(
             solarLUT,
             timeWeightMins,
+            sunriseWindowLUT,
+            sunsetWindowLUT,
             horizonBins,
             horizonEdgeSoftness
         ),
@@ -405,6 +448,7 @@ function prepareDaylightDuration(
             prepared: 1,
             clean: 0,
             samples: SOLAR_LUT_STEPS,
+            sunWindowSamples: SUN_WINDOW_LUT_STEPS,
             timeWeightMins,
             daylightKey,
             preset: getHorizonQualitySettings().preset,
@@ -430,12 +474,25 @@ export function drawDaylight(
     if (painter.renderPass === 'offscreen') {
         const center = painter.transform.center;
         const date = getDaylightDate();
-        const { lut, weight } = buildSolarLUT(date, center.lat, center.lng);
+        const { lut, weight, sunriseWindowLUT, sunsetWindowLUT } = buildSolarLUT(date, center.lat, center.lng);
         const terrain = painter.style.map.terrain as any;
         const atlasBounds = terrain?._elevationAtlasBounds as [number, number, number, number] | undefined;
         if (!atlasBounds) {
             const settings = getHorizonQualitySettings();
-            prepareDaylightDuration(painter, layer, lut, weight, 'missing-atlas', settings.bins, settings.edgeSoftness, painter.getDepthModeForSublayer(0, DepthMode.ReadOnly), StencilMode.disabled, painter.colorModeForRenderPass());
+            prepareDaylightDuration(
+                painter,
+                layer,
+                lut,
+                weight,
+                sunriseWindowLUT,
+                sunsetWindowLUT,
+                'missing-atlas',
+                settings.bins,
+                settings.edgeSoftness,
+                painter.getDepthModeForSublayer(0, DepthMode.ReadOnly),
+                StencilMode.disabled,
+                painter.colorModeForRenderPass()
+            );
             return;
         }
         const depthMode = painter.getDepthModeForSublayer(0, DepthMode.ReadOnly);
@@ -447,7 +504,20 @@ export function drawDaylight(
 
         const settings = getHorizonQualitySettings();
         const daylightKey = getDaylightCacheKey(date, center.lat, center.lng, atlasBounds, horizonKey);
-        prepareDaylightDuration(painter, layer, lut, weight, daylightKey, settings.bins, settings.edgeSoftness, depthMode, StencilMode.disabled, colorMode);
+        prepareDaylightDuration(
+            painter,
+            layer,
+            lut,
+            weight,
+            sunriseWindowLUT,
+            sunsetWindowLUT,
+            daylightKey,
+            settings.bins,
+            settings.edgeSoftness,
+            depthMode,
+            StencilMode.disabled,
+            colorMode
+        );
         painter.context.viewport.set([0, 0, painter.width, painter.height]);
         return;
     }

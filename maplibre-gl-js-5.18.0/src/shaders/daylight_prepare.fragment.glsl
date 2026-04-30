@@ -25,11 +25,24 @@ uniform vec4 u_solar_lut_12;
 uniform vec4 u_solar_lut_13;
 uniform vec4 u_solar_lut_14;
 uniform vec4 u_solar_lut_15;
+uniform vec4 u_sunrise_lut_0;
+uniform vec4 u_sunrise_lut_1;
+uniform vec4 u_sunrise_lut_2;
+uniform vec4 u_sunrise_lut_3;
+uniform vec4 u_sunset_lut_0;
+uniform vec4 u_sunset_lut_1;
+uniform vec4 u_sunset_lut_2;
+uniform vec4 u_sunset_lut_3;
 
 in vec2 v_pos;
 
 const float PI = 3.141592653589793;
 const float SOLAR_SAMPLES = 32.0;
+const float SUN_WINDOW_SAMPLES = 8.0;
+const float SUNRISE_PRE_MINS = 10.0;
+const float SUNRISE_POST_MINS = 20.0;
+const float SUNSET_PRE_MINS = 20.0;
+const float SUNSET_POST_MINS = 10.0;
 
 float channelValue(vec4 packed, float channel) {
     if (channel < 0.5) return packed.r;
@@ -74,47 +87,66 @@ float sunVisibility(vec2 sunPos, vec2 uv) {
     return aboveHorizon * smoothstep(terrainHorizon - edgeSoftness, terrainHorizon + edgeSoftness, sunAltitude);
 }
 
-void accumulateVisibility(vec4 packedSunPositions, vec2 uv, float baseIndex, float oneHourSamples, inout float visibleSamples, inout float morningScore, inout float morningNorm, inout float eveningScore, inout float eveningNorm) {
+float sunWindowWeight(float sampleOffsetMins, float preMins, float postMins) {
+    if (sampleOffsetMins < 0.0) {
+        return clamp(1.0 + sampleOffsetMins / max(preMins, 0.001), 0.0, 1.0);
+    }
+    return clamp(1.0 - sampleOffsetMins / max(postMins, 0.001), 0.0, 1.0);
+}
+
+void accumulateDurationVisibility(vec4 packedSunPositions, vec2 uv, inout float visibleSamples) {
     float v0 = sunVisibility(packedSunPositions.xy, uv);
     float v1 = sunVisibility(packedSunPositions.zw, uv);
     visibleSamples += v0 + v1;
+}
 
+void accumulateSunWindow(vec4 packedSunPositions, vec2 uv, float baseIndex, float windowStartOffsetMins, float windowStepMins, float preMins, float postMins, inout float score, inout float norm) {
+    float v0 = sunVisibility(packedSunPositions.xy, uv);
+    float v1 = sunVisibility(packedSunPositions.zw, uv);
     float idx0 = baseIndex;
     float idx1 = baseIndex + 1.0;
-    float morning0 = 1.0 - smoothstep(0.0, oneHourSamples, idx0);
-    float morning1 = 1.0 - smoothstep(0.0, oneHourSamples, idx1);
-    float evening0 = 1.0 - smoothstep(0.0, oneHourSamples, (SOLAR_SAMPLES - 1.0) - idx0);
-    float evening1 = 1.0 - smoothstep(0.0, oneHourSamples, (SOLAR_SAMPLES - 1.0) - idx1);
+    float offset0 = windowStartOffsetMins + (idx0 + 0.5) * windowStepMins;
+    float offset1 = windowStartOffsetMins + (idx1 + 0.5) * windowStepMins;
+    float w0 = sunWindowWeight(offset0, preMins, postMins);
+    float w1 = sunWindowWeight(offset1, preMins, postMins);
 
-    morningScore += v0 * morning0 + v1 * morning1;
-    morningNorm += morning0 + morning1;
-    eveningScore += v0 * evening0 + v1 * evening1;
-    eveningNorm += evening0 + evening1;
+    score += v0 * w0 + v1 * w1;
+    norm += w0 + w1;
 }
 
 void main() {
     float visibleSamples = 0.0;
-    float oneHourSamples = clamp(60.0 / max(u_time_weight, 1.0), 1.0, SOLAR_SAMPLES);
     float morningScore = 0.0;
     float morningNorm = 0.0;
     float eveningScore = 0.0;
     float eveningNorm = 0.0;
-    accumulateVisibility(u_solar_lut_0, v_pos, 0.0, oneHourSamples, visibleSamples, morningScore, morningNorm, eveningScore, eveningNorm);
-    accumulateVisibility(u_solar_lut_1, v_pos, 2.0, oneHourSamples, visibleSamples, morningScore, morningNorm, eveningScore, eveningNorm);
-    accumulateVisibility(u_solar_lut_2, v_pos, 4.0, oneHourSamples, visibleSamples, morningScore, morningNorm, eveningScore, eveningNorm);
-    accumulateVisibility(u_solar_lut_3, v_pos, 6.0, oneHourSamples, visibleSamples, morningScore, morningNorm, eveningScore, eveningNorm);
-    accumulateVisibility(u_solar_lut_4, v_pos, 8.0, oneHourSamples, visibleSamples, morningScore, morningNorm, eveningScore, eveningNorm);
-    accumulateVisibility(u_solar_lut_5, v_pos, 10.0, oneHourSamples, visibleSamples, morningScore, morningNorm, eveningScore, eveningNorm);
-    accumulateVisibility(u_solar_lut_6, v_pos, 12.0, oneHourSamples, visibleSamples, morningScore, morningNorm, eveningScore, eveningNorm);
-    accumulateVisibility(u_solar_lut_7, v_pos, 14.0, oneHourSamples, visibleSamples, morningScore, morningNorm, eveningScore, eveningNorm);
-    accumulateVisibility(u_solar_lut_8, v_pos, 16.0, oneHourSamples, visibleSamples, morningScore, morningNorm, eveningScore, eveningNorm);
-    accumulateVisibility(u_solar_lut_9, v_pos, 18.0, oneHourSamples, visibleSamples, morningScore, morningNorm, eveningScore, eveningNorm);
-    accumulateVisibility(u_solar_lut_10, v_pos, 20.0, oneHourSamples, visibleSamples, morningScore, morningNorm, eveningScore, eveningNorm);
-    accumulateVisibility(u_solar_lut_11, v_pos, 22.0, oneHourSamples, visibleSamples, morningScore, morningNorm, eveningScore, eveningNorm);
-    accumulateVisibility(u_solar_lut_12, v_pos, 24.0, oneHourSamples, visibleSamples, morningScore, morningNorm, eveningScore, eveningNorm);
-    accumulateVisibility(u_solar_lut_13, v_pos, 26.0, oneHourSamples, visibleSamples, morningScore, morningNorm, eveningScore, eveningNorm);
-    accumulateVisibility(u_solar_lut_14, v_pos, 28.0, oneHourSamples, visibleSamples, morningScore, morningNorm, eveningScore, eveningNorm);
-    accumulateVisibility(u_solar_lut_15, v_pos, 30.0, oneHourSamples, visibleSamples, morningScore, morningNorm, eveningScore, eveningNorm);
+    accumulateDurationVisibility(u_solar_lut_0, v_pos, visibleSamples);
+    accumulateDurationVisibility(u_solar_lut_1, v_pos, visibleSamples);
+    accumulateDurationVisibility(u_solar_lut_2, v_pos, visibleSamples);
+    accumulateDurationVisibility(u_solar_lut_3, v_pos, visibleSamples);
+    accumulateDurationVisibility(u_solar_lut_4, v_pos, visibleSamples);
+    accumulateDurationVisibility(u_solar_lut_5, v_pos, visibleSamples);
+    accumulateDurationVisibility(u_solar_lut_6, v_pos, visibleSamples);
+    accumulateDurationVisibility(u_solar_lut_7, v_pos, visibleSamples);
+    accumulateDurationVisibility(u_solar_lut_8, v_pos, visibleSamples);
+    accumulateDurationVisibility(u_solar_lut_9, v_pos, visibleSamples);
+    accumulateDurationVisibility(u_solar_lut_10, v_pos, visibleSamples);
+    accumulateDurationVisibility(u_solar_lut_11, v_pos, visibleSamples);
+    accumulateDurationVisibility(u_solar_lut_12, v_pos, visibleSamples);
+    accumulateDurationVisibility(u_solar_lut_13, v_pos, visibleSamples);
+    accumulateDurationVisibility(u_solar_lut_14, v_pos, visibleSamples);
+    accumulateDurationVisibility(u_solar_lut_15, v_pos, visibleSamples);
+
+    float sunriseStepMins = (SUNRISE_PRE_MINS + SUNRISE_POST_MINS) / SUN_WINDOW_SAMPLES;
+    float sunsetStepMins = (SUNSET_PRE_MINS + SUNSET_POST_MINS) / SUN_WINDOW_SAMPLES;
+    accumulateSunWindow(u_sunrise_lut_0, v_pos, 0.0, -SUNRISE_PRE_MINS, sunriseStepMins, SUNRISE_PRE_MINS, SUNRISE_POST_MINS, morningScore, morningNorm);
+    accumulateSunWindow(u_sunrise_lut_1, v_pos, 2.0, -SUNRISE_PRE_MINS, sunriseStepMins, SUNRISE_PRE_MINS, SUNRISE_POST_MINS, morningScore, morningNorm);
+    accumulateSunWindow(u_sunrise_lut_2, v_pos, 4.0, -SUNRISE_PRE_MINS, sunriseStepMins, SUNRISE_PRE_MINS, SUNRISE_POST_MINS, morningScore, morningNorm);
+    accumulateSunWindow(u_sunrise_lut_3, v_pos, 6.0, -SUNRISE_PRE_MINS, sunriseStepMins, SUNRISE_PRE_MINS, SUNRISE_POST_MINS, morningScore, morningNorm);
+    accumulateSunWindow(u_sunset_lut_0, v_pos, 0.0, -SUNSET_PRE_MINS, sunsetStepMins, SUNSET_PRE_MINS, SUNSET_POST_MINS, eveningScore, eveningNorm);
+    accumulateSunWindow(u_sunset_lut_1, v_pos, 2.0, -SUNSET_PRE_MINS, sunsetStepMins, SUNSET_PRE_MINS, SUNSET_POST_MINS, eveningScore, eveningNorm);
+    accumulateSunWindow(u_sunset_lut_2, v_pos, 4.0, -SUNSET_PRE_MINS, sunsetStepMins, SUNSET_PRE_MINS, SUNSET_POST_MINS, eveningScore, eveningNorm);
+    accumulateSunWindow(u_sunset_lut_3, v_pos, 6.0, -SUNSET_PRE_MINS, sunsetStepMins, SUNSET_PRE_MINS, SUNSET_POST_MINS, eveningScore, eveningNorm);
 
     float totalHours = visibleSamples * u_time_weight / 60.0;
     float daylightHours = max(u_time_weight * SOLAR_SAMPLES / 60.0, 1.0);
