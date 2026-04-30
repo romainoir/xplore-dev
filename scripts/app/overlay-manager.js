@@ -247,25 +247,35 @@ export function applyOverlays(map, deps = {}) {
         }
     }, topLabelId || undefined);
 
+    const sunWindowPaint = {
+        'daylight-opacity': 0.86,
+        'daylight-color-ramp': [
+            'interpolate',
+            ['linear'],
+            ['line-progress'],
+            0.0, '#071225',
+            0.25, '#134f9a',
+            0.55, '#16a085',
+            0.75, '#f4d44d',
+            0.90, '#f47c20',
+            1.0, '#d7191c'
+        ]
+    };
+
     ensureL({
-        id: 'sun-window-native',
+        id: 'sunrise-window-native',
         type: 'daylight',
         source: 'terrainSource',
         layout: { 'visibility': 'none' },
-        paint: {
-            'daylight-opacity': 0.86,
-            'daylight-color-ramp': [
-                'interpolate',
-                ['linear'],
-                ['line-progress'],
-                0.0, '#071225',
-                0.25, '#134f9a',
-                0.55, '#16a085',
-                0.75, '#f4d44d',
-                0.90, '#f47c20',
-                1.0, '#d7191c'
-            ]
-        }
+        paint: sunWindowPaint
+    }, topLabelId || undefined);
+
+    ensureL({
+        id: 'sunset-window-native',
+        type: 'daylight',
+        source: 'terrainSource',
+        layout: { 'visibility': 'none' },
+        paint: sunWindowPaint
     }, topLabelId || undefined);
 
     // ─── Raymarched cast shadows. Keep this on the same terrainSource path as

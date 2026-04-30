@@ -64,7 +64,12 @@ export function updateAnalyticalLegends(map, imageryState, updateShadowTime) {
     if (imageryState.get('avalanche')?.enabled) activeAnalyzers.push('avalanche');
     if (imageryState.get('snow')?.enabled) activeAnalyzers.push('snow');
     if (imageryState.get('snow-depth')?.enabled) activeAnalyzers.push('snow-depth');
-    if (imageryState.get('shadow')?.enabled || imageryState.get('daylight')?.enabled || imageryState.get('sun-window')?.enabled) activeAnalyzers.push('shadow');
+    if (
+        imageryState.get('shadow')?.enabled ||
+        imageryState.get('daylight')?.enabled ||
+        imageryState.get('sunrise-window')?.enabled ||
+        imageryState.get('sunset-window')?.enabled
+    ) activeAnalyzers.push('shadow');
 
     if (activeAnalyzers.length === 0) {
         container.style.opacity = '0';
@@ -225,9 +230,6 @@ function createShadowLegend(map, updateShadowTime, imageryState) {
     content.className = 'shadow-legend__content';
 
     const shadowActive = imageryState?.get?.('shadow')?.enabled === true;
-    const sunWindowActive = imageryState?.get?.('sun-window')?.enabled === true;
-    if (window._sunWindowMode !== 'sunset') window._sunWindowMode = 'sunrise';
-    const sunWindowMode = window._sunWindowMode;
     const now = new Date(window.skySimulationDate || Date.now());
     const startOfYear = new Date(now.getFullYear(), 0, 0);
     const diff = now - startOfYear;
@@ -248,10 +250,6 @@ function createShadowLegend(map, updateShadowTime, imageryState) {
       </div>
     </div>
     <div class="shadow-legend__row"><span class="shadow-legend__row-icon">📅</span><input type="range" id="shadowDateSlider" class="shadow-legend__slider shadow-legend__slider--date" min="1" max="366" value="${dayOfYear}"></div>
-    ${sunWindowActive ? `<div class="shadow-legend__mode-toggle" role="group" aria-label="Sun timing heatmap mode">
-      <button id="sunWindowSunriseBtn" class="shadow-legend__mode-btn" type="button" data-active="${sunWindowMode === 'sunrise'}">Sunrise</button>
-      <button id="sunWindowSunsetBtn" class="shadow-legend__mode-btn" type="button" data-active="${sunWindowMode === 'sunset'}">Sunset</button>
-    </div>` : ''}
     ${shadowActive ? `<div class="shadow-legend__row"><span class="shadow-legend__row-icon">🕒</span><input type="range" id="shadowTimeSlider" class="shadow-legend__slider" min="0" max="1440" step="1" value="${initialMins}"></div>` : ''}
     ${shadowActive && window.XploreDebug ? `
     <div id="shadowDebugMenu" class="shadow-legend__debug-menu" style="display: none;">
@@ -269,8 +267,6 @@ function createShadowLegend(map, updateShadowTime, imageryState) {
     const tSl = content.querySelector('#shadowTimeSlider');
     const tLb = content.querySelector('#shadowTimeLabel');
     const nBtn = content.querySelector('#shadowNowBtn');
-    const sunriseBtn = content.querySelector('#sunWindowSunriseBtn');
-    const sunsetBtn = content.querySelector('#sunWindowSunsetBtn');
     let timeInteractionTimer = null;
 
     const markTimeInteraction = () => {
@@ -316,15 +312,6 @@ function createShadowLegend(map, updateShadowTime, imageryState) {
     if (dSl) { dSl.addEventListener('input', syncUi); dSl.addEventListener('mousedown', e => e.stopPropagation()); dSl.addEventListener('touchstart', e => e.stopPropagation()); }
     if (tSl) { tSl.addEventListener('input', syncUi); tSl.addEventListener('mousedown', e => e.stopPropagation()); tSl.addEventListener('touchstart', e => e.stopPropagation()); }
     if (nBtn) { nBtn.addEventListener('click', () => { const now = new Date(); const soy = new Date(now.getFullYear(), 0, 0); const dy = Math.floor((now - soy) / 864e5); if (dSl) dSl.value = String(dy); if (tSl) tSl.value = String(now.getHours() * 60 + now.getMinutes()); syncUi(); }); }
-    const setSunWindowMode = (mode) => {
-        window._sunWindowMode = mode === 'sunset' ? 'sunset' : 'sunrise';
-        if (sunriseBtn) sunriseBtn.dataset.active = String(window._sunWindowMode === 'sunrise');
-        if (sunsetBtn) sunsetBtn.dataset.active = String(window._sunWindowMode === 'sunset');
-        if (map) map.triggerRepaint();
-    };
-    if (sunriseBtn) { sunriseBtn.addEventListener('click', () => setSunWindowMode('sunrise')); sunriseBtn.addEventListener('mousedown', e => e.stopPropagation()); }
-    if (sunsetBtn) { sunsetBtn.addEventListener('click', () => setSunWindowMode('sunset')); sunsetBtn.addEventListener('mousedown', e => e.stopPropagation()); }
-
     // Debug menu wiring
     const debugTgl = content.querySelector('#shadowDebugTgl');
     const debugMenu = content.querySelector('#shadowDebugMenu');

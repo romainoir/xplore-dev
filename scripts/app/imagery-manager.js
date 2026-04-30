@@ -38,7 +38,8 @@ function createTilePreviewUrl(template, coords = WMTS_PREVIEW_COORDS) {
 export const IMAGERY_OPTIONS = Object.freeze([
     { id: 'shadow', label: 'Shadows', type: 'shadow-layer', linkedLayerIds: ['shadow-coarse'], previewImage: './data/icons_Xmap/shadow.png', defaultOpacity: 1.0, defaultVisible: false },
     { id: 'daylight', label: 'Sunlight Hours', type: 'native-layer', layerId: 'daylight-native', previewImage: './data/icons_Xmap/daylight.png', defaultOpacity: 0.78, defaultVisible: false },
-    { id: 'sun-window', label: 'First/Last Sun', type: 'native-layer', layerId: 'sun-window-native', previewImage: './data/icons_Xmap/daylight.png', defaultOpacity: 0.86, defaultVisible: false },
+    { id: 'sunrise-window', label: 'First Sun', type: 'native-layer', layerId: 'sunrise-window-native', previewImage: './data/icons_Xmap/daylight.png', defaultOpacity: 0.86, defaultVisible: false },
+    { id: 'sunset-window', label: 'Last Sun', type: 'native-layer', layerId: 'sunset-window-native', previewImage: './data/icons_Xmap/daylight.png', defaultOpacity: 0.86, defaultVisible: false },
     {
         id: 'contours',
         label: 'Contours',
@@ -83,7 +84,7 @@ export const IMAGERY_OPTIONS = Object.freeze([
 
 // ─── LAYER_GROUPS ───
 export const LAYER_GROUPS = Object.freeze([
-    { id: 'sun-analysis', label: 'Sun Analysis', exclusive: true, members: ['shadow', 'daylight', 'sun-window'] },
+    { id: 'sun-analysis', label: 'Sun Analysis', exclusive: true, members: ['shadow', 'daylight', 'sunrise-window', 'sunset-window'] },
     { id: 'vector', label: 'Vector', exclusive: false, members: ['contours', 'osm-features'] },
     { id: 'wikimedia-photos', label: 'Wikimedia Photos', exclusive: true, members: ['wikimedia-photos'] },
     { id: 'heatmap', label: 'Heatmap', exclusive: true, members: ['strava-heatmap-all', 'strava-winter', 'strava-backcountry-ski', 'strava-cycling', 'strava-run', 'ign-traces-hivernales'] },
@@ -258,7 +259,7 @@ export function createImageryManager(map, deps = {}) {
         color: 'rgba(139, 90, 43, 0.2)',   // brown, 20% opacity
     };
 
-    const SHADOW_TOOLBOX_IDS = ['shadow', 'daylight', 'sun-window'];
+    const SHADOW_TOOLBOX_IDS = ['shadow', 'daylight', 'sunrise-window', 'sunset-window'];
     const TERRAIN_TOOLBOX_IDS = ['aspect', 'slope', 'avalanche'];
     const SNOW_TOOLBOX_IDS = ['snow', 'snow-depth'];
 
@@ -367,7 +368,7 @@ export function createImageryManager(map, deps = {}) {
         }
 
         // 2. Terrain analysis & snow layers — above basemaps
-        const terrainNativeLayers = ['normalmap', 'snow-native', 'snow-depth', 'aspect-native', 'slope-native', 'avalanche-native', 'shadow-coarse', 'daylight-native', 'sun-window-native'];
+        const terrainNativeLayers = ['normalmap', 'snow-native', 'snow-depth', 'aspect-native', 'slope-native', 'avalanche-native', 'shadow-coarse', 'daylight-native', 'sunrise-window-native', 'sunset-window-native'];
         if (topLabelId) {
             terrainNativeLayers.forEach(layerId => { if (map.getLayer(layerId)) map.moveLayer(layerId, topLabelId); });
         }
@@ -436,7 +437,7 @@ export function createImageryManager(map, deps = {}) {
         // Dynamic background for Analysis Toggles
         [
             { btnId: 'terrainToolboxToggle', layerIds: ['aspect', 'slope', 'avalanche'] },
-            { btnId: 'shadowToolboxToggle', layerIds: ['shadow', 'daylight', 'sun-window'] },
+            { btnId: 'shadowToolboxToggle', layerIds: ['shadow', 'daylight', 'sunrise-window', 'sunset-window'] },
             { btnId: 'snowToolboxToggle', layerIds: ['snow', 'snow-depth'] }
         ].forEach(config => {
             const btn = document.getElementById(config.btnId);
@@ -458,7 +459,7 @@ export function createImageryManager(map, deps = {}) {
             const state = imageryState.get(option.id);
             const opacity = clampOpacity(state?.opacity ?? 0);
             const visible = Boolean(state?.enabled && opacity > 0);
-            if ((option.id === 'shadow' || option.id === 'daylight' || option.id === 'sun-window') && visible) {
+            if ((option.id === 'shadow' || option.id === 'daylight' || option.id === 'sunrise-window' || option.id === 'sunset-window') && visible) {
                 sunAnalysisRequiresTerrain = true;
             }
             if (option.type === 'osm-overlay') { setLayerSequenceOpacity(map, baseStyleOverlayLayerIds, visible ? opacity : 0); return; }
@@ -471,7 +472,7 @@ export function createImageryManager(map, deps = {}) {
                 if (map.getLayer(option.layerId)) {
                     try {
                         map.setLayoutProperty(option.layerId, 'visibility', visible ? 'visible' : 'none');
-                        if (option.id === 'daylight' || option.id === 'sun-window') {
+                        if (option.id === 'daylight' || option.id === 'sunrise-window' || option.id === 'sunset-window') {
                             map.setPaintProperty(option.layerId, 'daylight-opacity', visible ? Math.min(opacity, 1.0) : 0);
                         } else {
                             map.setPaintProperty(option.layerId, 'hillshade-exaggeration', visible ? Math.min(opacity, 1.0) : 0);
