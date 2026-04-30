@@ -8,7 +8,7 @@
 
 // ─── Module imports ───
 import { createMap, getBaseStyleLayerBuckets, parseAndCacheBaseStyleLayers } from './map-init.js';
-import { createImageryManager, IMAGERY_OPTIONS, LAYER_GROUPS, LAYER_GROUP_BY_MEMBER_ID, clampOpacity, DEM_SOURCE_MAX_ZOOM } from './imagery-manager.js';
+import { createImageryManager, IMAGERY_OPTIONS, LAYER_GROUPS, LAYER_GROUP_BY_MEMBER_ID, clampOpacity } from './imagery-manager.js';
 import { applyOverlays, applyHillshadeAppearance, injectOverlaysIntoStyle } from './overlay-manager.js';
 import { createRoutingOrchestrator } from './routing-orchestrator.js';
 import { createShadowController } from './shadow-controller.js';
@@ -494,11 +494,30 @@ async function init() {
     updateFov();
   }
 
+  const terrainDemSourceIds = new Set(['terrainSource', 'hillshadeSource', 'reliefDem']);
+  const clearTerrainDemLodOverrides = () => {
+    const tileManagers = map?.style?.tileManagers;
+    if (!tileManagers) return;
+    terrainDemSourceIds.forEach(sourceId => {
+      const source = tileManagers[sourceId]?.getSource?.();
+      if (source && Object.prototype.hasOwnProperty.call(source, 'calculateTileZoom')) {
+        delete source.calculateTileZoom;
+      }
+    });
+  };
+
   const updateLodParams = () => {
     if (!map || typeof map.setSourceTileLodParams !== 'function') return;
     const maxZoom = lodMaxZoomSlider ? parseInt(lodMaxZoomSlider.value, 10) : 5;
     const tileRatio = lodTileRatioSlider ? parseFloat(lodTileRatioSlider.value) : 1;
-    map.setSourceTileLodParams(maxZoom, tileRatio);
+    const tileManagers = map.style?.tileManagers;
+    if (tileManagers) {
+      Object.keys(tileManagers).forEach(sourceId => {
+        if (terrainDemSourceIds.has(sourceId)) return;
+        try { map.setSourceTileLodParams(maxZoom, tileRatio, sourceId); } catch (_) { }
+      });
+    }
+    clearTerrainDemLodOverrides();
     if (lodMaxZoomLabel) lodMaxZoomLabel.textContent = String(maxZoom);
     if (lodTileRatioLabel) lodTileRatioLabel.textContent = tileRatio.toFixed(1);
   };
@@ -506,6 +525,7 @@ async function init() {
   if (lodMaxZoomSlider) lodMaxZoomSlider.addEventListener('input', updateLodParams);
   if (lodTileRatioSlider) lodTileRatioSlider.addEventListener('input', updateLodParams);
   updateLodParams();
+  map.on('style.load', () => window.requestAnimationFrame(updateLodParams));
 
   // ── Settings: Debug controls ──
   const debugModeToggle = document.getElementById('debugModeToggle');

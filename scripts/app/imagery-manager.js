@@ -15,7 +15,7 @@ import { setWikimediaPhotosEnabled } from '../map/wikimedia-photos.js';
 const IGN_ATTRIBUTION = '<a href="https://www.ign.fr/">© IGN</a>';
 const EOX_ATTRIBUTION = '<a href="https://www.eox.at/">© EOX</a>';
 const WMTS_PREVIEW_COORDS = Object.freeze({ z: 14, x: 8508, y: 5911 });
-export const DEM_SOURCE_MAX_ZOOM = 17;
+export const DEM_SOURCE_MAX_ZOOM = 15;
 export const SHADOW_DEM_MAX_ZOOM = 11;
 
 function createIgnTileTemplate(layerName, format = 'image/png') {
