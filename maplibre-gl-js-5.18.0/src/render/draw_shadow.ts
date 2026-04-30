@@ -319,6 +319,8 @@ export function drawShadow(
     if (painter.renderPass !== 'translucent') return;
 
     const { isRenderingToTexture } = renderOptions;
+    if (isRenderingToTexture && isCoarseGlobalShadow) return;
+
     const context = painter.context;
     const projection = painter.style.projection;
     const useSubdivision = projection.useSubdivision;
@@ -371,6 +373,8 @@ function renderShadowTiles(
     // OPTIMIZATION: If this is the coarse shadow layer (Z12), use the Global Sweep pass.
     // This kills the O(N^2) neighbor-sampling redundancy and tile-loop overhead.
     if (layer.id.toLowerCase().indexOf('coarse') !== -1) {
+        if (isRenderingToTexture) return;
+
         const terrain = painter.style.map.terrain;
         const cameraRefreshHeld = typeof window !== 'undefined' && (window as any)._shadowCameraRefreshHold;
         const cameraMoving = (painter.options.moving || cameraRefreshHeld) && !(typeof window !== 'undefined' && (window as any)._isInteractingWithTime);

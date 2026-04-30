@@ -63,6 +63,9 @@ function xploreSunAnalysisActive(): boolean {
 function layerShouldRenderToTexture(layer: StyleLayer): boolean {
     if (!LAYERS_TO_TEXTURES[layer.type]) return false;
     if (!xploreSunAnalysisActive()) return true;
+    // Global shadows render into their own atlas FBO; nesting that pass inside
+    // terrain RTT can leak later foreground draws to the default framebuffer.
+    if (layer.type === 'shadow') return false;
     return !XPLORE_SUN_ANALYSIS_FOREGROUND_LAYERS[layer.id] && !XPLORE_SUN_ANALYSIS_FOREGROUND_SOURCES[layer.source];
 }
 

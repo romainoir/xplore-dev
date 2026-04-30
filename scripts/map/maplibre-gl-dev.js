@@ -65651,6 +65651,8 @@ function drawShadow(painter, tileManager, layer, tileIDs, renderOptions) {
     if (painter.renderPass !== 'translucent')
         return;
     const { isRenderingToTexture } = renderOptions;
+    if (isRenderingToTexture && isCoarseGlobalShadow)
+        return;
     const context = painter.context;
     const projection = painter.style.projection;
     const useSubdivision = projection.useSubdivision;
@@ -65687,6 +65689,8 @@ function renderShadowTiles(painter, tileManager, layer, coords, stencilModes, de
     // OPTIMIZATION: If this is the coarse shadow layer (Z12), use the Global Sweep pass.
     // This kills the O(N^2) neighbor-sampling redundancy and tile-loop overhead.
     if (layer.id.toLowerCase().indexOf('coarse') !== -1) {
+        if (isRenderingToTexture)
+            return;
         const terrain = painter.style.map.terrain;
         const cameraRefreshHeld = typeof window !== 'undefined' && window._shadowCameraRefreshHold;
         const cameraMoving = (painter.options.moving || cameraRefreshHeld) && !(typeof window !== 'undefined' && window._isInteractingWithTime);
@@ -72423,6 +72427,10 @@ function layerShouldRenderToTexture(layer) {
         return false;
     if (!xploreSunAnalysisActive())
         return true;
+    // Global shadows render into their own atlas FBO; nesting that pass inside
+    // terrain RTT can leak later foreground draws to the default framebuffer.
+    if (layer.type === 'shadow')
+        return false;
     return !XPLORE_SUN_ANALYSIS_FOREGROUND_LAYERS[layer.id] && !XPLORE_SUN_ANALYSIS_FOREGROUND_SOURCES[layer.source];
 }
 /**
