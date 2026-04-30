@@ -36,7 +36,7 @@ void main() {
         color = mix(color, hot, smoothstep(0.42, 0.84, score));
         color = mix(color, peak, smoothstep(0.82, 1.0, score));
         color = mix(unlit, color, windowLit);
-        float alpha = u_opacity * hasSun * mix(0.92, 1.0, windowLit);
+        float alpha = u_opacity * mix(0.92, 1.0, windowLit);
         fragColor = vec4(color, alpha);
         return;
     }
