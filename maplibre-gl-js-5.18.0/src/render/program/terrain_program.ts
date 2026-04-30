@@ -247,8 +247,7 @@ const terrainUniformValues = (
             if (typeof window !== 'undefined') {
                 const imageryState = (window as any).imageryState;
                 const shadowEnabled = imageryState?.get?.('shadow')?.enabled === true;
-                const daylightEnabled = imageryState?.get?.('daylight')?.enabled === true;
-                if (shadowEnabled || daylightEnabled) return 1.0;
+                if (shadowEnabled) return 1.0;
                 if ((window as any)._xploreSunAnalysisTerrain === true) return 1.0;
             }
             return 0.0;

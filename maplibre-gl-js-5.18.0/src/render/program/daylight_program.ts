@@ -13,6 +13,7 @@ export type DaylightUniformsType = {
     'u_daylight': Uniform1i;
     'u_color_ramp': Uniform1i;
     'u_opacity': Uniform1f;
+    'u_daylight_mode': Uniform1f;
     'u_tile_id': Uniform3f;
     'u_atlas_bounds': Uniform4f;
 };
@@ -47,6 +48,7 @@ const daylightUniforms = (context: Context, locations: UniformLocations): Daylig
     'u_daylight': new Uniform1i(context, locations.u_daylight),
     'u_color_ramp': new Uniform1i(context, locations.u_color_ramp),
     'u_opacity': new Uniform1f(context, locations.u_opacity),
+    'u_daylight_mode': new Uniform1f(context, locations.u_daylight_mode),
     'u_tile_id': new Uniform3f(context, locations.u_tile_id),
     'u_atlas_bounds': new Uniform4f(context, locations.u_atlas_bounds),
 });
@@ -88,6 +90,7 @@ const daylightUniformValues = (
         'u_daylight': 0,
         'u_color_ramp': 1,
         'u_opacity': opacity,
+        'u_daylight_mode': layer.id === 'sun-window-native' ? 1.0 : 0.0,
         'u_tile_id': tileID,
         'u_atlas_bounds': atlasBounds,
     };

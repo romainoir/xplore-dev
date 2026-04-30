@@ -64,7 +64,7 @@ export function updateAnalyticalLegends(map, imageryState, updateShadowTime) {
     if (imageryState.get('avalanche')?.enabled) activeAnalyzers.push('avalanche');
     if (imageryState.get('snow')?.enabled) activeAnalyzers.push('snow');
     if (imageryState.get('snow-depth')?.enabled) activeAnalyzers.push('snow-depth');
-    if (imageryState.get('shadow')?.enabled || imageryState.get('daylight')?.enabled) activeAnalyzers.push('shadow');
+    if (imageryState.get('shadow')?.enabled || imageryState.get('daylight')?.enabled || imageryState.get('sun-window')?.enabled) activeAnalyzers.push('shadow');
 
     if (activeAnalyzers.length === 0) {
         container.style.opacity = '0';
@@ -89,7 +89,7 @@ export function updateAnalyticalLegends(map, imageryState, updateShadowTime) {
         } else if (type === 'snow-depth') {
             legend.appendChild(createSnowDepthLegend());
         } else if (type === 'shadow') {
-            legend.appendChild(createShadowLegend(map, updateShadowTime));
+            legend.appendChild(createShadowLegend(map, updateShadowTime, imageryState));
         }
         container.appendChild(legend);
     });
@@ -220,10 +220,11 @@ function createSnowDepthLegend() {
     return content;
 }
 
-function createShadowLegend(map, updateShadowTime) {
+function createShadowLegend(map, updateShadowTime, imageryState) {
     const content = document.createElement('div');
     content.className = 'shadow-legend__content';
 
+    const shadowActive = imageryState?.get?.('shadow')?.enabled === true;
     const now = new Date(window.skySimulationDate || Date.now());
     const startOfYear = new Date(now.getFullYear(), 0, 0);
     const diff = now - startOfYear;
@@ -235,17 +236,17 @@ function createShadowLegend(map, updateShadowTime) {
     <div class="shadow-legend__header">
       <div class="shadow-legend__stats">
         <span id="shadowDateLabel">${formatDate(now)}</span>
-        <span class="shadow-legend__separator">•</span>
-        <span id="shadowTimeLabel">${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}</span>
+        ${shadowActive ? `<span class="shadow-legend__separator">•</span>
+        <span id="shadowTimeLabel">${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}</span>` : ''}
       </div>
       <div class="shadow-legend__header-actions">
-        <button id="shadowNowBtn" class="shadow-legend__btn-now">Now</button>
-        ${window.XploreDebug ? `<button id="shadowDebugTgl" class="shadow-legend__btn-icon shadow-legend__btn-icon--small" title="Settings">⚙️</button>` : ''}
+        ${shadowActive ? `<button id="shadowNowBtn" class="shadow-legend__btn-now">Now</button>` : ''}
+        ${shadowActive && window.XploreDebug ? `<button id="shadowDebugTgl" class="shadow-legend__btn-icon shadow-legend__btn-icon--small" title="Settings">⚙️</button>` : ''}
       </div>
     </div>
     <div class="shadow-legend__row"><span class="shadow-legend__row-icon">📅</span><input type="range" id="shadowDateSlider" class="shadow-legend__slider shadow-legend__slider--date" min="1" max="366" value="${dayOfYear}"></div>
-    <div class="shadow-legend__row"><span class="shadow-legend__row-icon">🕒</span><input type="range" id="shadowTimeSlider" class="shadow-legend__slider" min="0" max="1440" step="1" value="${initialMins}"></div>
-    ${window.XploreDebug ? `
+    ${shadowActive ? `<div class="shadow-legend__row"><span class="shadow-legend__row-icon">🕒</span><input type="range" id="shadowTimeSlider" class="shadow-legend__slider" min="0" max="1440" step="1" value="${initialMins}"></div>` : ''}
+    ${shadowActive && window.XploreDebug ? `
     <div id="shadowDebugMenu" class="shadow-legend__debug-menu" style="display: none;">
       <button id="shdSkyTgl" class="shadow-legend__btn shadow-legend__btn--sky" data-off="${window._skyDisabled}">Sky ${window._skyDisabled ? 'OFF' : 'ON'}</button>
       <div class="shadow-legend__fog-group">
@@ -299,7 +300,7 @@ function createShadowLegend(map, updateShadowTime) {
         const d = buildDate();
         if (dLb) dLb.textContent = formatDate(d);
         if (tLb) tLb.textContent = `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
-        updateTimeGradient(d);
+        if (shadowActive) updateTimeGradient(d);
         if (updateShadowTime) updateShadowTime(d);
     };
 
@@ -343,7 +344,7 @@ function createShadowLegend(map, updateShadowTime) {
     }
 
     // Initial gradient
-    updateTimeGradient(now);
+    if (shadowActive) updateTimeGradient(now);
     if (updateShadowTime) updateShadowTime(now);
 
     return content;

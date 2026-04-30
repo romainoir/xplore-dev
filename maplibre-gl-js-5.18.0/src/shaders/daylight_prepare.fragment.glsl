@@ -74,32 +74,47 @@ float sunVisibility(vec2 sunPos, vec2 uv) {
     return aboveHorizon * smoothstep(terrainHorizon - edgeSoftness, terrainHorizon + edgeSoftness, sunAltitude);
 }
 
-float packedVisibility(vec4 packedSunPositions, vec2 uv) {
-    return sunVisibility(packedSunPositions.xy, uv) +
-        sunVisibility(packedSunPositions.zw, uv);
+void accumulateVisibility(vec4 packedSunPositions, vec2 uv, float baseIndex, inout float visibleSamples, inout float firstVisible, inout float lastVisible) {
+    float v0 = sunVisibility(packedSunPositions.xy, uv);
+    float v1 = sunVisibility(packedSunPositions.zw, uv);
+    visibleSamples += v0 + v1;
+
+    if (v0 > 0.08) {
+        firstVisible = min(firstVisible, baseIndex);
+        lastVisible = max(lastVisible, baseIndex);
+    }
+    if (v1 > 0.08) {
+        firstVisible = min(firstVisible, baseIndex + 1.0);
+        lastVisible = max(lastVisible, baseIndex + 1.0);
+    }
 }
 
 void main() {
     float visibleSamples = 0.0;
-    visibleSamples += packedVisibility(u_solar_lut_0, v_pos);
-    visibleSamples += packedVisibility(u_solar_lut_1, v_pos);
-    visibleSamples += packedVisibility(u_solar_lut_2, v_pos);
-    visibleSamples += packedVisibility(u_solar_lut_3, v_pos);
-    visibleSamples += packedVisibility(u_solar_lut_4, v_pos);
-    visibleSamples += packedVisibility(u_solar_lut_5, v_pos);
-    visibleSamples += packedVisibility(u_solar_lut_6, v_pos);
-    visibleSamples += packedVisibility(u_solar_lut_7, v_pos);
-    visibleSamples += packedVisibility(u_solar_lut_8, v_pos);
-    visibleSamples += packedVisibility(u_solar_lut_9, v_pos);
-    visibleSamples += packedVisibility(u_solar_lut_10, v_pos);
-    visibleSamples += packedVisibility(u_solar_lut_11, v_pos);
-    visibleSamples += packedVisibility(u_solar_lut_12, v_pos);
-    visibleSamples += packedVisibility(u_solar_lut_13, v_pos);
-    visibleSamples += packedVisibility(u_solar_lut_14, v_pos);
-    visibleSamples += packedVisibility(u_solar_lut_15, v_pos);
+    float firstVisible = SOLAR_SAMPLES;
+    float lastVisible = -1.0;
+    accumulateVisibility(u_solar_lut_0, v_pos, 0.0, visibleSamples, firstVisible, lastVisible);
+    accumulateVisibility(u_solar_lut_1, v_pos, 2.0, visibleSamples, firstVisible, lastVisible);
+    accumulateVisibility(u_solar_lut_2, v_pos, 4.0, visibleSamples, firstVisible, lastVisible);
+    accumulateVisibility(u_solar_lut_3, v_pos, 6.0, visibleSamples, firstVisible, lastVisible);
+    accumulateVisibility(u_solar_lut_4, v_pos, 8.0, visibleSamples, firstVisible, lastVisible);
+    accumulateVisibility(u_solar_lut_5, v_pos, 10.0, visibleSamples, firstVisible, lastVisible);
+    accumulateVisibility(u_solar_lut_6, v_pos, 12.0, visibleSamples, firstVisible, lastVisible);
+    accumulateVisibility(u_solar_lut_7, v_pos, 14.0, visibleSamples, firstVisible, lastVisible);
+    accumulateVisibility(u_solar_lut_8, v_pos, 16.0, visibleSamples, firstVisible, lastVisible);
+    accumulateVisibility(u_solar_lut_9, v_pos, 18.0, visibleSamples, firstVisible, lastVisible);
+    accumulateVisibility(u_solar_lut_10, v_pos, 20.0, visibleSamples, firstVisible, lastVisible);
+    accumulateVisibility(u_solar_lut_11, v_pos, 22.0, visibleSamples, firstVisible, lastVisible);
+    accumulateVisibility(u_solar_lut_12, v_pos, 24.0, visibleSamples, firstVisible, lastVisible);
+    accumulateVisibility(u_solar_lut_13, v_pos, 26.0, visibleSamples, firstVisible, lastVisible);
+    accumulateVisibility(u_solar_lut_14, v_pos, 28.0, visibleSamples, firstVisible, lastVisible);
+    accumulateVisibility(u_solar_lut_15, v_pos, 30.0, visibleSamples, firstVisible, lastVisible);
 
     float totalHours = visibleSamples * u_time_weight / 60.0;
     float daylightHours = max(u_time_weight * SOLAR_SAMPLES / 60.0, 1.0);
     float rampPos = smoothstep(0.0, 1.0, clamp(totalHours / daylightHours, 0.0, 1.0));
-    fragColor = vec4(rampPos, rampPos, rampPos, 1.0);
+    float hasSun = step(0.0, lastVisible);
+    float firstNorm = mix(1.0, firstVisible / max(SOLAR_SAMPLES - 1.0, 1.0), hasSun);
+    float lastNorm = mix(0.0, lastVisible / max(SOLAR_SAMPLES - 1.0, 1.0), hasSun);
+    fragColor = vec4(rampPos, firstNorm, lastNorm, 1.0);
 }
