@@ -25,8 +25,10 @@ void main() {
     if (u_daylight_mode > 0.5) {
         float timingScore = clamp(u_daylight_mode > 1.5 ? daylight.b : daylight.g, 0.0, 1.0);
         float hasSun = step(0.001, rampPos);
-        float durationWeight = mix(0.58, 1.0, smoothstep(0.18, 0.92, rampPos));
-        float score = pow(clamp(timingScore * durationWeight * hasSun, 0.0, 1.0), 1.42);
+        float normalizedTiming = smoothstep(0.035, 0.55, timingScore);
+        float durationGate = smoothstep(0.015, 0.12, rampPos);
+        float durationWeight = mix(0.88, 1.0, smoothstep(0.22, 0.82, rampPos));
+        float score = pow(clamp(normalizedTiming * durationGate * durationWeight * hasSun, 0.0, 1.0), 0.78);
         vec3 cold = vec3(0.12, 0.00, 0.01);
         vec3 low = vec3(0.36, 0.02, 0.01);
         vec3 mid = vec3(0.82, 0.03, 0.01);
