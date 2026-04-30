@@ -12,6 +12,7 @@ import {
 } from '../uniform_binding';
 import {EXTENT} from '../../data/extent';
 import {MercatorCoordinate} from '../../geo/mercator_coordinate';
+import {Color} from '@maplibre/maplibre-gl-style-spec';
 
 import type {Context} from '../../webgl/context';
 import type {UniformValues, UniformLocations} from '../uniform_binding';
@@ -31,6 +32,17 @@ export type HillshadeUniformsType = {
     'u_method': Uniform1i;
     'u_shadows': UniformColorArray;
     'u_highlights': UniformColorArray;
+    'u_metersPerPixel': Uniform1f;
+    'u_snow_altitude': Uniform1f;
+    'u_snow_maxSlope': Uniform1f;
+    'u_slope_min': Uniform1f;
+    'u_slope_max': Uniform1f;
+    'u_bearing': Uniform1f;
+    'u_image_raw': Uniform1i;
+    'u_unpack': Uniform4f;
+    'u_dimension': Uniform2f;
+    'u_skyHighlight': UniformColor;
+    'u_skyShadow': UniformColor;
 };
 
 export type HillshadePrepareUniformsType = {
@@ -39,6 +51,7 @@ export type HillshadePrepareUniformsType = {
     'u_dimension': Uniform2f;
     'u_zoom': Uniform1f;
     'u_unpack': Uniform4f;
+    'u_metersPerPixel': Uniform1f;
 };
 
 const hillshadeUniforms = (context: Context, locations: UniformLocations): HillshadeUniformsType => ({
@@ -50,7 +63,18 @@ const hillshadeUniforms = (context: Context, locations: UniformLocations): Hills
     'u_accent': new UniformColor(context, locations.u_accent),
     'u_method': new Uniform1i(context, locations.u_method),
     'u_shadows': new UniformColorArray(context, locations.u_shadows),
-    'u_highlights': new UniformColorArray(context, locations.u_highlights)
+    'u_highlights': new UniformColorArray(context, locations.u_highlights),
+    'u_metersPerPixel': new Uniform1f(context, locations.u_metersPerPixel),
+    'u_snow_altitude': new Uniform1f(context, locations.u_snow_altitude),
+    'u_snow_maxSlope': new Uniform1f(context, locations.u_snow_maxSlope),
+    'u_slope_min': new Uniform1f(context, locations.u_slope_min),
+    'u_slope_max': new Uniform1f(context, locations.u_slope_max),
+    'u_bearing': new Uniform1f(context, locations.u_bearing),
+    'u_image_raw': new Uniform1i(context, locations.u_image_raw),
+    'u_unpack': new Uniform4f(context, locations.u_unpack),
+    'u_dimension': new Uniform2f(context, locations.u_dimension),
+    'u_skyHighlight': new UniformColor(context, locations.u_skyHighlight),
+    'u_skyShadow': new UniformColor(context, locations.u_skyShadow)
 });
 
 const hillshadePrepareUniforms = (context: Context, locations: UniformLocations): HillshadePrepareUniformsType => ({
@@ -58,7 +82,8 @@ const hillshadePrepareUniforms = (context: Context, locations: UniformLocations)
     'u_image': new Uniform1i(context, locations.u_image),
     'u_dimension': new Uniform2f(context, locations.u_dimension),
     'u_zoom': new Uniform1f(context, locations.u_zoom),
-    'u_unpack': new Uniform4f(context, locations.u_unpack)
+    'u_unpack': new Uniform4f(context, locations.u_unpack),
+    'u_metersPerPixel': new Uniform1f(context, locations.u_metersPerPixel)
 });
 
 const hillshadeUniformValues = (
@@ -68,23 +93,36 @@ const hillshadeUniformValues = (
 ): UniformValues<HillshadeUniformsType> => {
     const accent = layer.paint.get('hillshade-accent-color');
     let method;
-    switch (layer.paint.get('hillshade-method')) {
-        case 'basic':
-            method = 4;
-            break;
-        case 'combined':
-            method = 1;
-            break;
-        case 'igor':
-            method = 2;
-            break;
-        case 'multidirectional':
-            method = 3;
-            break;
-        case 'standard':
-        default:
-            method = 0;
-            break;
+
+    // The app's terrain-analysis layers are regular hillshade layers whose
+    // analytical shader mode is selected by stable layer id.
+    if (layer.id === 'aspect' || layer.id === 'aspect-native') {
+        method = 6;
+    } else if (layer.id === 'slope' || layer.id === 'slope-native') {
+        method = 7;
+    } else if (layer.id === 'avalanche' || layer.id === 'avalanche-native') {
+        method = 8;
+    } else if (layer.id === 'snow' || layer.id === 'snow-native') {
+        method = 9;
+    } else {
+        switch (layer.paint.get('hillshade-method')) {
+            case 'basic':
+                method = 4;
+                break;
+            case 'combined':
+                method = 1;
+                break;
+            case 'igor':
+                method = 2;
+                break;
+            case 'multidirectional':
+                method = 3;
+                break;
+            case 'standard':
+            default:
+                method = 0;
+                break;
+        }
     }
 
     const illumination = layer.getIlluminationProperties();
@@ -95,16 +133,45 @@ const hillshadeUniformValues = (
             illumination.directionRadians[i] += painter.transform.bearingInRadians;
         }
     }
+    const latRange = getTileLatRange(painter, tile.tileID);
+    const tileSize = 512;
+    const worldCircumference = 40075016.7;
+    const zoom = tile.tileID.overscaledZ;
+    const globalMetersPerPixel = worldCircumference / (tileSize * Math.pow(2, zoom));
+
+    const skyPreset = (typeof window !== 'undefined' && (window as any)._currentSkyPreset) || {};
+    const skyHighlightHex = skyPreset['hillshade-highlight'] || '#FFFFFF';
+    const skyShadowHex = skyPreset['hillshade-shadow'] || '#000000';
+    const skyHighlight = Color.parse(skyHighlightHex) || Color.parse('#FFFFFF');
+    const skyShadow = Color.parse(skyShadowHex) || Color.parse('#000000');
+
+    const snowConfig = (typeof window !== 'undefined' && (window as any).snowConfig) || {};
+    const snowAltitude = snowConfig.altitude ?? 1000;
+    const snowMaxSlope = snowConfig.maxSlope ?? 35;
+
+    const slopeConfig = (typeof window !== 'undefined' && (window as any).slopeConfig) || {};
+
     return {
         'u_image': 0,
-        'u_latrange': getTileLatRange(painter, tile.tileID),
+        'u_image_raw': 1,
+        'u_unpack': tile.dem ? tile.dem.getUnpackVector() : [0, 0, 0, 0],
+        'u_dimension': tile.dem ? [tile.dem.stride, tile.dem.stride] : [514, 514],
+        'u_bearing': painter.transform.bearingInRadians,
+        'u_latrange': latRange,
         'u_exaggeration': layer.paint.get('hillshade-exaggeration'),
         'u_altitudes': illumination.altitudeRadians,
         'u_azimuths': illumination.directionRadians,
         'u_accent': accent,
         'u_method': method,
         'u_highlights': illumination.highlightColor,
-        'u_shadows': illumination.shadowColor
+        'u_shadows': illumination.shadowColor,
+        'u_metersPerPixel': globalMetersPerPixel,
+        'u_snow_altitude': snowAltitude,
+        'u_snow_maxSlope': snowMaxSlope,
+        'u_slope_min': slopeConfig.min ?? 0,
+        'u_slope_max': slopeConfig.max ?? 90,
+        'u_skyHighlight': skyHighlight,
+        'u_skyShadow': skyShadow
     };
 };
 
@@ -121,7 +188,8 @@ const hillshadeUniformPrepareValues = (tileID: OverscaledTileID, dem: DEMData): 
         'u_image': 1,
         'u_dimension': [stride, stride],
         'u_zoom': tileID.overscaledZ,
-        'u_unpack': dem.getUnpackVector()
+        'u_unpack': dem.getUnpackVector(),
+        'u_metersPerPixel': 40075016.6855785 / (512 * Math.pow(2, tileID.overscaledZ))
     };
 };
 
