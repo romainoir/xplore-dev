@@ -72385,6 +72385,46 @@ const LAYERS_TO_TEXTURES = {
     shadow: true,
     daylight: true
 };
+const XPLORE_SUN_ANALYSIS_FOREGROUND_SOURCES = {
+    'strava-heatmap-all': true,
+    'strava-winter': true,
+    'strava-backcountry-ski': true,
+    'strava-cycling': true,
+    'strava-run': true,
+    'ign-traces-hivernales': true,
+    'route-line-source': true,
+    'route-manual-source': true,
+    'route-segments-source': true,
+    'drag-preview-source': true,
+    'distance-markers-source': true,
+    'route-hover-point-source': true,
+    'waypoints': true,
+    'route-pois': true,
+    'segment-markers': true,
+    'imported-gpx': true,
+    'offline-router-network-debug': true,
+    'offline-router-network-pois': true
+};
+const XPLORE_SUN_ANALYSIS_FOREGROUND_LAYERS = {
+    'route-line': true,
+    'route-line-casing': true,
+    'route-line-manual': true,
+    'route-line-manual-bg': true,
+    'route-segment-hover': true,
+    'drag-preview-line': true,
+    'imported-gpx-line': true,
+    'offline-router-network-debug': true
+};
+function xploreSunAnalysisActive() {
+    return typeof window !== 'undefined' && Boolean(window._xploreSunAnalysisTerrain);
+}
+function layerShouldRenderToTexture(layer) {
+    if (!LAYERS_TO_TEXTURES[layer.type])
+        return false;
+    if (!xploreSunAnalysisActive())
+        return true;
+    return !XPLORE_SUN_ANALYSIS_FOREGROUND_LAYERS[layer.id] && !XPLORE_SUN_ANALYSIS_FOREGROUND_SOURCES[layer.source];
+}
 /**
  * @internal
  * A helper class to help define what should be rendered to texture and how
@@ -72405,9 +72445,16 @@ class RenderToTexture {
         var _a, _b;
         this._stacks = [];
         this._prevType = null;
+        this._prevLayerRenderedToTexture = false;
         this._rttTiles = [];
         this._renderableTiles = this.terrain.tileManager.getRenderableTiles();
         this._renderableLayerIds = style._order.filter(id => !style._layers[id].isHidden(zoom));
+        const sunAnalysisActive = xploreSunAnalysisActive();
+        if (this._xploreSunAnalysisActive !== sunAnalysisActive) {
+            for (const tile of this._renderableTiles)
+                tile.rtt = [];
+            this._xploreSunAnalysisActive = sunAnalysisActive;
+        }
         this._coordsAscending = {};
         for (const id in style.tileManagers) {
             this._coordsAscending[id] = {};
@@ -72427,7 +72474,7 @@ class RenderToTexture {
         for (const id of style._order) {
             const layer = style._layers[id];
             const source = layer.source;
-            const shouldRenderToTexture = LAYERS_TO_TEXTURES[layer.type];
+            const shouldRenderToTexture = layerShouldRenderToTexture(layer);
             if (shouldRenderToTexture && !this._rttFingerprints[source]) {
                 this._rttFingerprints[source] = {};
                 const revision = (_b = (_a = style.tileManagers[source]) === null || _a === void 0 ? void 0 : _a.getState().revision) !== null && _b !== void 0 ? _b : 0;
@@ -72464,21 +72511,24 @@ class RenderToTexture {
         const type = layer.type;
         const painter = this.painter;
         const isLastLayer = this._renderableLayerIds[this._renderableLayerIds.length - 1] === layer.id;
+        const shouldRenderToTexture = layerShouldRenderToTexture(layer);
         // remember background, fill, line & raster layer to render into a stack
-        if (LAYERS_TO_TEXTURES[type]) {
+        if (shouldRenderToTexture) {
             // create a new stack if previous layer was not rendered to texture (f.e. symbols)
-            if (!this._prevType || !LAYERS_TO_TEXTURES[this._prevType])
+            if (!this._prevLayerRenderedToTexture)
                 this._stacks.push([]);
             // push current render-to-texture layer to render-stack
             this._prevType = type;
+            this._prevLayerRenderedToTexture = true;
             this._stacks[this._stacks.length - 1].push(layer.id);
             // rendering is done later, all in once
             if (!isLastLayer)
                 return true;
         }
         // in case a stack is finished render all collected stack-layers into a texture
-        if (LAYERS_TO_TEXTURES[this._prevType] || (LAYERS_TO_TEXTURES[type] && isLastLayer)) {
+        if (this._prevLayerRenderedToTexture || (shouldRenderToTexture && isLastLayer)) {
             this._prevType = type;
+            this._prevLayerRenderedToTexture = shouldRenderToTexture;
             const stack = this._stacks.length - 1, layers = this._stacks[stack] || [];
             for (const tile of this._renderableTiles) {
                 // if render pool is full draw current tiles to screen and free pool
@@ -72518,8 +72568,10 @@ class RenderToTexture {
             drawTerrain(this.painter, this.terrain, this._rttTiles, options);
             this._rttTiles = [];
             this.pool.freeAllObjects();
-            return LAYERS_TO_TEXTURES[type];
+            return shouldRenderToTexture;
         }
+        this._prevType = type;
+        this._prevLayerRenderedToTexture = false;
         return false;
     }
 }

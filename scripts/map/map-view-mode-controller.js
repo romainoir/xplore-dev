@@ -69,6 +69,12 @@ export function createViewModeController(map, options = {}) {
   let moveEndHandler = null;
   let isInternalChange = false;
 
+  function setSunAnalysisTerrainFlag(required) {
+    if (typeof window !== 'undefined') {
+      window._xploreSunAnalysisTerrain = Boolean(required);
+    }
+  }
+
   function resolveTerrainSourceId() {
     const resolved = resolveValue(terrainSourceResolver, null);
     return typeof resolved === 'string' && resolved.length ? resolved : null;
@@ -419,6 +425,7 @@ export function createViewModeController(map, options = {}) {
 
   function setAnalysisTerrainRequired(required) {
     const nextRequired = Boolean(required);
+    setSunAnalysisTerrainFlag(nextRequired);
     if (analysisTerrainRequired === nextRequired) return;
     analysisTerrainRequired = nextRequired;
     if (currentMode === VIEW_MODES.TWOD) {
@@ -428,6 +435,7 @@ export function createViewModeController(map, options = {}) {
   }
 
   applyMode(currentMode, { animate: false });
+  setSunAnalysisTerrainFlag(analysisTerrainRequired);
   applyHdMode();
 
   // Public method to update sky based on simulation time
