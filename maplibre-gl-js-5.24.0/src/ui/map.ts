@@ -2399,6 +2399,75 @@ export class Map extends Camera {
     }
 
     /**
+     * Reads the entire 2048x2048 Elevation Atlas FBO pixels for debugging purposes.
+     * @returns Uint8Array containing the raw RGBA pixels, or null if terrain is not active.
+     */
+    readElevationAtlasPixels(): Uint8Array | null {
+        if (!this.terrain) return null;
+        return this.terrain.readElevationAtlasPixels();
+    }
+
+    /**
+     * Gets the elevation at a given location, in meters above sea level.
+     *
+     * This override keeps Xplore terrain analysis working in both 2D and 3D.
+     * Upstream Camera.queryTerrainElevation returns null when 3D terrain is not
+     * enabled, but slope/aspect/avalanche/snow hover readouts also need DEM
+     * values while the app is in 2D mode.
+     *
+     * @param lngLatLike - [x,y] or LngLat coordinates of the location
+     * @returns elevation in meters, or null if no elevation data is available
+     */
+    queryTerrainElevation(lngLatLike: LngLatLike): number | null {
+        if (this.terrain) {
+            return this.terrain.getElevationForLngLat(LngLat.convert(lngLatLike), this.transform);
+        }
+
+        if (this.style && this.style._loaded) {
+            const lngLat = LngLat.convert(lngLatLike);
+            for (const id in this.style.tileManagers) {
+                const tileManager = this.style.tileManagers[id];
+                if (!tileManager || tileManager.getSource().type !== 'raster-dem') continue;
+
+                const allTiles = (tileManager as any)._inViewTiles?.getAllTiles?.() || [];
+                for (const tile of allTiles) {
+                    if (!tile?.dem) continue;
+                    const canonical = tile.tileID?.canonical;
+                    if (!canonical) continue;
+
+                    const tileZoom = canonical.z;
+                    const tileCount = 1 << tileZoom;
+                    const latRad = lngLat.lat * Math.PI / 180;
+                    const mercatorX = ((lngLat.lng + 180) / 360) * tileCount;
+                    const mercatorY = (1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * tileCount;
+                    const tileX = Math.floor(mercatorX);
+                    const tileY = Math.floor(mercatorY);
+
+                    if (canonical.x !== tileX || canonical.y !== tileY) continue;
+
+                    const dem = tile.dem;
+                    const dim = dem.dim;
+                    const pixelX = (mercatorX - tileX) * dim;
+                    const pixelY = (mercatorY - tileY) * dim;
+                    const cx = Math.floor(pixelX);
+                    const cy = Math.floor(pixelY);
+                    const tx = pixelX - cx;
+                    const ty = pixelY - cy;
+
+                    return (
+                        dem.get(cx, cy) * (1 - tx) * (1 - ty) +
+                        dem.get(cx + 1, cy) * tx * (1 - ty) +
+                        dem.get(cx, cy + 1) * (1 - tx) * ty +
+                        dem.get(cx + 1, cy + 1) * tx * ty
+                    );
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * Returns a Boolean indicating whether all tiles in the viewport from all sources on
      * the style are loaded.
      *

@@ -467,7 +467,7 @@ export function drawDaylight(
     tileManager: TileManager,
     layer: DaylightStyleLayer,
     tileIDs: Array<OverscaledTileID>,
-    renderOptions: RenderOptions // eslint-disable-line
+    renderOptions: RenderOptions
 ) {
     if (painter.renderPass !== 'offscreen' && painter.renderPass !== 'translucent') return;
 
@@ -527,9 +527,11 @@ export function drawDaylight(
     const context = painter.context;
     const gl = context.gl;
     const projection = painter.style.projection;
+    const {isRenderingToTexture} = renderOptions;
 
     const depthMode = painter.getDepthModeForSublayer(0, DepthMode.ReadOnly);
     const colorMode = painter.colorModeForRenderPass();
+    const align = !painter.options.moving;
 
     const [stencil, coords] = painter.getStencilConfigForOverlapAndUpdateStencilID(tileIDs);
 
@@ -581,8 +583,8 @@ export function drawDaylight(
 
         const projectionData = painter.transform.getProjectionData({
             overscaledTileID: coord,
-            aligned: false,
-            applyGlobeMatrix: false,
+            aligned: align,
+            applyGlobeMatrix: !isRenderingToTexture,
             applyTerrainMatrix: true
         });
 

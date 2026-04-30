@@ -12,6 +12,8 @@ The app currently runs a local MapLibre GL JS 5.24 fork:
 
 The custom shadow/daylight work is not a plugin. It is patched directly into the MapLibre renderer, style layer system, shaders, and generated dev bundle. Do not replace the fork with upstream MapLibre and expect shadows to keep working.
 
+The terrain-analysis layers are also fork patches. Aspect, slope, avalanche, snow, and Igor relief are implemented as custom hillshade shader modes, not as separate app-only layers. If those shader modes are only partially ported, the layers will render as quantized derivative grayscale.
+
 ## Current Upstream Target
 
 Use the latest stable 5.x release first. As of 2026-04-30:
@@ -58,20 +60,50 @@ These are the known fork integration points. An LLM should inspect these first b
 - `maplibre-gl-js-5.24.0/src/webgl/draw/draw_hillshade.ts`
 - `maplibre-gl-js-5.24.0/src/render/terrain.ts`
 - `maplibre-gl-js-5.24.0/src/render/painter.ts`
+- `maplibre-gl-js-5.24.0/src/ui/map.ts`
 - `maplibre-gl-js-5.24.0/src/webgl/program/program_uniforms.ts`
+- `maplibre-gl-js-5.24.0/src/webgl/program/hillshade_program.ts`
 - `maplibre-gl-js-5.24.0/src/webgl/program/terrain_program.ts`
 - `maplibre-gl-js-5.24.0/src/webgl/program/shadow_program.ts`
 - `maplibre-gl-js-5.24.0/src/webgl/program/shadow_prepare_program.ts`
 - `maplibre-gl-js-5.24.0/src/webgl/program/daylight_program.ts`
 - `maplibre-gl-js-5.24.0/src/webgl/program/horizon_program.ts`
 - `maplibre-gl-js-5.24.0/src/shaders/shaders.ts`
+- `maplibre-gl-js-5.24.0/src/shaders/glsl/hillshade*.glsl`
 - `maplibre-gl-js-5.24.0/src/shaders/glsl/shadow*.glsl`
 - `maplibre-gl-js-5.24.0/src/shaders/glsl/daylight*.glsl`
 - `maplibre-gl-js-5.24.0/src/shaders/glsl/horizon_prepare.fragment.glsl`
 - Generated shader files: `maplibre-gl-js-5.24.0/src/shaders/glsl/*.g.ts` after `npm run codegen`
 - Built runtime copied into the app: `scripts/map/maplibre-gl-dev.js`
+- Built source map copied into the app: `scripts/map/maplibre-gl-dev.js.map`
 
-Use `rg "shadow-coarse|daylight-native|ShadowStyleLayer|drawGlobalShadow|drawDaylight|horizonPrepare" maplibre-gl-js-5.24.0/src scripts/map/maplibre-gl-dev.js` to find all active patch points.
+Use `rg "shadow-coarse|daylight-native|ShadowStyleLayer|drawGlobalShadow|drawDaylight|horizonPrepare|aspect-native|slope-native|avalanche-native|snow-native|queryTerrainElevation" maplibre-gl-js-5.24.0/src scripts/map/maplibre-gl-dev.js` to find all active patch points.
+
+## Custom Shader Port Checklist
+
+When rebasing to a newer MapLibre release, do not stop after copying GLSL files. The TypeScript wrappers decide which uniforms exist, how textures are bound, and which draw function runs for a style layer.
+
+Terrain analysis / hillshade:
+
+- `src/shaders/glsl/hillshade.fragment.glsl` must include custom methods `ASPECT`, `SLOPE`, `AVALANCHE`, and `SNOW`.
+- `src/shaders/glsl/hillshade_prepare.fragment.glsl` must encode derivatives in the custom `deriv / 8.0 + 0.5` format and pass normalized elevation in the blue channel for snow.
+- `src/webgl/program/hillshade_program.ts` must bind all custom uniforms used by the GLSL: `u_image_raw`, `u_unpack`, `u_dimension`, `u_metersPerPixel`, `u_snow_altitude`, `u_snow_maxSlope`, `u_slope_min`, `u_slope_max`, `u_skyHighlight`, and `u_skyShadow`.
+- `src/webgl/program/hillshade_program.ts` must force method IDs by layer id: `aspect-native -> 6`, `slope-native -> 7`, `avalanche-native -> 8`, `snow-native -> 9`.
+- `src/webgl/draw/draw_hillshade.ts` must bind the prepared derivative FBO on texture unit 0 and the raw DEM texture on texture unit 1 before drawing analytical hillshade modes.
+- `src/ui/map.ts` must keep the Xplore `Map.queryTerrainElevation()` override. Upstream `Camera.queryTerrainElevation()` returns `null` when 3D terrain is disabled, but Xplore's 2D aspect/slope/avalanche hover readout needs to sample loaded raster-dem tiles in 2D.
+
+Shadow/daylight:
+
+- `src/style/create_style_layer.ts`, `src/style/style.ts`, and `src/style/style_layer/typed_style_layer.ts` must recognize non-standard `shadow` and `daylight` style layer types.
+- `src/webgl/draw/index.ts` must register `drawShadow` and `drawDaylight`.
+- `src/webgl/program/program_uniforms.ts` and `src/shaders/shaders.ts` must register every custom program/shader pair.
+- `src/render/painter.ts` must call the elevation/depth/coordinate atlas path and dispatch shadow/daylight render layers.
+- `src/render/terrain.ts` must own and destroy the custom atlas/framebuffer resources.
+- `src/webgl/draw/draw_daylight.ts` must render Sunlight Hours, First Sun, and Last Sun with the same terrain-aware projection contract as raster/hillshade/shadow: call `getTerrainData(coord)` and use `getProjectionData({overscaledTileID: coord, aligned: !painter.options.moving, applyGlobeMatrix: !isRenderingToTexture, applyTerrainMatrix: true})`. If `applyGlobeMatrix` is forced off, the duration layers render as flat overlays instead of conforming to pitched terrain.
+
+MapLibre 5.24 projection caveat:
+
+- Do not add legacy fields such as `u_matrix` to `ProjectionData`. In 5.24, `Program.draw()` maps every projection-data field through `projectionObjectToUniformMap`; unknown fields crash with `this.projectionUniforms[uniformName].set`. For custom atlas rendering, override `projectionData.mainMatrix` only.
 
 ## Safe Update Workflow
 
@@ -114,6 +146,7 @@ Use `rg "shadow-coarse|daylight-native|ShadowStyleLayer|drawGlobalShadow|drawDay
 
    ```bash
    cp maplibre-gl-js-5.24.0/dist/maplibre-gl-dev.js scripts/map/maplibre-gl-dev.js
+   cp maplibre-gl-js-5.24.0/dist/maplibre-gl-dev.js.map scripts/map/maplibre-gl-dev.js.map
    ```
 
    Then update CSS references:
@@ -141,6 +174,8 @@ Use `rg "shadow-coarse|daylight-native|ShadowStyleLayer|drawGlobalShadow|drawDay
 
    - App loads in 2D and 3D.
    - Shadow, Sunlight Hours, First Sun, and Last Sun layers render.
+   - Aspect, slope, avalanche, snow, and Igor hillshade render with their expected colors, not grayscale derivative tiles.
+   - Aspect and slope hover values appear in 2D mode.
    - Date slider updates daylight layers.
    - Date and time sliders update shadow layer.
    - Panning, rotating, zooming do not recompute shadows while the camera moves.

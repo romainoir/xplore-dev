@@ -66993,8 +66993,7 @@ function prepareDaylightDuration(painter, layer, solarLUT, timeWeightMins, sunri
         };
     }
 }
-function drawDaylight(painter, tileManager, layer, tileIDs, renderOptions // eslint-disable-line
-) {
+function drawDaylight(painter, tileManager, layer, tileIDs, renderOptions) {
     var _a, _b, _c, _d, _e;
     if (painter.renderPass !== 'offscreen' && painter.renderPass !== 'translucent')
         return;
@@ -67025,8 +67024,10 @@ function drawDaylight(painter, tileManager, layer, tileIDs, renderOptions // esl
     const context = painter.context;
     const gl = context.gl;
     const projection = painter.style.projection;
+    const { isRenderingToTexture } = renderOptions;
     const depthMode = painter.getDepthModeForSublayer(0, DepthMode.ReadOnly);
     const colorMode = painter.colorModeForRenderPass();
+    const align = !painter.options.moving;
     const [stencil, coords] = painter.getStencilConfigForOverlapAndUpdateStencilID(tileIDs);
     // Get current map center and date to read the matching cached daylight texture.
     const center = painter.transform.center;
@@ -67064,8 +67065,8 @@ function drawDaylight(painter, tileManager, layer, tileIDs, renderOptions // esl
         const uniformValues = daylightUniformValues(layer, [coord.canonical.z, coord.canonical.x, coord.canonical.y], atlasBounds);
         const projectionData = painter.transform.getProjectionData({
             overscaledTileID: coord,
-            aligned: false,
-            applyGlobeMatrix: false,
+            aligned: align,
+            applyGlobeMatrix: !isRenderingToTexture,
             applyTerrainMatrix: true
         });
         program.draw(context, gl.TRIANGLES, depthMode, stencil[coord.overscaledZ], colorMode, CullFaceMode.backCCW, uniformValues, terrainData, projectionData, layer.id, mesh.vertexBuffer, mesh.indexBuffer, mesh.segments);
@@ -75968,6 +75969,70 @@ let Map$1 = class Map extends Camera {
     getTerrain() {
         var _a, _b;
         return (_b = (_a = this.terrain) === null || _a === void 0 ? void 0 : _a.options) !== null && _b !== void 0 ? _b : null;
+    }
+    /**
+     * Reads the entire 2048x2048 Elevation Atlas FBO pixels for debugging purposes.
+     * @returns Uint8Array containing the raw RGBA pixels, or null if terrain is not active.
+     */
+    readElevationAtlasPixels() {
+        if (!this.terrain)
+            return null;
+        return this.terrain.readElevationAtlasPixels();
+    }
+    /**
+     * Gets the elevation at a given location, in meters above sea level.
+     *
+     * This override keeps Xplore terrain analysis working in both 2D and 3D.
+     * Upstream Camera.queryTerrainElevation returns null when 3D terrain is not
+     * enabled, but slope/aspect/avalanche/snow hover readouts also need DEM
+     * values while the app is in 2D mode.
+     *
+     * @param lngLatLike - [x,y] or LngLat coordinates of the location
+     * @returns elevation in meters, or null if no elevation data is available
+     */
+    queryTerrainElevation(lngLatLike) {
+        var _a, _b, _c;
+        if (this.terrain) {
+            return this.terrain.getElevationForLngLat(symbol_layout.LngLat.convert(lngLatLike), this.transform);
+        }
+        if (this.style && this.style._loaded) {
+            const lngLat = symbol_layout.LngLat.convert(lngLatLike);
+            for (const id in this.style.tileManagers) {
+                const tileManager = this.style.tileManagers[id];
+                if (!tileManager || tileManager.getSource().type !== 'raster-dem')
+                    continue;
+                const allTiles = ((_b = (_a = tileManager._inViewTiles) === null || _a === void 0 ? void 0 : _a.getAllTiles) === null || _b === void 0 ? void 0 : _b.call(_a)) || [];
+                for (const tile of allTiles) {
+                    if (!(tile === null || tile === void 0 ? void 0 : tile.dem))
+                        continue;
+                    const canonical = (_c = tile.tileID) === null || _c === void 0 ? void 0 : _c.canonical;
+                    if (!canonical)
+                        continue;
+                    const tileZoom = canonical.z;
+                    const tileCount = 1 << tileZoom;
+                    const latRad = lngLat.lat * Math.PI / 180;
+                    const mercatorX = ((lngLat.lng + 180) / 360) * tileCount;
+                    const mercatorY = (1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * tileCount;
+                    const tileX = Math.floor(mercatorX);
+                    const tileY = Math.floor(mercatorY);
+                    if (canonical.x !== tileX || canonical.y !== tileY)
+                        continue;
+                    const dem = tile.dem;
+                    const dim = dem.dim;
+                    const pixelX = (mercatorX - tileX) * dim;
+                    const pixelY = (mercatorY - tileY) * dim;
+                    const cx = Math.floor(pixelX);
+                    const cy = Math.floor(pixelY);
+                    const tx = pixelX - cx;
+                    const ty = pixelY - cy;
+                    return (dem.get(cx, cy) * (1 - tx) * (1 - ty) +
+                        dem.get(cx + 1, cy) * tx * (1 - ty) +
+                        dem.get(cx, cy + 1) * (1 - tx) * ty +
+                        dem.get(cx + 1, cy + 1) * tx * ty);
+                }
+            }
+        }
+        return null;
     }
     /**
      * Returns a Boolean indicating whether all tiles in the viewport from all sources on
