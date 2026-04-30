@@ -242,7 +242,16 @@ const terrainUniformValues = (
         'u_horizon_edge_naturalness': (typeof window !== 'undefined' && (window as any)._horizonEdgeNaturalness !== undefined) ? (window as any)._horizonEdgeNaturalness : 0.0,
         'u_debug_mode': (typeof window !== 'undefined' && (window as any)._shadowDebugMode) ? (window as any)._shadowDebugMode : 0,
         'u_cast_shadow_mult': (typeof window !== 'undefined' && (window as any)._castShadowMult !== undefined) ? (window as any)._castShadowMult : 1.8,
-        'u_igor_relief_enabled': 1.0,
+        'u_igor_relief_enabled': (() => {
+            if (typeof window !== 'undefined') {
+                const imageryState = (window as any).imageryState;
+                const shadowEnabled = imageryState?.get?.('shadow')?.enabled === true;
+                const daylightEnabled = imageryState?.get?.('daylight')?.enabled === true;
+                if (shadowEnabled || daylightEnabled) return 1.0;
+                if ((window as any)._xploreSunAnalysisTerrain === true) return 1.0;
+            }
+            return 0.0;
+        })(),
         'u_sun_altitude': (() => {
             if (typeof window !== 'undefined' && (window as any)._actualSunAltitudeRad !== undefined) {
                 return (window as any)._actualSunAltitudeRad;

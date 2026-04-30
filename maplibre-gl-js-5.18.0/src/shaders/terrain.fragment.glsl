@@ -376,37 +376,45 @@ void main() {
         }
     }
 
-    // ── Global Shadow + Full-Res AO Hillshade + Time-of-Day Coloring ──
+    // ── Full-res local Igor relief is independent from the global shadow atlas.
+    // Cast shadows are atlas-bounded, but local relief must cover every terrain tile.
+    float directSun = directSunAmount(u_sun_altitude);
+    float skyAmbient = skyAmbientAmount(u_sun_altitude);
+    float horizonWarmth = smoothstep(radians(-6.0), radians(2.0), u_sun_altitude) *
+        (1.0 - smoothstep(radians(6.0), radians(16.0), u_sun_altitude));
+    float tintMix = 1.0 - smoothstep(radians(5.0), radians(22.0), u_sun_altitude);
+    float directShadow = min(u_shadow_intensity, directSun);
+
+    vec2 localRelief = vec2(0.0);
+    if (u_dem_ao_dim > 2.0 && (u_self_shadow_mult > 0.001 || u_igor_relief_enabled > 0.5)) {
+        localRelief = localIgorReliefMask(sampleReliefGradient(clamp(v_dem_coord, vec2(1.0), vec2(u_dem_ao_dim))));
+    }
+
+    if (u_igor_relief_enabled > 0.5) {
+        vec3 highlightTint = mix(vec3(0.86, 0.91, 1.0), vec3(1.0, 0.94, 0.80), tintMix);
+        float reliefHighlight = localRelief.y * (0.035 + directShadow * 0.11) * mix(0.55, 1.0, skyAmbient);
+        vec3 ambientLiftTint = mix(vec3(0.72, 0.80, 1.0), vec3(1.0, 0.88, 0.66), tintMix);
+        float ambientReliefAO = localRelief.x * (0.035 + skyAmbient * 0.040);
+        float ambientReliefLift = localRelief.y * 0.014 * mix(0.55, 1.0, skyAmbient);
+        fragColor.rgb = mix(fragColor.rgb, highlightTint, reliefHighlight);
+        fragColor.rgb *= 1.0 - ambientReliefAO;
+        fragColor.rgb = mix(fragColor.rgb, ambientLiftTint, ambientReliefLift);
+    }
+
+    // ── Global Shadow + Time-of-Day Coloring ──
     vec2 atlasUV = v_atlas_uv;
     if (atlasUV.x >= -0.001 && atlasUV.x <= 1.001 && atlasUV.y >= -0.001 && atlasUV.y <= 1.001) {
         float rawAtlasShadow = clamp(texture(u_shadow_atlas, clamp(atlasUV, vec2(0.0), vec2(1.0))).r, 0.0, 1.0);
         float raymarchedShadow = remapShadowMask(rawAtlasShadow, atlasUV);
         float horizonShadow = horizonShadowMask(atlasUV);
         float shadowMask = mix(raymarchedShadow, horizonShadow, clamp(u_horizon_available, 0.0, 1.0));
-        float directSun = directSunAmount(u_sun_altitude);
-        float skyAmbient = skyAmbientAmount(u_sun_altitude);
-        float horizonWarmth = smoothstep(radians(-6.0), radians(2.0), u_sun_altitude) *
-            (1.0 - smoothstep(radians(6.0), radians(16.0), u_sun_altitude));
 
         vec3 TINT_DAY = vec3(0.08, 0.17, 0.32);
         vec3 TINT_TWILIGHT = vec3(0.12, 0.09, 0.20);
         vec3 TINT_NIGHT = vec3(0.11, 0.12, 0.18);
         
-        float tintMix = 1.0 - smoothstep(radians(5.0), radians(22.0), u_sun_altitude);
         vec3 lowLightShadowTint = mix(TINT_NIGHT, TINT_TWILIGHT, horizonWarmth);
         vec3 shadowTint = mix(TINT_DAY, lowLightShadowTint, tintMix);
-
-        float directShadow = min(u_shadow_intensity, directSun);
-        vec2 localRelief = vec2(0.0);
-        if (u_dem_ao_dim > 2.0 && (u_self_shadow_mult > 0.001 || u_igor_relief_enabled > 0.5)) {
-            localRelief = localIgorReliefMask(sampleReliefGradient(clamp(v_dem_coord, vec2(1.0), vec2(u_dem_ao_dim))));
-        }
-
-        if (u_igor_relief_enabled > 0.5) {
-            vec3 highlightTint = mix(vec3(0.86, 0.91, 1.0), vec3(1.0, 0.94, 0.80), tintMix);
-            float reliefHighlight = localRelief.y * (0.035 + directShadow * 0.11) * mix(0.55, 1.0, skyAmbient);
-            fragColor.rgb = mix(fragColor.rgb, highlightTint, reliefHighlight);
-        }
 
         float selfShadowMask = clamp(localRelief.x * u_self_shadow_mult * mix(0.36, 0.92, directShadow), 0.0, 1.0);
         float baseShadow = max(shadowMask, selfShadowMask);
@@ -417,8 +425,7 @@ void main() {
         // post-shadow AO pass, opaque cast shadows flatten the integrated Igor detail.
         if (u_igor_relief_enabled > 0.5) {
             float castPresence = clamp(shadowMask * directShadow, 0.0, 1.0);
-            float ambientReliefAO = localRelief.x * (0.035 + skyAmbient * 0.040) * (1.0 - castPresence * 0.25);
-            float reliefAO = localRelief.x * (0.040 + castPresence * 0.120) + ambientReliefAO;
+            float reliefAO = localRelief.x * castPresence * 0.105;
             float reliefLift = localRelief.y * (0.014 + castPresence * 0.025) * mix(0.55, 1.0, skyAmbient);
             vec3 ambientLiftTint = mix(vec3(0.72, 0.80, 1.0), vec3(1.0, 0.88, 0.66), tintMix);
             fragColor.rgb *= 1.0 - reliefAO;
