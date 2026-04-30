@@ -66527,7 +66527,7 @@ function getShadowAtlasVisibleBounds(painter, terrain, renderableTiles = terrain
     ];
     for (const yf of ys) {
         for (const xf of xs) {
-            const coord = tr.screenPointToMercatorCoordinate(new Point(clamp(width * xf, 0, Math.max(width - 1, 0)), clamp(height * yf, 0, Math.max(height - 1, 0))));
+            const coord = tr.screenPointToMercatorCoordinate(new performance$1.Point(clamp(width * xf, 0, Math.max(width - 1, 0)), clamp(height * yf, 0, Math.max(height - 1, 0))));
             if (coord && Number.isFinite(coord.x) && Number.isFinite(coord.y)) {
                 includeBounds(sampleBounds, { minX: coord.x, minY: coord.y, maxX: coord.x, maxY: coord.y });
             }
