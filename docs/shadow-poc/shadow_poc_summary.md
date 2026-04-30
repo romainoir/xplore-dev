@@ -87,7 +87,7 @@ Refined the analytical AO (Hillshade) logic within the core terrain shader (`ter
 - **Readable sun-duration map**: The daylight accumulation atlas now maps visible sun time to a fraction of the actual sunrise-to-sunset duration for the selected date, then renders with a dark-purple to blue/teal/green/yellow/orange/red ramp where warmer colors mean more sun.
 
 ## Current Known Constraints
-- The POC depends on `scripts/map/maplibre-gl-dev.js` exposing the custom `shadow`, `daylight`, and elevation-atlas readback hooks.
+- The POC depends on `../../scripts/map/maplibre-gl-dev.js` exposing the custom `shadow`, `daylight`, and elevation-atlas readback hooks.
 - Terrain rendering still depends on live Mapterhorn DEM tile requests.
 
 ---
