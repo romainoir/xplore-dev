@@ -23,22 +23,17 @@ void main() {
     float rampPos = clamp(daylight.r, 0.0, 1.0);
 
     if (u_daylight_mode > 0.5) {
-        float first = clamp(daylight.g, 0.0, 1.0);
-        float last = clamp(daylight.b, 0.0, 1.0);
+        float timingScore = clamp(u_daylight_mode > 1.5 ? daylight.b : daylight.g, 0.0, 1.0);
         float hasSun = step(0.001, rampPos);
-        float earlyScore = (1.0 - first) * rampPos * hasSun;
-        float lateScore = last * rampPos * hasSun;
-        float allDayScore = sqrt(max(earlyScore * lateScore, 0.0));
-
-        vec3 color = mix(vec3(0.03, 0.06, 0.16), vec3(0.05, 0.30, 0.72), smoothstep(0.04, 0.42, rampPos));
-        color = mix(color, vec3(0.05, 0.68, 0.56), smoothstep(0.34, 0.72, rampPos));
-        color = mix(color, vec3(0.95, 0.82, 0.22), smoothstep(0.70, 0.93, rampPos));
-        color = mix(color, vec3(0.34, 0.96, 0.78), earlyScore * (1.0 - lateScore) * 0.35);
-        color = mix(color, vec3(1.0, 0.50, 0.12), lateScore * 0.58);
-        color = mix(color, vec3(1.0, 0.16, 0.08), lateScore * smoothstep(0.60, 0.95, rampPos) * 0.42);
-        color = mix(color, vec3(1.0, 0.95, 0.58), allDayScore * 0.32);
-        color = mix(vec3(0.02, 0.03, 0.08), color, hasSun);
-        fragColor = vec4(color, u_opacity * mix(0.74, 1.0, rampPos));
+        float score = timingScore * hasSun;
+        vec3 cold = vec3(0.02, 0.05, 0.14);
+        vec3 low = vec3(0.05, 0.21, 0.55);
+        vec3 mid = u_daylight_mode > 1.5 ? vec3(0.95, 0.50, 0.10) : vec3(0.05, 0.72, 0.78);
+        vec3 hot = u_daylight_mode > 1.5 ? vec3(1.00, 0.10, 0.04) : vec3(1.00, 0.92, 0.32);
+        vec3 color = mix(low, mid, smoothstep(0.08, 0.58, score));
+        color = mix(color, hot, smoothstep(0.56, 1.0, score));
+        color = mix(cold, color, hasSun * smoothstep(0.0, 0.16, rampPos));
+        fragColor = vec4(color, u_opacity * mix(0.40, 1.0, score));
         return;
     }
 

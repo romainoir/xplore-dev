@@ -114,7 +114,9 @@ void main() {
     float daylightHours = max(u_time_weight * SOLAR_SAMPLES / 60.0, 1.0);
     float rampPos = smoothstep(0.0, 1.0, clamp(totalHours / daylightHours, 0.0, 1.0));
     float hasSun = step(0.0, lastVisible);
-    float firstNorm = mix(1.0, firstVisible / max(SOLAR_SAMPLES - 1.0, 1.0), hasSun);
-    float lastNorm = mix(0.0, lastVisible / max(SOLAR_SAMPLES - 1.0, 1.0), hasSun);
-    fragColor = vec4(rampPos, firstNorm, lastNorm, 1.0);
+    float oneHourSamples = clamp(60.0 / max(u_time_weight, 1.0), 1.0, SOLAR_SAMPLES);
+    float morningScore = hasSun * (1.0 - smoothstep(0.0, oneHourSamples, firstVisible));
+    float eveningDelta = (SOLAR_SAMPLES - 1.0) - lastVisible;
+    float eveningScore = hasSun * (1.0 - smoothstep(0.0, oneHourSamples, eveningDelta));
+    fragColor = vec4(rampPos, morningScore, eveningScore, 1.0);
 }

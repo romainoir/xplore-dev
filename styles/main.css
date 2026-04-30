@@ -947,6 +947,34 @@ body {
   opacity: 0.8;
 }
 
+.shadow-legend__mode-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  margin: -2px 0 10px 32px;
+  padding: 3px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+}
+
+.shadow-legend__mode-btn {
+  height: 24px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.shadow-legend__mode-btn[data-active="true"] {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.18);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.28);
+}
+
 .shadow-legend__btn-now {
   background: rgba(255, 255, 255, 0.1);
   border: 1px solid rgba(255, 255, 255, 0.15);

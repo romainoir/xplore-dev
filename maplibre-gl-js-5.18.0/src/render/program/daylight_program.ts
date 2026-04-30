@@ -90,7 +90,9 @@ const daylightUniformValues = (
         'u_daylight': 0,
         'u_color_ramp': 1,
         'u_opacity': opacity,
-        'u_daylight_mode': layer.id === 'sun-window-native' ? 1.0 : 0.0,
+        'u_daylight_mode': layer.id === 'sun-window-native'
+            ? (typeof window !== 'undefined' && (window as any)._sunWindowMode === 'sunset' ? 2.0 : 1.0)
+            : 0.0,
         'u_tile_id': tileID,
         'u_atlas_bounds': atlasBounds,
     };
