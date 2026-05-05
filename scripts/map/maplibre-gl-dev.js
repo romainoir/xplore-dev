@@ -63275,6 +63275,70 @@ class Terrain {
         return pixels;
     }
     /**
+     * Reads cached sun-analysis atlas data for a single geographic point.
+     *
+     * The horizon atlas stores normalized horizon angles in directional bins:
+     * `angleRadians = channel * PI / 2`. The daylight atlas stores the
+     * normalized daylight-duration ramp in R, sunrise-window score in G, and
+     * sunset-window score in B.
+     *
+     * @internal
+     */
+    readSunAnalysisAtlas(lngLat) {
+        const atlasBounds = this._elevationAtlasBounds;
+        if (!atlasBounds || !this._horizonAtlasReady || !this._fboHorizon0Texture || !this._fboHorizon1Texture) {
+            return null;
+        }
+        const merc = symbol_layout.MercatorCoordinate.fromLngLat(lngLat);
+        const u = (merc.x - atlasBounds[0]) / (atlasBounds[2] - atlasBounds[0]);
+        const v = 1.0 - (merc.y - atlasBounds[1]) / (atlasBounds[3] - atlasBounds[1]);
+        if (u < 0 || u > 1 || v < 0 || v > 1) {
+            return null;
+        }
+        const context = this.painter.context;
+        const gl = context.gl;
+        const pixel = new Uint8Array(4);
+        const readFramebufferPixel = (framebuffer, size) => {
+            const x = Math.max(0, Math.min(size - 1, Math.floor(u * size)));
+            const y = Math.max(0, Math.min(size - 1, Math.floor(v * size)));
+            context.bindFramebuffer.set(framebuffer.framebuffer);
+            gl.readPixels(x, y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+            return [pixel[0] / 255, pixel[1] / 255, pixel[2] / 255, pixel[3] / 255];
+        };
+        const horizonBins = Math.max(8, Math.min(16, Math.round(Number(this._horizonDirectionBins) || 8)));
+        const horizonSize = this._fboHorizon0Texture.size[0];
+        const horizonAngles = [];
+        const pushAngles = (values) => {
+            for (const value of values) {
+                if (horizonAngles.length < horizonBins)
+                    horizonAngles.push(value * Math.PI * 0.5);
+            }
+        };
+        pushAngles(readFramebufferPixel(this.getFramebuffer('horizon0'), horizonSize));
+        pushAngles(readFramebufferPixel(this.getFramebuffer('horizon1'), horizonSize));
+        if (horizonBins > 8 && this._fboHorizon2Texture && this._fboHorizon3Texture) {
+            const size2 = this._fboHorizon2Texture.size[0];
+            pushAngles(readFramebufferPixel(this.getFramebuffer('horizon2'), size2));
+            pushAngles(readFramebufferPixel(this.getFramebuffer('horizon3'), size2));
+        }
+        let daylight = null;
+        if (this._daylightAtlasReady && this._fboDaylightTexture) {
+            const values = readFramebufferPixel(this.getFramebuffer('daylight'), this._fboDaylightTexture.size[0]);
+            daylight = {
+                durationRamp: values[0],
+                sunriseScore: values[1],
+                sunsetScore: values[2]
+            };
+        }
+        context.bindFramebuffer.set(null);
+        return {
+            atlasUV: [u, v],
+            horizonBins,
+            horizonAngles,
+            daylight
+        };
+    }
+    /**
      * create a regular mesh which will be used by all terrain-tiles
      * @returns the created regular mesh
      */
@@ -66872,6 +66936,7 @@ function prepareHorizonAtlas(painter, horizonKey, horizonBins, maxDistance, step
     context.viewport.set([0, 0, painter.width, painter.height]);
     terrain._horizonAtlasReady = true;
     terrain._horizonAtlasKey = horizonKey;
+    terrain._horizonDirectionBins = horizonBins;
     terrain._daylightAtlasReady = false;
     if (debugEnabled) {
         window._horizonPrepareDebug = {
@@ -75979,6 +76044,21 @@ let Map$1 = class Map extends Camera {
         if (!this.terrain)
             return null;
         return this.terrain.readElevationAtlasPixels();
+    }
+    /**
+     * Reads cached sun-analysis atlas values for a location.
+     *
+     * Xplore uses this for lightweight hover readouts on Sunlight Hours,
+     * First Sun, and Last Sun layers. It samples the already-prepared horizon
+     * and daylight atlases instead of raymarching terrain again on the CPU.
+     *
+     * @param lngLatLike - [x,y] or LngLat coordinates of the location
+     * @returns cached horizon/daylight atlas data, or null when unavailable
+     */
+    readSunAnalysisAtlas(lngLatLike) {
+        if (!this.terrain)
+            return null;
+        return this.terrain.readSunAnalysisAtlas(symbol_layout.LngLat.convert(lngLatLike));
     }
     /**
      * Gets the elevation at a given location, in meters above sea level.

@@ -2408,6 +2408,26 @@ export class Map extends Camera {
     }
 
     /**
+     * Reads cached sun-analysis atlas values for a location.
+     *
+     * Xplore uses this for lightweight hover readouts on Sunlight Hours,
+     * First Sun, and Last Sun layers. It samples the already-prepared horizon
+     * and daylight atlases instead of raymarching terrain again on the CPU.
+     *
+     * @param lngLatLike - [x,y] or LngLat coordinates of the location
+     * @returns cached horizon/daylight atlas data, or null when unavailable
+     */
+    readSunAnalysisAtlas(lngLatLike: LngLatLike): {
+        atlasUV: [number, number];
+        horizonBins: number;
+        horizonAngles: number[];
+        daylight: {durationRamp: number; sunriseScore: number; sunsetScore: number} | null;
+    } | null {
+        if (!this.terrain) return null;
+        return this.terrain.readSunAnalysisAtlas(LngLat.convert(lngLatLike));
+    }
+
+    /**
      * Gets the elevation at a given location, in meters above sea level.
      *
      * This override keeps Xplore terrain analysis working in both 2D and 3D.

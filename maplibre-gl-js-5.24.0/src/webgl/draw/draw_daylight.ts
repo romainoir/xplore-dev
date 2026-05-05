@@ -300,6 +300,7 @@ function prepareHorizonAtlas(
 
     terrain._horizonAtlasReady = true;
     terrain._horizonAtlasKey = horizonKey;
+    terrain._horizonDirectionBins = horizonBins;
     terrain._daylightAtlasReady = false;
 
     if (debugEnabled) {

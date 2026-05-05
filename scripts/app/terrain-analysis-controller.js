@@ -47,6 +47,143 @@ export function initTerrainAnalysisConfig() {
     if (!window.snowConfig) window.snowConfig = { altitude: 1000, maxSlope: 40 };
 }
 
+const sunExposureHoverCache = new Map();
+const SUN_EXPOSURE_CACHE_LIMIT = 220;
+
+function formatSunHoverTime(date) {
+    if (!date) return '—';
+    return date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+}
+
+function formatSunHoverDuration(minutes) {
+    if (!Number.isFinite(minutes) || minutes <= 0) return '0h';
+    const rounded = Math.round(minutes);
+    const hours = Math.floor(rounded / 60);
+    const mins = rounded % 60;
+    if (hours <= 0) return `${mins}m`;
+    return mins ? `${hours}h${mins.toString().padStart(2, '0')}` : `${hours}h`;
+}
+
+function sampleHorizonAngle(horizonAngles, azimuth) {
+    const bins = horizonAngles.length;
+    if (!bins) return 0;
+    const twoPi = Math.PI * 2;
+    const wrapped = ((azimuth % twoPi) + twoPi) % twoPi;
+    const bin = wrapped / (twoPi / bins);
+    const bin0 = Math.floor(bin);
+    const bin1 = (bin0 + 1) % bins;
+    const t = bin - bin0;
+    return horizonAngles[bin0] * (1 - t) + horizonAngles[bin1] * t;
+}
+
+function isSunVisibleAt(date, lngLat, horizonAngles) {
+    const pos = SunCalc.getPosition(date, lngLat.lat, lngLat.lng);
+    let azimuth = pos.azimuth + Math.PI;
+    if (azimuth > Math.PI * 2) azimuth -= Math.PI * 2;
+    const horizon = sampleHorizonAngle(horizonAngles, azimuth);
+    return pos.altitude >= horizon;
+}
+
+function refineSunCrossing(low, high, lngLat, horizonAngles, wantVisibleHigh) {
+    let lo = low.getTime();
+    let hi = high.getTime();
+    for (let i = 0; i < 10; i++) {
+        const mid = (lo + hi) * 0.5;
+        const visible = isSunVisibleAt(new Date(mid), lngLat, horizonAngles);
+        if (visible === wantVisibleHigh) {
+            hi = mid;
+        } else {
+            lo = mid;
+        }
+    }
+    return wantVisibleHigh ? new Date(hi) : new Date(lo);
+}
+
+function findFirstSunTime(startMs, endMs, stepMs, lngLat, horizonAngles) {
+    let previous = new Date(startMs);
+    if (isSunVisibleAt(previous, lngLat, horizonAngles)) return previous;
+    for (let t = startMs + stepMs; t <= endMs; t += stepMs) {
+        const current = new Date(t);
+        if (isSunVisibleAt(current, lngLat, horizonAngles)) {
+            return refineSunCrossing(previous, current, lngLat, horizonAngles, true);
+        }
+        previous = current;
+    }
+    return null;
+}
+
+function findLastSunTime(startMs, endMs, stepMs, lngLat, horizonAngles) {
+    let next = new Date(endMs);
+    if (isSunVisibleAt(next, lngLat, horizonAngles)) return next;
+    for (let t = endMs - stepMs; t >= startMs; t -= stepMs) {
+        const current = new Date(t);
+        if (isSunVisibleAt(current, lngLat, horizonAngles)) {
+            return refineSunCrossing(current, next, lngLat, horizonAngles, false);
+        }
+        next = current;
+    }
+    return null;
+}
+
+function estimateSunDurationMinutes(startMs, endMs, stepMs, lngLat, horizonAngles) {
+    let lit = 0;
+    for (let t = startMs; t <= endMs; t += stepMs) {
+        if (isSunVisibleAt(new Date(t), lngLat, horizonAngles)) lit += stepMs / 60000;
+    }
+    return lit;
+}
+
+function calculateSunExposureHover(map, lngLat) {
+    if (!map || typeof map.readSunAnalysisAtlas !== 'function' || typeof SunCalc === 'undefined') return null;
+    const atlas = map.readSunAnalysisAtlas([lngLat.lng, lngLat.lat]);
+    if (!atlas?.horizonAngles?.length) return null;
+
+    const date = new Date(window._daylightDateMs || window.skySimulationDate || Date.now());
+    const key = [
+        date.toDateString(),
+        lngLat.lng.toFixed(4),
+        lngLat.lat.toFixed(4),
+        atlas.horizonBins,
+        atlas.horizonAngles.map(v => Math.round(v * 1000)).join(',')
+    ].join('|');
+    if (sunExposureHoverCache.has(key)) return sunExposureHoverCache.get(key);
+
+    const times = SunCalc.getTimes(date, lngLat.lat, lngLat.lng);
+    if (!times?.sunrise || !times?.sunset || isNaN(times.sunrise.getTime()) || isNaN(times.sunset.getTime())) {
+        return null;
+    }
+
+    const startMs = times.sunrise.getTime() - 30 * 60000;
+    const endMs = times.sunset.getTime() + 30 * 60000;
+    const stepMs = 5 * 60000;
+    const firstSun = findFirstSunTime(startMs, endMs, stepMs, lngLat, atlas.horizonAngles);
+    const lastSun = findLastSunTime(startMs, endMs, stepMs, lngLat, atlas.horizonAngles);
+    const durationMins = estimateSunDurationMinutes(startMs, endMs, stepMs, lngLat, atlas.horizonAngles);
+    const value = { firstSun, lastSun, durationMins, atlas };
+
+    sunExposureHoverCache.set(key, value);
+    if (sunExposureHoverCache.size > SUN_EXPOSURE_CACHE_LIMIT) {
+        const oldest = sunExposureHoverCache.keys().next().value;
+        sunExposureHoverCache.delete(oldest);
+    }
+    return value;
+}
+
+function buildSunExposureHoverContent(map, lngLat, activeLayer) {
+    const info = calculateSunExposureHover(map, lngLat);
+    if (!info) return '';
+    if (!info.firstSun || !info.lastSun || info.durationMins <= 0) {
+        return '<span style="color: #f97316">Direct sun:</span> none';
+    }
+    if (activeLayer === 'sunrise-window') {
+        return `<span style="color: #f97316">First sun:</span> ${formatSunHoverTime(info.firstSun)}`;
+    }
+    if (activeLayer === 'sunset-window') {
+        return `<span style="color: #f97316">Last sun:</span> ${formatSunHoverTime(info.lastSun)}`;
+    }
+    return `<span style="color: #f97316">Sun:</span> ${formatSunHoverTime(info.firstSun)}-${formatSunHoverTime(info.lastSun)} <span class="terrain-hover__sep">•</span> ${formatSunHoverDuration(info.durationMins)}`;
+}
+
 /**
  * Render analytical legends for active terrain analysis layers.
  * @param {maplibregl.Map} map
@@ -378,6 +515,19 @@ export function setupTerrainHoverInfo(map, imageryState) {
             return;
         }
 
+        if (activeLayer === 'daylight' || activeLayer === 'sunrise-window' || activeLayer === 'sunset-window') {
+            const content = buildSunExposureHoverContent(map, e.lngLat, activeLayer);
+            if (content) {
+                hoverEl.innerHTML = content;
+                hoverEl.style.display = 'block';
+                hoverEl.style.left = `${e.originalEvent.clientX}px`;
+                hoverEl.style.top = `${e.originalEvent.clientY}px`;
+            } else {
+                hoverEl.style.display = 'none';
+            }
+            return;
+        }
+
         const terrain = calculateTerrainAnalysis(map, e.lngLat);
         if (!terrain) {
             hoverEl.style.display = 'none';
@@ -422,6 +572,9 @@ export function setupTerrainHoverInfo(map, imageryState) {
  */
 function getActiveAnalysisLayer(imageryState) {
     if (!imageryState) return null;
+    if (imageryState.get('sunrise-window')?.enabled) return 'sunrise-window';
+    if (imageryState.get('sunset-window')?.enabled) return 'sunset-window';
+    if (imageryState.get('daylight')?.enabled) return 'daylight';
     if (imageryState.get('avalanche')?.enabled) return 'avalanche';
     if (imageryState.get('slope')?.enabled) return 'slope';
     if (imageryState.get('aspect')?.enabled) return 'aspect';
