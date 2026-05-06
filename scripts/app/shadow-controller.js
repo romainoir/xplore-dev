@@ -47,34 +47,33 @@ function publishSolarState(date, center, sunPos, sunAzimuthDeg, sunAltitudeDeg) 
 }
 
 function colorRampForSun(altitude) {
-    const altitudeRad = altitude * Math.PI / 180;
     const directSun = smoothstep(-2.0, 8.0, altitude);
     const skyAmbient = smoothstep(-16.0, 6.0, altitude);
     const horizonWarmth = smoothstep(-6.0, 2.0, altitude) * (1.0 - smoothstep(6.0, 16.0, altitude));
-    const sunMix = clamp((0.52 - altitudeRad) / (0.52 - 0.08), 0, 1);
+    const redWarmth = smoothstep(-4.0, 0.8, altitude) * (1.0 - smoothstep(2.5, 9.0, altitude));
+    const warmMix = clamp(horizonWarmth * 0.72 + redWarmth * 0.28, 0, 1);
     const highlight = {
         r: 255,
-        g: Math.round((0.97 * (1 - sunMix) + 0.76 * sunMix) * 255),
-        b: Math.round((0.92 - 0.50 * sunMix) * 255)
+        g: Math.round((0.97 * (1 - warmMix) + 0.74 * warmMix) * 255),
+        b: Math.round((0.92 * (1 - warmMix) + 0.50 * warmMix) * 255)
     };
     const shadow = {
-        r: Math.round((0.07 + 0.11 * sunMix) * 255),
-        g: Math.round((0.26 * (1 - sunMix) + 0.10 * sunMix) * 255),
-        b: Math.round((0.44 * (1 - sunMix) + 0.34 * sunMix) * 255)
+        r: 19,
+        g: 22,
+        b: 31
     };
     const hillshadeHighlightRgb = [
         mixNumber(170, mixNumber(255, 255, horizonWarmth), skyAmbient),
         mixNumber(190, mixNumber(180, 248, directSun), skyAmbient),
         mixNumber(220, mixNumber(130, 255, directSun), skyAmbient)
     ];
-    const hillshadeShadowOpacity = mixNumber(0.11, 0.26, directSun) + horizonWarmth * 0.035;
     return {
         highlight: `rgb(${highlight.r}, ${highlight.g}, ${highlight.b})`,
         shadow: `rgb(${shadow.r}, ${shadow.g}, ${shadow.b})`,
         directSun,
         skyAmbient,
         hillshadeHighlight: rgbString(hillshadeHighlightRgb),
-        hillshadeShadow: `rgba(0,0,0, ${clamp(hillshadeShadowOpacity, 0.10, 0.32).toFixed(3)})`
+        hillshadeShadow: 'rgba(0,0,0, 0.220)'
     };
 }
 
