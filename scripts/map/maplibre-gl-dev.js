@@ -54995,7 +54995,7 @@ var atmosphereFrag = '#ifdef GL_ES\nprecision highp float;\n#endif\nin vec3 view
 var atmosphereVert = 'in vec2 a_pos;uniform mat4 u_inv_proj_matrix;out vec3 view_direction;void main() {view_direction=(u_inv_proj_matrix*vec4(a_pos,0.0,1.0)).xyz;gl_Position=vec4(a_pos,0.0,1.0);}';
 
 // This file is generated. Edit build/generate-shaders.ts, then run `npm run codegen`.
-var skyFrag = 'uniform vec4 u_sky_color;uniform vec4 u_horizon_color;uniform vec2 u_horizon;uniform vec2 u_horizon_normal;uniform float u_sky_horizon_blend;uniform float u_sky_blend;uniform vec3 u_sun_pos;uniform float u_sun_opacity;in vec3 view_direction;void main() {float x=gl_FragCoord.x;float y=gl_FragCoord.y;float blend=(y-u_horizon.y)*u_horizon_normal.y+(x-u_horizon.x)*u_horizon_normal.x;vec4 skyColor=vec4(0.0);if (blend > 0.0) {if (blend < u_sky_horizon_blend) {skyColor=mix(u_sky_color,u_horizon_color,pow(1.0-blend/u_sky_horizon_blend,2.0));} else {skyColor=u_sky_color;}}vec3 viewDir=normalize(view_direction);vec3 sunDir=normalize(u_sun_pos);float sunAngle=acos(clamp(dot(viewDir,sunDir),-1.0,1.0));float diskRadius=0.0087;float glowRadius=0.060;float aa=max(fwidth(sunAngle)*1.8,0.0007);float disk=1.0-smoothstep(diskRadius-aa,diskRadius+aa,sunAngle);float glow=1.0-smoothstep(diskRadius,glowRadius,sunAngle);glow*=glow;float horizonMask=smoothstep(0.0,max(u_sky_horizon_blend*0.25,1.0),blend);float sunAmount=u_sun_opacity*horizonMask;vec3 glowColor=vec3(1.0,0.55,0.22);vec3 diskColor=vec3(1.0,0.93,0.72);skyColor.rgb=mix(skyColor.rgb,glowColor,clamp(glow*sunAmount*0.42,0.0,0.55));skyColor.rgb=mix(skyColor.rgb,diskColor,clamp(disk*sunAmount,0.0,1.0));skyColor.a=max(skyColor.a,clamp((glow*0.20+disk)*sunAmount,0.0,1.0));fragColor=mix(skyColor,vec4(vec3(0.0),0.0),u_sky_blend);}';
+var skyFrag = 'uniform vec4 u_sky_color;uniform vec4 u_horizon_color;uniform vec2 u_horizon;uniform vec2 u_horizon_normal;uniform float u_sky_horizon_blend;uniform float u_sky_blend;uniform vec3 u_sun_pos;uniform float u_sun_opacity;in vec3 view_direction;void main() {float x=gl_FragCoord.x;float y=gl_FragCoord.y;float blend=(y-u_horizon.y)*u_horizon_normal.y+(x-u_horizon.x)*u_horizon_normal.x;vec4 skyColor=vec4(0.0);if (blend > 0.0) {if (blend < u_sky_horizon_blend) {skyColor=mix(u_sky_color,u_horizon_color,pow(1.0-blend/u_sky_horizon_blend,2.0));} else {skyColor=u_sky_color;}}vec3 viewDir=normalize(view_direction);vec3 sunDir=normalize(u_sun_pos);float sunAngle=acos(clamp(dot(viewDir,sunDir),-1.0,1.0));float diskRadius=0.012;float glowRadius=0.085;float aa=max(fwidth(sunAngle)*1.8,0.0007);float disk=1.0-smoothstep(diskRadius-aa,diskRadius+aa,sunAngle);float glow=1.0-smoothstep(diskRadius,glowRadius,sunAngle);glow*=glow;float horizonMask=smoothstep(0.0,max(u_sky_horizon_blend*0.25,1.0),blend);float sunAmount=u_sun_opacity*horizonMask;vec3 glowColor=vec3(1.0,0.55,0.22);vec3 diskColor=vec3(1.0,0.93,0.72);skyColor.rgb=mix(skyColor.rgb,glowColor,clamp(glow*sunAmount*0.52,0.0,0.65));skyColor.rgb=mix(skyColor.rgb,diskColor,clamp(disk*sunAmount,0.0,1.0));skyColor.a=max(skyColor.a,clamp((glow*0.20+disk)*sunAmount,0.0,1.0));fragColor=mix(skyColor,vec4(vec3(0.0),0.0),u_sky_blend);}';
 
 // This file is generated. Edit build/generate-shaders.ts, then run `npm run codegen`.
 var skyVert = 'in vec2 a_pos;uniform mat4 u_inv_proj_matrix;out vec3 view_direction;void main() {view_direction=(u_inv_proj_matrix*vec4(a_pos,0.0,1.0)).xyz;gl_Position=vec4(a_pos,1.0,1.0);}';
@@ -68900,7 +68900,7 @@ function drawSky(painter, sky) {
     const gl = context.gl;
     const transform = painter.transform;
     const light = painter.style.light;
-    const sunPos = getSunPos(light, transform);
+    const sunPos = getSkySunPos(light, transform);
     const sunAltitude = getSunAltitude(light);
     const skyUniforms = skyUniformValues(sky, transform, painter.pixelRatio, sunPos, sunAltitude, transform.inverseProjectionMatrix);
     const depthMode = new DepthMode(gl.LEQUAL, DepthMode.ReadWrite, [0, 1]);
@@ -68923,6 +68923,20 @@ function getSunPos(light, transform) {
     }
     symbol_layout.transformMat4$2(lightPos, lightPos, lightMat);
     return lightPos;
+}
+function getSkySunPos(light, transform) {
+    const _lp = light.properties.get('position');
+    const sunPos = [_lp.x, _lp.y, _lp.z];
+    const lightMat = symbol_layout.identity(new Float64Array(16));
+    if (light.properties.get('anchor') === 'map') {
+        symbol_layout.rotateZ(lightMat, lightMat, transform.rollInRadians);
+        symbol_layout.rotateX(lightMat, lightMat, -transform.pitchInRadians);
+        symbol_layout.rotateZ(lightMat, lightMat, transform.bearingInRadians);
+        symbol_layout.rotateX(lightMat, lightMat, transform.center.lat * Math.PI / 180.0);
+        symbol_layout.rotateY$1(lightMat, lightMat, -transform.center.lng * Math.PI / 180.0);
+    }
+    symbol_layout.transformMat4$2(sunPos, sunPos, lightMat);
+    return sunPos;
 }
 function getSunAltitude(light) {
     const _lp = light.properties.get('position');
