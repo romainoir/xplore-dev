@@ -387,7 +387,7 @@ function createShadowLegend(map, updateShadowTime, imageryState) {
       </div>
     </div>
     <div class="shadow-legend__row"><span class="shadow-legend__row-icon">📅</span><input type="range" id="shadowDateSlider" class="shadow-legend__slider shadow-legend__slider--date" min="1" max="366" value="${dayOfYear}"></div>
-    ${shadowActive ? `<div class="shadow-legend__row"><span class="shadow-legend__row-icon">🕒</span><input type="range" id="shadowTimeSlider" class="shadow-legend__slider" min="0" max="1440" step="1" value="${initialMins}"></div>` : ''}
+    ${shadowActive ? `<div class="shadow-legend__row"><span class="shadow-legend__row-icon">🕒</span><input type="range" id="shadowTimeSlider" class="shadow-legend__slider" min="0" max="1440" step="0.1" value="${initialMins}"></div>` : ''}
     ${shadowActive && window.XploreDebug ? `
     <div id="shadowDebugMenu" class="shadow-legend__debug-menu" style="display: none;">
       <button id="shdSkyTgl" class="shadow-legend__btn shadow-legend__btn--sky" data-off="${window._skyDisabled}">Sky ${window._skyDisabled ? 'OFF' : 'ON'}</button>
@@ -431,9 +431,15 @@ function createShadowLegend(map, updateShadowTime, imageryState) {
     const buildDate = () => {
         const year = new Date().getFullYear();
         const dayVal = parseInt(dSl?.value ?? dayOfYear);
-        const minVal = shadowActive ? parseInt(tSl?.value ?? initialMins) : 12 * 60;
+        const minVal = shadowActive ? parseFloat(tSl?.value ?? initialMins) : 12 * 60;
+        let wholeMinutes = Math.floor(minVal);
+        let seconds = Math.round((minVal - wholeMinutes) * 60);
+        if (seconds >= 60) {
+            wholeMinutes += 1;
+            seconds = 0;
+        }
         const d = new Date(year, 0, dayVal);
-        d.setHours(0, minVal, 0, 0);
+        d.setHours(0, wholeMinutes, seconds, 0);
         return d;
     };
 
@@ -441,7 +447,10 @@ function createShadowLegend(map, updateShadowTime, imageryState) {
         markTimeInteraction();
         const d = buildDate();
         if (dLb) dLb.textContent = formatDate(d);
-        if (tLb) tLb.textContent = `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+        if (tLb) {
+            const timeLabel = `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+            tLb.textContent = d.getSeconds() ? `${timeLabel}:${d.getSeconds().toString().padStart(2, '0')}` : timeLabel;
+        }
         if (shadowActive) updateTimeGradient(d);
         if (updateShadowTime) updateShadowTime(d);
     };

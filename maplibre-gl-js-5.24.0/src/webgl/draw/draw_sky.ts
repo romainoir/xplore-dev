@@ -93,9 +93,16 @@ function getSunDirection(light: Light): number {
 function getMercatorSkySun(painter: Painter, light: Light, transform: IReadonlyTransform): {sunPos: vec3; sunAltitude: number} {
     const shadowLayer = painter.style.getLayer('shadow-coarse') as any;
     const shadowProps = shadowLayer?.getShadowProperties?.();
-    const sunDirection = shadowProps?.directionRadians ?? getSunDirection(light);
-    const sunAltitude = typeof window !== 'undefined' && typeof (window as any)._actualSunAltitudeRad === 'number' ?
-        (window as any)._actualSunAltitudeRad :
+    const solarState = typeof window !== 'undefined' ? (window as any)._xploreSolarState : null;
+    const sunDirection = typeof solarState?.azimuthRad === 'number' ?
+        solarState.azimuthRad :
+        typeof window !== 'undefined' && typeof (window as any)._skySunAzimuthRad === 'number' ?
+            (window as any)._skySunAzimuthRad :
+            shadowProps?.directionRadians ?? getSunDirection(light);
+    const sunAltitude = typeof solarState?.altitudeRad === 'number' ?
+        solarState.altitudeRad :
+        typeof window !== 'undefined' && typeof (window as any)._skySunAltitudeRad === 'number' ?
+            (window as any)._skySunAltitudeRad :
         shadowProps?.altitudeRadians ?? getSunAltitude(light);
     const clampedAltitude = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, sunAltitude));
     const cosAltitude = Math.cos(clampedAltitude);

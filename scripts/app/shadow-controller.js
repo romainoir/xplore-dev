@@ -26,6 +26,26 @@ function rgbString(rgb) {
     return `rgb(${Math.round(rgb[0])}, ${Math.round(rgb[1])}, ${Math.round(rgb[2])})`;
 }
 
+function publishSolarState(date, center, sunPos, sunAzimuthDeg, sunAltitudeDeg) {
+    const azimuthRad = sunAzimuthDeg * Math.PI / 180;
+    window._skySunAzimuthRad = azimuthRad;
+    window._skySunAltitudeRad = sunPos.altitude;
+    window._actualSunAltitudeRad = sunPos.altitude;
+    window._shadowSunDirection = [
+        Math.sin(azimuthRad),
+        -Math.cos(azimuthRad)
+    ];
+    window._xploreSolarState = {
+        dateMs: date.getTime(),
+        lat: center.lat,
+        lng: center.lng,
+        azimuthDeg: sunAzimuthDeg,
+        azimuthRad,
+        altitudeDeg: sunAltitudeDeg,
+        altitudeRad: sunPos.altitude
+    };
+}
+
 function colorRampForSun(altitude) {
     const altitudeRad = altitude * Math.PI / 180;
     const directSun = smoothstep(-2.0, 8.0, altitude);
@@ -226,13 +246,9 @@ export function createShadowController(map, deps = {}) {
             const renderAltitude = clamp(sunAlt, SHADOW_MIN_RENDER_ALTITUDE, SHADOW_MAX_RENDER_ALTITUDE);
             const colors = colorRampForSun(sunAlt);
 
-            window._actualSunAltitudeRad = sunPos.altitude;
+            publishSolarState(date, center, sunPos, sunAzi, sunAlt);
             window._directSunAmount = colors.directSun;
             window._skyAmbientAmount = colors.skyAmbient;
-            window._shadowSunDirection = [
-                Math.sin(sunAzi * Math.PI / 180),
-                -Math.cos(sunAzi * Math.PI / 180)
-            ];
             window.sunConfig = {
                 azimuth: sunAzi,
                 altitude: sunAlt,

@@ -27254,7 +27254,7 @@ const shadowPaintSpec = {
         default: 315,
         minimum: 0,
         maximum: 360,
-        transition: true,
+        transition: false,
         expression: { interpolated: true, parameters: ["zoom"] },
         "property-type": "data-constant",
     },
@@ -27263,7 +27263,7 @@ const shadowPaintSpec = {
         default: 45,
         minimum: 0,
         maximum: 90,
-        transition: true,
+        transition: false,
         expression: { interpolated: true, parameters: ["zoom"] },
         "property-type": "data-constant",
     },
@@ -68936,10 +68936,17 @@ function getMercatorSkySun(painter, light, transform) {
     var _a, _b, _c;
     const shadowLayer = painter.style.getLayer('shadow-coarse');
     const shadowProps = (_a = shadowLayer === null || shadowLayer === void 0 ? void 0 : shadowLayer.getShadowProperties) === null || _a === void 0 ? void 0 : _a.call(shadowLayer);
-    const sunDirection = (_b = shadowProps === null || shadowProps === void 0 ? void 0 : shadowProps.directionRadians) !== null && _b !== void 0 ? _b : getSunDirection(light);
-    const sunAltitude = typeof window !== 'undefined' && typeof window._actualSunAltitudeRad === 'number' ?
-        window._actualSunAltitudeRad :
-        (_c = shadowProps === null || shadowProps === void 0 ? void 0 : shadowProps.altitudeRadians) !== null && _c !== void 0 ? _c : getSunAltitude(light);
+    const solarState = typeof window !== 'undefined' ? window._xploreSolarState : null;
+    const sunDirection = typeof (solarState === null || solarState === void 0 ? void 0 : solarState.azimuthRad) === 'number' ?
+        solarState.azimuthRad :
+        typeof window !== 'undefined' && typeof window._skySunAzimuthRad === 'number' ?
+            window._skySunAzimuthRad :
+            (_b = shadowProps === null || shadowProps === void 0 ? void 0 : shadowProps.directionRadians) !== null && _b !== void 0 ? _b : getSunDirection(light);
+    const sunAltitude = typeof (solarState === null || solarState === void 0 ? void 0 : solarState.altitudeRad) === 'number' ?
+        solarState.altitudeRad :
+        typeof window !== 'undefined' && typeof window._skySunAltitudeRad === 'number' ?
+            window._skySunAltitudeRad :
+            (_c = shadowProps === null || shadowProps === void 0 ? void 0 : shadowProps.altitudeRadians) !== null && _c !== void 0 ? _c : getSunAltitude(light);
     const clampedAltitude = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, sunAltitude));
     const cosAltitude = Math.cos(clampedAltitude);
     const sunPos = [

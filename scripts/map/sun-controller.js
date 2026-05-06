@@ -72,6 +72,26 @@ function multiInterpolate(stops, value) {
     return result;
 }
 
+function publishSolarState(date, lat, lon, sunPos, azimuthDegrees, altitudeDegrees) {
+    const azimuthRad = azimuthDegrees * Math.PI / 180;
+    window._skySunAzimuthRad = azimuthRad;
+    window._skySunAltitudeRad = sunPos.altitude;
+    window._actualSunAltitudeRad = sunPos.altitude;
+    window._shadowSunDirection = [
+        Math.sin(azimuthRad),
+        -Math.cos(azimuthRad)
+    ];
+    window._xploreSolarState = {
+        dateMs: date.getTime(),
+        lat,
+        lng: lon,
+        azimuthDeg: azimuthDegrees,
+        azimuthRad,
+        altitudeDeg: altitudeDegrees,
+        altitudeRad: sunPos.altitude
+    };
+}
+
 /**
  * Update the sun position on the map
  * Color palette inspired by Microsoft Bing Maps
@@ -93,6 +113,7 @@ export function updateSunPosition(map, lat, lon, date) {
         // Convert SunCalc coordinates to MapLibre coordinates
         const azimuthDegrees = (sunPos.azimuth * 180 / Math.PI) + 180;
         const altitudeDegrees = sunPos.altitude * 180 / Math.PI;
+        publishSolarState(date, lat, lon, sunPos, azimuthDegrees, altitudeDegrees);
 
         // Polar angle: 0 = zenith (up), 90 = horizon
         const polarAngle = 90 - altitudeDegrees;
