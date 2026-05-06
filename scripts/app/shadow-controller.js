@@ -242,7 +242,9 @@ export function createShadowController(map, deps = {}) {
             const sunPos = SunCalc.getPosition(date, center.lat, center.lng);
             const sunAzi = (sunPos.azimuth * 180 / Math.PI + 180) % 360;
             const sunAlt = sunPos.altitude * 180 / Math.PI;
-            const renderAltitude = clamp(sunAlt, SHADOW_MIN_RENDER_ALTITUDE, SHADOW_MAX_RENDER_ALTITUDE);
+            const renderAltitude = sunAlt > 0
+                ? clamp(sunAlt, SHADOW_MIN_RENDER_ALTITUDE, SHADOW_MAX_RENDER_ALTITUDE)
+                : 0;
             const colors = colorRampForSun(sunAlt);
 
             publishSolarState(date, center, sunPos, sunAzi, sunAlt);

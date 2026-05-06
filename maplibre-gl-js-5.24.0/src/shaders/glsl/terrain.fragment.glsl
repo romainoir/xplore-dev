@@ -194,6 +194,8 @@ vec3 applySkyLightTint(vec3 color, float altitude, vec3 horizonColor, vec3 fogCo
 
     vec3 skyHaze = clamp(mix(fogColor, horizonColor, 0.55), vec3(0.0), vec3(1.0));
     vec3 nightColor = color * vec3(0.58, 0.63, 0.78) + vec3(0.026, 0.034, 0.056);
+    float fullNight = 1.0 - smoothstep(radians(-10.0), radians(-2.0), altitude);
+    nightColor = mix(nightColor, vec3(0.045, 0.052, 0.075), fullNight * 0.38);
     vec3 twilightCool = color * vec3(0.80, 0.84, 0.96) + skyHaze * 0.045;
     vec3 golden = color * vec3(1.02, 0.84, 0.62) + skyHaze * 0.085;
     vec3 redGold = color * vec3(1.06, 0.72, 0.54) + skyHaze * 0.100;
@@ -383,6 +385,8 @@ void main() {
     float skyAmbient = skyAmbientAmount(u_sun_altitude);
     float tintMix = 1.0 - smoothstep(radians(5.0), radians(22.0), u_sun_altitude);
     float shadowStrength = clamp(u_shadow_intensity, 0.0, 1.0);
+    float sunCastVisibility = smoothstep(radians(-0.15), radians(0.85), u_sun_altitude);
+    float effectiveShadowStrength = shadowStrength * sunCastVisibility;
 
     vec2 localRelief = vec2(0.0);
     if (u_dem_ao_dim > 2.0 && (u_self_shadow_mult > 0.001 || u_igor_relief_enabled > 0.5)) {
@@ -391,7 +395,7 @@ void main() {
 
     if (u_igor_relief_enabled > 0.5) {
         vec3 highlightTint = mix(vec3(0.86, 0.91, 1.0), vec3(1.0, 0.94, 0.80), tintMix);
-        float reliefHighlight = localRelief.y * (0.035 + shadowStrength * 0.11) * mix(0.55, 1.0, skyAmbient);
+        float reliefHighlight = localRelief.y * (0.035 + effectiveShadowStrength * 0.11) * mix(0.55, 1.0, skyAmbient);
         vec3 ambientLiftTint = mix(vec3(0.72, 0.80, 1.0), vec3(1.0, 0.88, 0.66), tintMix);
         float ambientReliefAO = localRelief.x * (0.035 + skyAmbient * 0.040);
         float ambientReliefLift = localRelief.y * 0.014 * mix(0.55, 1.0, skyAmbient);
@@ -404,30 +408,36 @@ void main() {
 
     // ── Global Shadow Occlusion ──
     vec2 atlasUV = v_atlas_uv;
+    bool atlasCovered = atlasUV.x >= -0.001 && atlasUV.x <= 1.001 && atlasUV.y >= -0.001 && atlasUV.y <= 1.001;
+    float shadowMask = 0.0;
+    float castPresence = 0.0;
     if (atlasUV.x >= -0.001 && atlasUV.x <= 1.001 && atlasUV.y >= -0.001 && atlasUV.y <= 1.001) {
         float rawAtlasShadow = clamp(texture(u_shadow_atlas, clamp(atlasUV, vec2(0.0), vec2(1.0))).r, 0.0, 1.0);
         float raymarchedShadow = remapShadowMask(rawAtlasShadow, atlasUV);
         float horizonShadow = horizonShadowMask(atlasUV);
-        float shadowMask = mix(raymarchedShadow, horizonShadow, clamp(u_horizon_available, 0.0, 1.0));
+        shadowMask = mix(raymarchedShadow, horizonShadow, clamp(u_horizon_available, 0.0, 1.0));
+    }
 
-        vec3 shadowTint = vec3(0.075, 0.085, 0.120);
+    vec3 shadowTint = vec3(0.075, 0.085, 0.120);
+    float selfShadowMask = clamp(localRelief.x * u_self_shadow_mult * mix(0.36, 0.92, effectiveShadowStrength), 0.0, 1.0);
+    float lowSunFarFallback = 1.0 - smoothstep(radians(7.0), radians(22.0), u_sun_altitude);
+    float farTerrainShadow = localRelief.x * mix(0.18, 0.52, lowSunFarFallback) * (atlasCovered ? 0.0 : 1.0);
+    float baseShadow = max(max(shadowMask, selfShadowMask), farTerrainShadow);
+    float shadowAlpha = clamp(baseShadow * effectiveShadowStrength * u_cast_shadow_mult * 0.62, 0.0, 0.74);
+    fragColor.rgb = mix(fragColor.rgb, shadowTint, shadowAlpha);
 
-        float selfShadowMask = clamp(localRelief.x * u_self_shadow_mult * mix(0.36, 0.92, shadowStrength), 0.0, 1.0);
-        float baseShadow = max(shadowMask, selfShadowMask);
-        float shadowAlpha = clamp(baseShadow * shadowStrength * u_cast_shadow_mult * 0.62, 0.0, 0.74);
-        fragColor.rgb = mix(fragColor.rgb, shadowTint, shadowAlpha);
+    // Preserve fine terrain relief inside broad cast shadows. Without this
+    // post-shadow AO pass, opaque cast shadows flatten the integrated Igor detail.
+    if (u_igor_relief_enabled > 0.5) {
+        castPresence = clamp(max(shadowMask, farTerrainShadow) * effectiveShadowStrength, 0.0, 1.0);
+        float reliefAO = localRelief.x * castPresence * 0.105;
+        float reliefLift = localRelief.y * (0.014 + castPresence * 0.025) * mix(0.55, 1.0, skyAmbient);
+        vec3 ambientLiftTint = vec3(0.62, 0.66, 0.74);
+        fragColor.rgb *= 1.0 - reliefAO;
+        fragColor.rgb = mix(fragColor.rgb, ambientLiftTint, reliefLift);
+    }
 
-        // Preserve fine terrain relief inside broad cast shadows. Without this
-        // post-shadow AO pass, opaque cast shadows flatten the integrated Igor detail.
-        if (u_igor_relief_enabled > 0.5) {
-            float castPresence = clamp(shadowMask * shadowStrength, 0.0, 1.0);
-            float reliefAO = localRelief.x * castPresence * 0.105;
-            float reliefLift = localRelief.y * (0.014 + castPresence * 0.025) * mix(0.55, 1.0, skyAmbient);
-            vec3 ambientLiftTint = vec3(0.62, 0.66, 0.74);
-            fragColor.rgb *= 1.0 - reliefAO;
-            fragColor.rgb = mix(fragColor.rgb, ambientLiftTint, reliefLift);
-        }
-
+    if (atlasCovered) {
         if (u_debug_mode > 0) {
             if (atlasUV.x >= 0.0 && atlasUV.x <= 1.0 && atlasUV.y >= 0.0 && atlasUV.y <= 1.0) {
                 if (u_debug_mode == 3) {
