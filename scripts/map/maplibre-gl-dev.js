@@ -54995,7 +54995,7 @@ var atmosphereFrag = '#ifdef GL_ES\nprecision highp float;\n#endif\nin vec3 view
 var atmosphereVert = 'in vec2 a_pos;uniform mat4 u_inv_proj_matrix;out vec3 view_direction;void main() {view_direction=(u_inv_proj_matrix*vec4(a_pos,0.0,1.0)).xyz;gl_Position=vec4(a_pos,0.0,1.0);}';
 
 // This file is generated. Edit build/generate-shaders.ts, then run `npm run codegen`.
-var skyFrag = 'uniform vec4 u_sky_color;uniform vec4 u_horizon_color;uniform vec2 u_horizon;uniform vec2 u_horizon_normal;uniform float u_sky_horizon_blend;uniform float u_sky_blend;uniform vec2 u_sun_screen_pos;uniform float u_sun_size;uniform float u_sun_glow_size;uniform float u_sun_opacity;uniform vec4 u_sun_color;uniform vec4 u_sun_glow_color;void main() {float x=gl_FragCoord.x;float y=gl_FragCoord.y;float blend=(y-u_horizon.y)*u_horizon_normal.y+(x-u_horizon.x)*u_horizon_normal.x;vec4 skyColor=vec4(0.0);if (blend > 0.0) {if (blend < u_sky_horizon_blend) {skyColor=mix(u_sky_color,u_horizon_color,pow(1.0-blend/u_sky_horizon_blend,2.0));} else {skyColor=u_sky_color;}}float sunDistance=length(gl_FragCoord.xy-u_sun_screen_pos);float glow=(1.0-smoothstep(u_sun_size,u_sun_glow_size,sunDistance))*u_sun_opacity;float disk=(1.0-smoothstep(u_sun_size-1.5,u_sun_size+1.5,sunDistance))*u_sun_opacity;float halo=glow*u_sun_glow_color.a*smoothstep(0.0,u_sky_horizon_blend*0.45,blend);skyColor.rgb=mix(skyColor.rgb,u_sun_glow_color.rgb,clamp(halo,0.0,0.65));skyColor.rgb=mix(skyColor.rgb,u_sun_color.rgb,clamp(disk,0.0,1.0));skyColor.a=max(skyColor.a,clamp(halo*0.45+disk,0.0,1.0));fragColor=mix(skyColor,vec4(vec3(0.0),0.0),u_sky_blend);}';
+var skyFrag = 'uniform vec4 u_sky_color;uniform vec4 u_horizon_color;uniform vec2 u_horizon;uniform vec2 u_horizon_normal;uniform float u_sky_horizon_blend;uniform float u_sky_blend;void main() {float x=gl_FragCoord.x;float y=gl_FragCoord.y;float blend=(y-u_horizon.y)*u_horizon_normal.y+(x-u_horizon.x)*u_horizon_normal.x;if (blend > 0.0) {if (blend < u_sky_horizon_blend) {fragColor=mix(u_sky_color,u_horizon_color,pow(1.0-blend/u_sky_horizon_blend,2.0));} else {fragColor=u_sky_color;}}fragColor=mix(fragColor,vec4(vec3(0.0),0.0),u_sky_blend);}';
 
 // This file is generated. Edit build/generate-shaders.ts, then run `npm run codegen`.
 var skyVert = 'in vec2 a_pos;void main() {gl_Position=vec4(a_pos,1.0,1.0);}';
@@ -64181,62 +64181,21 @@ const skyUniforms = (context, locations) => ({
     'u_horizon_normal': new symbol_layout.Uniform2f(context, locations.u_horizon_normal),
     'u_sky_horizon_blend': new symbol_layout.Uniform1f(context, locations.u_sky_horizon_blend),
     'u_sky_blend': new symbol_layout.Uniform1f(context, locations.u_sky_blend),
-    'u_sun_screen_pos': new symbol_layout.Uniform2f(context, locations.u_sun_screen_pos),
-    'u_sun_size': new symbol_layout.Uniform1f(context, locations.u_sun_size),
-    'u_sun_glow_size': new symbol_layout.Uniform1f(context, locations.u_sun_glow_size),
-    'u_sun_opacity': new symbol_layout.Uniform1f(context, locations.u_sun_opacity),
-    'u_sun_color': new symbol_layout.UniformColor(context, locations.u_sun_color),
-    'u_sun_glow_color': new symbol_layout.UniformColor(context, locations.u_sun_glow_color),
 });
-function clamp$1(value, min, max) {
-    return Math.max(min, Math.min(max, value));
-}
-function smoothstep(edge0, edge1, value) {
-    const t = clamp$1((value - edge0) / (edge1 - edge0), 0, 1);
-    return t * t * (3 - 2 * t);
-}
 const skyUniformValues = (sky, transform, pixelRatio) => {
     const cosRoll = Math.cos(transform.rollInRadians);
     const sinRoll = Math.sin(transform.rollInRadians);
     const mercatorHorizon = getMercatorHorizon(transform);
     const projectionData = transform.getProjectionData({ overscaledTileID: null, applyGlobeMatrix: true, applyTerrainMatrix: true });
     const skyBlend = projectionData.projectionTransition;
-    const horizon = [(transform.width / 2 - mercatorHorizon * sinRoll) * pixelRatio,
-        (transform.height / 2 + mercatorHorizon * cosRoll) * pixelRatio];
-    const horizonNormal = [-sinRoll, cosRoll];
-    const windowState = typeof window !== 'undefined' ? window : {};
-    const sunAltitude = typeof windowState._skySunAltitudeRad === 'number' ?
-        windowState._skySunAltitudeRad :
-        typeof windowState._actualSunAltitudeRad === 'number' ? windowState._actualSunAltitudeRad : -Math.PI;
-    const sunAzimuth = typeof windowState._skySunAzimuthRad === 'number' ?
-        windowState._skySunAzimuthRad :
-        Array.isArray(windowState._shadowSunDirection) ?
-            Math.atan2(windowState._shadowSunDirection[0], -windowState._shadowSunDirection[1]) :
-            0;
-    // Keep the visible sun disk stable in screen space while panning/rotating.
-    // Terrain shadows still use the geographically correct sun direction.
-    const sunPathX = clamp$1(0.5 + Math.sin(sunAzimuth) * 0.34, 0.16, 0.84);
-    const sunPathY = 0.68 - smoothstep(-2.0 * Math.PI / 180.0, 55.0 * Math.PI / 180.0, sunAltitude) * 0.50;
-    const sunOpacity = smoothstep(-2.0 * Math.PI / 180.0, 0.35 * Math.PI / 180.0, sunAltitude) * (1.0 - skyBlend);
-    const lowSun = 1.0 - smoothstep(4.0 * Math.PI / 180.0, 18.0 * Math.PI / 180.0, sunAltitude);
-    const sunColor = new symbol_layout.Color(1.0, 0.97 - lowSun * 0.17, 0.82 - lowSun * 0.34, 1.0);
-    const sunGlowColor = new symbol_layout.Color(1.0, 0.58 + lowSun * 0.10, 0.22, 0.38 + lowSun * 0.18);
     return {
         'u_sky_color': sky.properties.get('sky-color'),
         'u_horizon_color': sky.properties.get('horizon-color'),
-        'u_horizon': horizon,
-        'u_horizon_normal': horizonNormal,
+        'u_horizon': [(transform.width / 2 - mercatorHorizon * sinRoll) * pixelRatio,
+            (transform.height / 2 + mercatorHorizon * cosRoll) * pixelRatio],
+        'u_horizon_normal': [-sinRoll, cosRoll],
         'u_sky_horizon_blend': (sky.properties.get('sky-horizon-blend') * transform.height / 2) * pixelRatio,
         'u_sky_blend': skyBlend,
-        'u_sun_screen_pos': [
-            sunPathX * transform.width * pixelRatio,
-            sunPathY * transform.height * pixelRatio
-        ],
-        'u_sun_size': 9.0 * pixelRatio,
-        'u_sun_glow_size': 62.0 * pixelRatio,
-        'u_sun_opacity': sunOpacity,
-        'u_sun_color': sunColor,
-        'u_sun_glow_color': sunGlowColor,
     };
 };
 

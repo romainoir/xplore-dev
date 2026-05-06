@@ -93,8 +93,6 @@ export function updateSunPosition(map, lat, lon, date) {
         // Convert SunCalc coordinates to MapLibre coordinates
         const azimuthDegrees = (sunPos.azimuth * 180 / Math.PI) + 180;
         const altitudeDegrees = sunPos.altitude * 180 / Math.PI;
-        window._skySunAzimuthRad = azimuthDegrees * Math.PI / 180;
-        window._skySunAltitudeRad = sunPos.altitude;
 
         // Polar angle: 0 = zenith (up), 90 = horizon
         const polarAngle = 90 - altitudeDegrees;
