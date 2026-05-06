@@ -64,9 +64,10 @@ const skyUniformValues = (sky: Sky, transform: IReadonlyTransform, pixelRatio: n
         Array.isArray(windowState._shadowSunDirection) ?
             Math.atan2(windowState._shadowSunDirection[0], -windowState._shadowSunDirection[1]) :
             0;
-    const relativeAzimuth = sunAzimuth - transform.bearingInRadians;
     const tangent = [cosRoll, sinRoll];
-    const horizontalOffset = Math.sin(relativeAzimuth) * transform.width * 0.48 * pixelRatio;
+    // Keep the visible sun disk stable in screen space while panning/rotating.
+    // Terrain shadows still use the geographically correct sun direction.
+    const horizontalOffset = Math.sin(sunAzimuth) * transform.width * 0.48 * pixelRatio;
     const altitudeLift = Math.sin(clamp(sunAltitude, -0.08, Math.PI / 2)) * transform.height * 1.65 * pixelRatio;
     const sunOpacity = smoothstep(-2.0 * Math.PI / 180.0, 0.35 * Math.PI / 180.0, sunAltitude) * (1.0 - skyBlend);
     const lowSun = 1.0 - smoothstep(4.0 * Math.PI / 180.0, 18.0 * Math.PI / 180.0, sunAltitude);
