@@ -42,8 +42,12 @@ function getMesh(context: Context, sky: Sky): Mesh {
 export function drawSky(painter: Painter, sky: Sky) {
     const context = painter.context;
     const gl = context.gl;
+    const transform = painter.transform;
+    const light = painter.style.light;
 
-    const skyUniforms = skyUniformValues(sky, painter.style.map.transform, painter.pixelRatio);
+    const sunPos = getSunPos(light, transform);
+    const sunAltitude = getSunAltitude(light);
+    const skyUniforms = skyUniformValues(sky, transform, painter.pixelRatio, sunPos, sunAltitude, transform.inverseProjectionMatrix);
 
     const depthMode = new DepthMode(gl.LEQUAL, DepthMode.ReadWrite, [0, 1]);
     const stencilMode = StencilMode.disabled;
@@ -74,6 +78,12 @@ function getSunPos(light: Light, transform: IReadonlyTransform): vec3 {
     vec3.transformMat4(lightPos, lightPos, lightMat);
 
     return lightPos;
+}
+
+function getSunAltitude(light: Light): number {
+    const _lp = light.properties.get('position');
+    const radius = Math.hypot(_lp.x, _lp.y, _lp.z);
+    return radius > 0 ? Math.asin(_lp.z / radius) : 0.0;
 }
 
 export function drawAtmosphere(painter: Painter, sky: Sky, light: Light) {
