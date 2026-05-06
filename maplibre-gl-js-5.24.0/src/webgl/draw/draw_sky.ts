@@ -45,8 +45,7 @@ export function drawSky(painter: Painter, sky: Sky) {
     const transform = painter.transform;
     const light = painter.style.light;
 
-    const sunPos = getSkySunPos(light, transform);
-    const sunAltitude = getSunAltitude(light);
+    const {sunPos, sunAltitude} = getMercatorSkySun(painter, light, transform);
     const skyUniforms = skyUniformValues(sky, transform, painter.pixelRatio, sunPos, sunAltitude, transform.inverseProjectionMatrix);
 
     const depthMode = new DepthMode(gl.LEQUAL, DepthMode.ReadWrite, [0, 1]);
@@ -80,29 +79,40 @@ function getSunPos(light: Light, transform: IReadonlyTransform): vec3 {
     return lightPos;
 }
 
-function getSkySunPos(light: Light, transform: IReadonlyTransform): vec3 {
-    const _lp = light.properties.get('position');
-    const sunPos = [_lp.x, _lp.y, _lp.z] as vec3;
-
-    const lightMat = mat4.identity(new Float64Array(16) as any);
-
-    if (light.properties.get('anchor') === 'map') {
-        mat4.rotateZ(lightMat, lightMat, transform.rollInRadians);
-        mat4.rotateX(lightMat, lightMat, -transform.pitchInRadians);
-        mat4.rotateZ(lightMat, lightMat, transform.bearingInRadians);
-        mat4.rotateX(lightMat, lightMat, transform.center.lat * Math.PI / 180.0);
-        mat4.rotateY(lightMat, lightMat, -transform.center.lng * Math.PI / 180.0);
-    }
-
-    vec3.transformMat4(sunPos, sunPos, lightMat);
-
-    return sunPos;
-}
-
 function getSunAltitude(light: Light): number {
     const _lp = light.properties.get('position');
     const radius = Math.hypot(_lp.x, _lp.y, _lp.z);
     return radius > 0 ? Math.asin(_lp.z / radius) : 0.0;
+}
+
+function getSunDirection(light: Light): number {
+    const _lp = light.properties.get('position');
+    return Math.atan2(-_lp.x, -_lp.y);
+}
+
+function getMercatorSkySun(painter: Painter, light: Light, transform: IReadonlyTransform): {sunPos: vec3; sunAltitude: number} {
+    const shadowLayer = painter.style.getLayer('shadow-coarse') as any;
+    const shadowProps = shadowLayer?.getShadowProperties?.();
+    const sunDirection = shadowProps?.directionRadians ?? getSunDirection(light);
+    const sunAltitude = typeof window !== 'undefined' && typeof (window as any)._actualSunAltitudeRad === 'number' ?
+        (window as any)._actualSunAltitudeRad :
+        shadowProps?.altitudeRadians ?? getSunAltitude(light);
+    const clampedAltitude = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, sunAltitude));
+    const cosAltitude = Math.cos(clampedAltitude);
+    const sunPos = [
+        Math.sin(sunDirection) * cosAltitude,
+        -Math.cos(sunDirection) * cosAltitude,
+        Math.sin(clampedAltitude)
+    ] as vec3;
+
+    const cameraMat = mat4.identity(new Float64Array(16) as any);
+    mat4.scale(cameraMat, cameraMat, [1, -1, 1]);
+    mat4.rotateZ(cameraMat, cameraMat, -transform.rollInRadians);
+    mat4.rotateX(cameraMat, cameraMat, transform.pitchInRadians);
+    mat4.rotateZ(cameraMat, cameraMat, -transform.bearingInRadians);
+    vec3.transformMat4(sunPos, sunPos, cameraMat);
+
+    return {sunPos, sunAltitude};
 }
 
 export function drawAtmosphere(painter: Painter, sky: Sky, light: Light) {
