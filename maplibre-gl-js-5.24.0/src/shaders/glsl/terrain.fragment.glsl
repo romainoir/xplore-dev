@@ -167,6 +167,10 @@ float directSunAmount(float altitude) {
     return smoothstep(radians(-2.0), radians(8.0), altitude);
 }
 
+float castShadowAmount(float altitude) {
+    return smoothstep(radians(-0.85), radians(1.25), altitude);
+}
+
 float skyAmbientAmount(float altitude) {
     return smoothstep(radians(-16.0), radians(6.0), altitude);
 }
@@ -188,15 +192,27 @@ float valueNoise(vec2 p) {
     return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
 }
 
-vec3 applyTwilightAmbient(vec3 color, float altitude) {
+vec3 skyMatchedShadowTint(float altitude, float horizonWarmth, vec3 horizonColor, vec3 fogColor) {
+    float lowLightBlend = 1.0 - smoothstep(radians(6.0), radians(22.0), altitude);
+    vec3 dayTint = vec3(0.08, 0.17, 0.32);
+    vec3 nightTint = vec3(0.07, 0.09, 0.15);
+    vec3 skyHaze = clamp(mix(fogColor, horizonColor, 0.62), vec3(0.0), vec3(1.0));
+    vec3 twilightTint = mix(vec3(0.10, 0.15, 0.28), vec3(0.12, 0.10, 0.22), horizonWarmth);
+    twilightTint = mix(twilightTint, vec3(0.10 + skyHaze.r * 0.12, 0.09 + skyHaze.g * 0.08, 0.17 + skyHaze.b * 0.22), 0.52);
+    vec3 lowLightTint = mix(nightTint, twilightTint, horizonWarmth);
+    return mix(dayTint, lowLightTint, lowLightBlend);
+}
+
+vec3 applyTwilightAmbient(vec3 color, float altitude, vec3 horizonColor, vec3 fogColor) {
     float skyAmbient = skyAmbientAmount(altitude);
     float lowLightBlend = 1.0 - smoothstep(radians(3.0), radians(17.0), altitude);
     float horizonWarmth = smoothstep(radians(-6.0), radians(2.0), altitude) *
         (1.0 - smoothstep(radians(6.0), radians(16.0), altitude));
 
-    vec3 nightColor = color * vec3(0.64, 0.68, 0.82) + vec3(0.040, 0.050, 0.075);
-    vec3 twilightColor = color * vec3(0.82, 0.84, 0.94) + vec3(0.055, 0.047, 0.040);
-    twilightColor = mix(twilightColor, color * vec3(0.92, 0.82, 0.70) + vec3(0.050, 0.035, 0.025), horizonWarmth * 0.50);
+    vec3 skyHaze = clamp(mix(fogColor, horizonColor, 0.45), vec3(0.0), vec3(1.0));
+    vec3 nightColor = color * vec3(0.58, 0.64, 0.80) + vec3(0.026, 0.035, 0.060);
+    vec3 twilightColor = color * vec3(0.80, 0.84, 0.95) + skyHaze * 0.040;
+    twilightColor = mix(twilightColor, color * vec3(0.96, 0.84, 0.68) + skyHaze * 0.070, horizonWarmth * 0.58);
     vec3 lowLightColor = mix(nightColor, twilightColor, skyAmbient);
 
     return mix(color, lowLightColor, lowLightBlend);
@@ -383,7 +399,7 @@ void main() {
     float horizonWarmth = smoothstep(radians(-6.0), radians(2.0), u_sun_altitude) *
         (1.0 - smoothstep(radians(6.0), radians(16.0), u_sun_altitude));
     float tintMix = 1.0 - smoothstep(radians(5.0), radians(22.0), u_sun_altitude);
-    float directShadow = min(u_shadow_intensity, directSun);
+    float directShadow = min(u_shadow_intensity, castShadowAmount(u_sun_altitude));
 
     vec2 localRelief = vec2(0.0);
     if (u_dem_ao_dim > 2.0 && (u_self_shadow_mult > 0.001 || u_igor_relief_enabled > 0.5)) {
@@ -409,12 +425,7 @@ void main() {
         float horizonShadow = horizonShadowMask(atlasUV);
         float shadowMask = mix(raymarchedShadow, horizonShadow, clamp(u_horizon_available, 0.0, 1.0));
 
-        vec3 TINT_DAY = vec3(0.08, 0.17, 0.32);
-        vec3 TINT_TWILIGHT = vec3(0.12, 0.09, 0.20);
-        vec3 TINT_NIGHT = vec3(0.11, 0.12, 0.18);
-        
-        vec3 lowLightShadowTint = mix(TINT_NIGHT, TINT_TWILIGHT, horizonWarmth);
-        vec3 shadowTint = mix(TINT_DAY, lowLightShadowTint, tintMix);
+        vec3 shadowTint = skyMatchedShadowTint(u_sun_altitude, horizonWarmth, u_horizon_color.rgb, u_fog_color.rgb);
 
         float selfShadowMask = clamp(localRelief.x * u_self_shadow_mult * mix(0.36, 0.92, directShadow), 0.0, 1.0);
         float baseShadow = max(shadowMask, selfShadowMask);
@@ -451,5 +462,5 @@ void main() {
         }
     }
 
-    fragColor.rgb = applyTwilightAmbient(fragColor.rgb, u_sun_altitude);
+    fragColor.rgb = applyTwilightAmbient(fragColor.rgb, u_sun_altitude, u_horizon_color.rgb, u_fog_color.rgb);
 }

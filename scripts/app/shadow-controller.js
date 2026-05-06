@@ -233,6 +233,8 @@ export function createShadowController(map, deps = {}) {
                 Math.sin(sunAzi * Math.PI / 180),
                 -Math.cos(sunAzi * Math.PI / 180)
             ];
+            window._skySunAzimuthRad = sunAzi * Math.PI / 180;
+            window._skySunAltitudeRad = sunPos.altitude;
             window.sunConfig = {
                 azimuth: sunAzi,
                 altitude: sunAlt,
