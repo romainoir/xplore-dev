@@ -428,9 +428,13 @@ void main() {
     }
 
     vec3 shadowTint = vec3(0.075, 0.085, 0.120);
-    float selfShadowMask = clamp(localRelief.x * u_self_shadow_mult * mix(0.36, 0.92, effectiveShadowStrength), 0.0, 1.0);
+    // Keep local self-shadowing in the same 0..1 occlusion domain as the
+    // raymarched atlas. Sun/time attenuation is applied once in shadowAlpha.
+    float selfShadowSignal = clamp(localRelief.x * u_self_shadow_mult, 0.0, 1.0);
+    float selfShadowMask = smoothstep(0.025, 0.62, selfShadowSignal);
     float lowSunFarFallback = 1.0 - smoothstep(radians(7.0), radians(22.0), u_sun_altitude);
-    float farTerrainShadow = localRelief.x * mix(0.18, 0.52, lowSunFarFallback) * (atlasCovered ? 0.0 : 1.0);
+    float farTerrainSignal = clamp(localRelief.x * u_self_shadow_mult * mix(0.28, 0.58, lowSunFarFallback), 0.0, 1.0);
+    float farTerrainShadow = smoothstep(0.025, 0.68, farTerrainSignal) * (atlasCovered ? 0.0 : 1.0);
     float baseShadow = max(max(shadowMask, selfShadowMask), farTerrainShadow);
     float shadowAlpha = clamp(baseShadow * effectiveShadowStrength * u_cast_shadow_mult * 0.62, 0.0, 0.74);
     fragColor.rgb = mix(fragColor.rgb, shadowTint, shadowAlpha);
