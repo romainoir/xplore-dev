@@ -8,7 +8,7 @@
 
 // ─── Module imports ───
 import { createMap, getBaseStyleLayerBuckets, parseAndCacheBaseStyleLayers } from './map-init.js';
-import { createImageryManager, IMAGERY_OPTIONS, LAYER_GROUP_BY_MEMBER_ID } from './imagery-manager.js';
+import { createImageryManager, IMAGERY_OPTIONS, LAYER_GROUP_BY_MEMBER_ID, SUN_DURATION_ADDON_IDS } from './imagery-manager.js';
 import { applyOverlays, applyHillshadeAppearance, injectOverlaysIntoStyle } from './overlay-manager.js';
 import { createRoutingOrchestrator } from './routing-orchestrator.js';
 import { createShadowController } from './shadow-controller.js';
@@ -727,12 +727,35 @@ async function init() {
     if (toolboxes.terrain.box) toolboxes.terrain.box.textContent = '';
     if (toolboxes.snow.box) toolboxes.snow.box.textContent = '';
 
+    const disableSunDurationAddons = () => {
+      SUN_DURATION_ADDON_IDS.forEach((id) => {
+        const state = imagery.imageryState.get(id);
+        if (state) state.enabled = false;
+      });
+    };
+    const enableSunDurationBase = () => {
+      const daylightOption = IMAGERY_OPTIONS.find(o => o.id === 'daylight');
+      const daylightState = imagery.imageryState.get('daylight');
+      if (daylightState) {
+        daylightState.enabled = true;
+        if (daylightState.opacity <= 0) daylightState.opacity = typeof daylightOption?.defaultOpacity === 'number' ? daylightOption.defaultOpacity : 1.0;
+      }
+      const shadowState = imagery.imageryState.get('shadow');
+      if (shadowState) shadowState.enabled = false;
+    };
+    const refreshImageryAfterToolboxChange = () => {
+      imagery.applyImageryState();
+      imagery.updateImageryControlStates();
+      imagery.applyImageryLayerOrder();
+    };
+
     IMAGERY_OPTIONS.forEach((option) => {
       if (option.hiddenControl) return;
       const isTerrainToolboxMember = TERRAIN_TOOLBOX_IDS.includes(option.id);
       const isSnowToolboxMember = SNOW_TOOLBOX_IDS.includes(option.id);
       const isShadowToolboxMember = SHADOW_TOOLBOX_IDS.includes(option.id);
       if (!isTerrainToolboxMember && !isSnowToolboxMember && !isShadowToolboxMember) return;
+      if (SUN_DURATION_ADDON_IDS.includes(option.id)) return;
 
       const group = LAYER_GROUP_BY_MEMBER_ID.get(option.id);
 
@@ -769,20 +792,67 @@ async function init() {
         }
         cur.enabled = nextEnabled;
         if (nextEnabled && cur.opacity <= 0) cur.opacity = typeof option.defaultOpacity === 'number' ? option.defaultOpacity : 1.0;
-        imagery.applyImageryState();
-        imagery.updateImageryControlStates();
-        imagery.applyImageryLayerOrder();
+        if (option.id === 'shadow' && nextEnabled) disableSunDurationAddons();
+        if (option.id === 'daylight' && !nextEnabled) disableSunDurationAddons();
+        refreshImageryAfterToolboxChange();
         if (isTerrainToolboxMember) setToolboxOpen('terrain', false);
         if (isSnowToolboxMember) setToolboxOpen('snow', false);
-        if (isShadowToolboxMember) setToolboxOpen('shadow', false);
+        if (isShadowToolboxMember && option.id !== 'daylight') setToolboxOpen('shadow', false);
       });
 
       let targetToolbox = toolboxes.terrain.box;
       if (isSnowToolboxMember) targetToolbox = toolboxes.snow.box;
       if (isShadowToolboxMember) targetToolbox = toolboxes.shadow.box;
-      if (targetToolbox) targetToolbox.appendChild(toggleButton);
+      let controlContainer = toggleButton;
+      if (targetToolbox && option.id === 'daylight') {
+        const row = document.createElement('div');
+        row.className = 'toolbox-option-row';
+        row.appendChild(toggleButton);
 
-      imagery.imageryControls.set(option.id, { container: toggleButton, button: toggleButton, slider: null, sliderWrapper: null, isGroupMember: false });
+        const subMenu = document.createElement('div');
+        subMenu.className = 'shadow-sub-menu';
+        subMenu.dataset.parentId = option.id;
+        SUN_DURATION_ADDON_IDS.forEach((addonId) => {
+          const addonOption = IMAGERY_OPTIONS.find(o => o.id === addonId);
+          if (!addonOption) return;
+
+          const subButton = document.createElement('button');
+          subButton.type = 'button';
+          subButton.className = 'shadow-sub-option sub-thumb-btn';
+          subButton.dataset.imageryId = addonOption.id;
+          subButton.setAttribute('aria-pressed', 'false');
+          subButton.setAttribute('title', addonOption.label);
+          subButton.setAttribute('aria-label', addonOption.label);
+
+          const label = document.createElement('span');
+          label.textContent = addonId === 'sunrise-window' ? 'Sunrise' : 'Sunset';
+          subButton.appendChild(label);
+
+          subButton.addEventListener('click', (event) => {
+            event.stopPropagation();
+            subButton.blur();
+            const addonState = imagery.imageryState.get(addonOption.id);
+            if (!addonState) return;
+            const active = Boolean(addonState.enabled && addonState.opacity > 0);
+            enableSunDurationBase();
+            addonState.enabled = !active;
+            if (addonState.enabled && addonState.opacity <= 0) {
+              addonState.opacity = typeof addonOption.defaultOpacity === 'number' ? addonOption.defaultOpacity : 1.0;
+            }
+            refreshImageryAfterToolboxChange();
+          });
+
+          subMenu.appendChild(subButton);
+          imagery.imageryControls.set(addonOption.id, { container: subButton, button: subButton, slider: null, sliderWrapper: null, isGroupMember: false });
+        });
+        row.appendChild(subMenu);
+        targetToolbox.appendChild(row);
+        controlContainer = row;
+      } else if (targetToolbox) {
+        targetToolbox.appendChild(toggleButton);
+      }
+
+      imagery.imageryControls.set(option.id, { container: controlContainer, button: toggleButton, slider: null, sliderWrapper: null, isGroupMember: false });
     });
 
     imagery.updateImageryControlStates();

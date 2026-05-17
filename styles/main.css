@@ -544,7 +544,8 @@ body {
 
 /* Sub-menu containers — fly out horizontally to the right */
 .basemap-sub-menu,
-.pathway-sub-menu {
+.pathway-sub-menu,
+.shadow-sub-menu {
   display: none !important;
   position: absolute;
   right: calc(100% + 8px);
@@ -564,7 +565,8 @@ body {
 }
 
 .basemap-sub-menu.visible,
-.pathway-sub-menu.visible {
+.pathway-sub-menu.visible,
+.shadow-sub-menu.visible {
   display: flex !important;
 }
 
@@ -609,6 +611,11 @@ body {
 .sub-thumb-btn.active {
   border-color: rgba(255, 255, 255, 0.6);
   box-shadow: 0 0 8px rgba(255, 255, 255, 0.2);
+}
+
+.shadow-sub-option.active {
+  border-color: rgba(243, 156, 18, 0.75);
+  box-shadow: 0 0 10px rgba(243, 156, 18, 0.28);
 }
 
 /* Lidar HD action icon buttons (tree / leaf) */
