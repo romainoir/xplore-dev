@@ -263,6 +263,14 @@ float shadowHitAt(vec2 atlasUV, float edgeAA) {
     return smoothstep(SHADOW_HIT_THRESHOLD - edgeAA, SHADOW_HIT_THRESHOLD + edgeAA, rawMask);
 }
 
+float interleavedGradientNoise(vec2 p) {
+    return fract(52.9829189 * fract(dot(p, vec2(0.06711056, 0.00583715))));
+}
+
+float triangularDither(vec2 p) {
+    return interleavedGradientNoise(p) + interleavedGradientNoise(p + vec2(37.0, 17.0)) - 1.0;
+}
+
 float orientedShadowHit(vec2 atlasUV, vec2 edgeNormal, vec2 offset, float radius, float edgeAA) {
     vec2 edgeTangent = vec2(-edgeNormal.y, edgeNormal.x);
     vec2 sampleOffset = (edgeNormal * offset.x + edgeTangent * offset.y) * (radius / SHADOW_ATLAS_SIZE);
@@ -291,29 +299,37 @@ float remapShadowMask(float rawMask, vec2 atlasUV) {
     float edgeGradient = fwidth(rawMask);
     float atlasFootprint = max(length(dFdx(atlasUV) * SHADOW_ATLAS_SIZE), length(dFdy(atlasUV) * SHADOW_ATLAS_SIZE));
     float edgeAA = clamp(max(edgeGradient * 0.52, 0.006 + atlasFootprint * 0.0035), 0.006, 0.046);
-    float center = smoothstep(SHADOW_HIT_THRESHOLD - edgeAA, SHADOW_HIT_THRESHOLD + edgeAA, rawMask);
+    float lowSunSoftness = 1.0 - smoothstep(radians(10.0), radians(34.0), u_sun_altitude);
+    vec2 edgeNormal = shadowAtlasEdgeNormal(atlasUV, rawMask);
+    float edgeActivity = smoothstep(0.0015, 0.028, edgeGradient);
+    float sampleDither = triangularDither(gl_FragCoord.xy + atlasUV * 97.0);
+    float jitterPixels = sampleDither * mix(0.42, 0.78, lowSunSoftness) * edgeActivity;
+    vec2 sampleUV = atlasUV + edgeNormal * (jitterPixels / SHADOW_ATLAS_SIZE);
+
+    float center = shadowHitAt(sampleUV, edgeAA);
     if (edgeGradient < 0.002 && (center < 0.001 || center > 0.999)) {
         return center;
     }
 
-    float lowSunSoftness = 1.0 - smoothstep(radians(10.0), radians(34.0), u_sun_altitude);
     float radius = clamp(max(mix(0.95, 1.85, lowSunSoftness), atlasFootprint * 0.55), 0.95, 2.85);
-    vec2 edgeNormal = shadowAtlasEdgeNormal(atlasUV, rawMask);
 
     float pcf =
         center * 2.25 +
-        orientedShadowHit(atlasUV, edgeNormal, vec2(-1.15,  0.00), radius, edgeAA) * 1.10 +
-        orientedShadowHit(atlasUV, edgeNormal, vec2( 1.15,  0.00), radius, edgeAA) * 1.10 +
-        orientedShadowHit(atlasUV, edgeNormal, vec2(-0.72,  0.58), radius, edgeAA) * 0.90 +
-        orientedShadowHit(atlasUV, edgeNormal, vec2( 0.72, -0.58), radius, edgeAA) * 0.90 +
-        orientedShadowHit(atlasUV, edgeNormal, vec2(-0.40, -0.92), radius, edgeAA) * 0.70 +
-        orientedShadowHit(atlasUV, edgeNormal, vec2( 0.40,  0.92), radius, edgeAA) * 0.70 +
-        orientedShadowHit(atlasUV, edgeNormal, vec2(-1.55,  0.68), radius, edgeAA) * 0.45 +
-        orientedShadowHit(atlasUV, edgeNormal, vec2( 1.55, -0.68), radius, edgeAA) * 0.45;
+        orientedShadowHit(sampleUV, edgeNormal, vec2(-1.15,  0.00), radius, edgeAA) * 1.10 +
+        orientedShadowHit(sampleUV, edgeNormal, vec2( 1.15,  0.00), radius, edgeAA) * 1.10 +
+        orientedShadowHit(sampleUV, edgeNormal, vec2(-0.72,  0.58), radius, edgeAA) * 0.90 +
+        orientedShadowHit(sampleUV, edgeNormal, vec2( 0.72, -0.58), radius, edgeAA) * 0.90 +
+        orientedShadowHit(sampleUV, edgeNormal, vec2(-0.40, -0.92), radius, edgeAA) * 0.70 +
+        orientedShadowHit(sampleUV, edgeNormal, vec2( 0.40,  0.92), radius, edgeAA) * 0.70 +
+        orientedShadowHit(sampleUV, edgeNormal, vec2(-1.55,  0.68), radius, edgeAA) * 0.45 +
+        orientedShadowHit(sampleUV, edgeNormal, vec2( 1.55, -0.68), radius, edgeAA) * 0.45;
 
     float filtered = pcf / 8.55;
+    float transition = filtered * (1.0 - filtered) * 4.0;
+    float opacityDither = triangularDither(gl_FragCoord.xy * 0.73 + vec2(11.0, 71.0)) * 0.032 * transition;
+    filtered = clamp(filtered + opacityDither, 0.0, 1.0);
     float crisp = smoothstep(0.08, 0.92, filtered);
-    float crispAmount = mix(0.48, 0.32, lowSunSoftness);
+    float crispAmount = mix(0.42, 0.28, lowSunSoftness);
     return clamp(mix(filtered, crisp, crispAmount), 0.0, 1.0);
 }
 
