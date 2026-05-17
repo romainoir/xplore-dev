@@ -260,56 +260,61 @@ float horizonShadowMask(vec2 atlasUV) {
 
 float shadowHitAt(vec2 atlasUV, float edgeAA) {
     float rawMask = texture(u_shadow_atlas, clamp(atlasUV, vec2(0.0), vec2(1.0))).r;
-    float thresholdJitter = (valueNoise(atlasUV * SHADOW_ATLAS_SIZE * 1.37 + vec2(91.0, 53.0)) - 0.5) * edgeAA * 0.55;
-    float threshold = SHADOW_HIT_THRESHOLD + thresholdJitter;
-    return smoothstep(threshold - edgeAA, threshold + edgeAA, rawMask);
+    return smoothstep(SHADOW_HIT_THRESHOLD - edgeAA, SHADOW_HIT_THRESHOLD + edgeAA, rawMask);
 }
 
-vec2 rotateShadowOffset(vec2 offset, float c, float s) {
-    return vec2(offset.x * c - offset.y * s, offset.x * s + offset.y * c);
+float orientedShadowHit(vec2 atlasUV, vec2 edgeNormal, vec2 offset, float radius, float edgeAA) {
+    vec2 edgeTangent = vec2(-edgeNormal.y, edgeNormal.x);
+    vec2 sampleOffset = (edgeNormal * offset.x + edgeTangent * offset.y) * (radius / SHADOW_ATLAS_SIZE);
+    return shadowHitAt(atlasUV + sampleOffset, edgeAA);
 }
 
-float poissonShadowHit(vec2 atlasUV, vec2 offset, float radius, float edgeAA, float c, float s) {
-    vec2 rotatedOffset = rotateShadowOffset(offset, c, s) * (radius / SHADOW_ATLAS_SIZE);
-    return shadowHitAt(atlasUV + rotatedOffset, edgeAA);
+vec2 shadowAtlasEdgeNormal(vec2 atlasUV, float rawMask) {
+    vec2 texel = vec2(1.0 / SHADOW_ATLAS_SIZE);
+    float left = texture(u_shadow_atlas, clamp(atlasUV - vec2(texel.x, 0.0), vec2(0.0), vec2(1.0))).r;
+    float right = texture(u_shadow_atlas, clamp(atlasUV + vec2(texel.x, 0.0), vec2(0.0), vec2(1.0))).r;
+    float down = texture(u_shadow_atlas, clamp(atlasUV - vec2(0.0, texel.y), vec2(0.0), vec2(1.0))).r;
+    float up = texture(u_shadow_atlas, clamp(atlasUV + vec2(0.0, texel.y), vec2(0.0), vec2(1.0))).r;
+    vec2 atlasGradient = vec2(right - left, up - down);
+    if (dot(atlasGradient, atlasGradient) > 0.000001) {
+        return normalize(atlasGradient);
+    }
+
+    vec2 screenGradient = vec2(dFdx(rawMask), dFdy(rawMask));
+    if (dot(screenGradient, screenGradient) > 0.000001) {
+        return normalize(screenGradient);
+    }
+    return vec2(1.0, 0.0);
 }
 
 float remapShadowMask(float rawMask, vec2 atlasUV) {
     float edgeGradient = fwidth(rawMask);
-    float edgeAA = clamp(edgeGradient * 0.58 + 0.012, 0.012, 0.058);
+    float atlasFootprint = max(length(dFdx(atlasUV) * SHADOW_ATLAS_SIZE), length(dFdy(atlasUV) * SHADOW_ATLAS_SIZE));
+    float edgeAA = clamp(max(edgeGradient * 0.52, 0.006 + atlasFootprint * 0.0035), 0.006, 0.046);
     float center = smoothstep(SHADOW_HIT_THRESHOLD - edgeAA, SHADOW_HIT_THRESHOLD + edgeAA, rawMask);
     if (edgeGradient < 0.002 && (center < 0.001 || center > 0.999)) {
         return center;
     }
 
-    vec2 texel = vec2(1.0 / SHADOW_ATLAS_SIZE);
     float lowSunSoftness = 1.0 - smoothstep(radians(10.0), radians(34.0), u_sun_altitude);
-    float radius = mix(1.65, 3.15, lowSunSoftness);
-    vec2 atlasCell = floor(atlasUV * SHADOW_ATLAS_SIZE);
-    float angle = hash12(atlasCell + vec2(7.0, 113.0)) * PI * 2.0;
-    float c = cos(angle);
-    float s = sin(angle);
-    vec2 jitter = vec2(
-        hash12(atlasCell + vec2(17.0, 29.0)) - 0.5,
-        hash12(atlasCell + vec2(61.0, 11.0)) - 0.5
-    ) * texel * mix(0.85, 1.55, lowSunSoftness);
-    vec2 sampleUV = atlasUV + jitter;
+    float radius = clamp(max(mix(0.95, 1.85, lowSunSoftness), atlasFootprint * 0.55), 0.95, 2.85);
+    vec2 edgeNormal = shadowAtlasEdgeNormal(atlasUV, rawMask);
 
     float pcf =
-        center * 1.7 +
-        poissonShadowHit(sampleUV, vec2( 0.1305,  0.9914), radius, edgeAA, c, s) * 0.78 +
-        poissonShadowHit(sampleUV, vec2(-0.3688,  0.5490), radius, edgeAA, c, s) +
-        poissonShadowHit(sampleUV, vec2( 0.6204,  0.6318), radius, edgeAA, c, s) +
-        poissonShadowHit(sampleUV, vec2(-0.7713,  0.1345), radius, edgeAA, c, s) +
-        poissonShadowHit(sampleUV, vec2( 0.7211, -0.3072), radius, edgeAA, c, s) +
-        poissonShadowHit(sampleUV, vec2(-0.2805, -0.8537), radius, edgeAA, c, s) * 0.82 +
-        poissonShadowHit(sampleUV, vec2( 0.0702, -0.3881), radius * 0.72, edgeAA, c, s) * 0.72 +
-        poissonShadowHit(sampleUV, vec2(-0.8931, -0.4492), radius, edgeAA, c, s) * 0.78;
+        center * 2.25 +
+        orientedShadowHit(atlasUV, edgeNormal, vec2(-1.15,  0.00), radius, edgeAA) * 1.10 +
+        orientedShadowHit(atlasUV, edgeNormal, vec2( 1.15,  0.00), radius, edgeAA) * 1.10 +
+        orientedShadowHit(atlasUV, edgeNormal, vec2(-0.72,  0.58), radius, edgeAA) * 0.90 +
+        orientedShadowHit(atlasUV, edgeNormal, vec2( 0.72, -0.58), radius, edgeAA) * 0.90 +
+        orientedShadowHit(atlasUV, edgeNormal, vec2(-0.40, -0.92), radius, edgeAA) * 0.70 +
+        orientedShadowHit(atlasUV, edgeNormal, vec2( 0.40,  0.92), radius, edgeAA) * 0.70 +
+        orientedShadowHit(atlasUV, edgeNormal, vec2(-1.55,  0.68), radius, edgeAA) * 0.45 +
+        orientedShadowHit(atlasUV, edgeNormal, vec2( 1.55, -0.68), radius, edgeAA) * 0.45;
 
-    float filtered = pcf / 8.80;
-    float transition = filtered * (1.0 - filtered) * 4.0;
-    float microBreakup = (valueNoise(atlasUV * SHADOW_ATLAS_SIZE * 2.0 + vec2(211.0, 19.0)) - 0.5) * 0.022 * transition;
-    return clamp(filtered + microBreakup, 0.0, 1.0);
+    float filtered = pcf / 8.55;
+    float crisp = smoothstep(0.08, 0.92, filtered);
+    float crispAmount = mix(0.48, 0.32, lowSunSoftness);
+    return clamp(mix(filtered, crisp, crispAmount), 0.0, 1.0);
 }
 
 vec2 localIgorReliefMask(vec2 gradient) {
