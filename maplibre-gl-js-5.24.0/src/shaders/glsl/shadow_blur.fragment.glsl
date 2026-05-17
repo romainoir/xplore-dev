@@ -1,6 +1,7 @@
 uniform sampler2D u_image;
 uniform vec2 u_direction; // [1.0, 0.0] or [0.0, 1.0]
 uniform float u_texture_size;
+uniform float u_blur_radius;
 
 in vec2 v_pos;
 
@@ -8,7 +9,7 @@ void main() {
     float weights[5] = float[](0.2270270270, 0.1945945946, 0.1216216216, 0.0540540541, 0.0162162162);
 
     // Sub-texel edge cleanup: enough to remove atlas stair-stepping, not a soft penumbra.
-    vec2 tex_offset = (u_direction * 0.32) / max(u_texture_size, 1.0);
+    vec2 tex_offset = (u_direction * max(u_blur_radius, 0.0)) / max(u_texture_size, 1.0);
     vec3 result = texture(u_image, v_pos).rgb * weights[0];
     for(int i = 1; i < 5; ++i) {
         result += texture(u_image, v_pos + tex_offset * float(i)).rgb * weights[i];

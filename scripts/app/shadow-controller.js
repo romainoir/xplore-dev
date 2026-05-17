@@ -92,6 +92,9 @@ function ensureShadowRuntimeDefaults() {
     setDefaultGlobal('_horizonDirectionBins', 16);
     setDefaultGlobal('_horizonEdgeSoftness', 1.0);
     setDefaultGlobal('_horizonEdgeNaturalness', 0.0);
+    setDefaultGlobal('_shadowAtlasSize', 2048);
+    setDefaultGlobal('_shadowEdgeCleanup', true);
+    setDefaultGlobal('_shadowBlurRadius', 0.95);
     setDefaultGlobal('_shadowCameraMoving', false);
     setDefaultGlobal('_shadowCameraRefreshHold', false);
     setDefaultGlobal('_shadowProgressivePhase', 'stable');

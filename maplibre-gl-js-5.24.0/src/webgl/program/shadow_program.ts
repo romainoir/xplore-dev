@@ -74,6 +74,7 @@ export type ShadowBlurUniformsType = {
     'u_image': Uniform1i;
     'u_direction': Uniform2f;
     'u_texture_size': Uniform1f;
+    'u_blur_radius': Uniform1f;
 };
 
 const shadowGlobalUniforms = (context: Context, locations: UniformLocations): ShadowGlobalUniformsType => ({
@@ -137,6 +138,7 @@ const shadowBlurUniforms = (context: Context, locations: UniformLocations): Shad
     'u_image': new Uniform1i(context, locations.u_image),
     'u_direction': new Uniform2f(context, locations.u_direction),
     'u_texture_size': new Uniform1f(context, locations.u_texture_size),
+    'u_blur_radius': new Uniform1f(context, locations.u_blur_radius),
 });
 
 const shadowUniformValues = (

@@ -627,14 +627,12 @@ export function drawGlobalShadow(
         uniformValues, null, null, layer.id, painter.rasterBoundsBuffer,
         painter.quadTriangleIndexBuffer, painter.rasterBoundsSegments);
 
-    // Optional atlas-space blur is intentionally disabled by default. Shadow
-    // contacts are cleaned in the terrain shader with derivative-aware remap
-    // and a tiny edge-only atlas filter, which preserves silhouettes better
-    // than rounding the whole atlas.
+    // A small atlas-space blur is cheaper and cleaner than screen-space
+    // dithering for hiding raymarch stair-steps on the binary shadow mask.
     const isTimeSliding = typeof window !== 'undefined' && (window as any)._isInteractingWithTime;
     const progressivePhase = typeof window !== 'undefined' ? (window as any)._shadowProgressivePhase : '';
     const isProgressivePreview = progressivePhase === 'preview';
-    const useEdgeCleanup = typeof window !== 'undefined' && (window as any)._shadowEdgeCleanup === true;
+    const useEdgeCleanup = typeof window === 'undefined' || (window as any)._shadowEdgeCleanup !== false;
     const blurStart = debugEnabled ? performance.now() : 0;
     if (useEdgeCleanup && !isTimeSliding && !isProgressivePreview) {
         drawGlobalShadowBlur(painter);
@@ -677,6 +675,9 @@ export function drawGlobalShadowBlur(painter: Painter) {
 
     const fboWidth = terrainInstance._fboShadowTexture.size[0];
     const fboHeight = terrainInstance._fboShadowTexture.size[1];
+    const blurRadius = typeof window !== 'undefined' && Number.isFinite((window as any)._shadowBlurRadius) ?
+        Number((window as any)._shadowBlurRadius) :
+        0.95;
     const program = painter.useProgram('shadowBlur');
     const colorMode = ColorMode.unblended;
     const depthMode = DepthMode.disabled;
@@ -692,7 +693,7 @@ export function drawGlobalShadowBlur(painter: Painter) {
     gl.bindTexture(gl.TEXTURE_2D, terrainInstance._fboShadowTexture.texture);
 
     program.draw(context, gl.TRIANGLES, depthMode, stencilMode, colorMode, CullFaceMode.disabled,
-        { 'u_image': 0, 'u_direction': [1.0, 0.0], 'u_texture_size': fboWidth }, null, null, 'shadow-blur-h',
+        { 'u_image': 0, 'u_direction': [1.0, 0.0], 'u_texture_size': fboWidth, 'u_blur_radius': blurRadius }, null, null, 'shadow-blur-h',
         painter.rasterBoundsBuffer, painter.quadTriangleIndexBuffer, painter.rasterBoundsSegments);
 
     // --- Pass 2: Vertical Blur ---
@@ -705,7 +706,7 @@ export function drawGlobalShadowBlur(painter: Painter) {
     gl.bindTexture(gl.TEXTURE_2D, terrainInstance._fboShadowBlurTexture.texture);
 
     program.draw(context, gl.TRIANGLES, depthMode, stencilMode, colorMode, CullFaceMode.disabled,
-        { 'u_image': 0, 'u_direction': [0.0, 1.0], 'u_texture_size': fboWidth }, null, null, 'shadow-blur-v',
+        { 'u_image': 0, 'u_direction': [0.0, 1.0], 'u_texture_size': fboWidth, 'u_blur_radius': blurRadius }, null, null, 'shadow-blur-v',
         painter.rasterBoundsBuffer, painter.quadTriangleIndexBuffer, painter.rasterBoundsSegments);
 }
 

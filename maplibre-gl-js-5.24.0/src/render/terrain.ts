@@ -349,7 +349,7 @@ export class Terrain {
     _fboHorizon2: Framebuffer;
     _fboHorizon3: Framebuffer;
     static readonly ATLAS_SIZE = 2048;
-    static readonly SHADOW_ATLAS_SIZE = 4096;
+    static readonly SHADOW_ATLAS_SIZE = 2048;
     static readonly HORIZON_ATLAS_SIZE = 1024;
 
     getFramebuffer(texture: string): Framebuffer {
@@ -396,9 +396,8 @@ export class Terrain {
             this._fboDepthTexture = new Texture(painter.context, { width, height, data: null }, painter.context.gl.RGBA, { premultiply: false });
             this._fboDepthTexture.bind(painter.context.gl.NEAREST, painter.context.gl.CLAMP_TO_EDGE);
         }
-        // Elevation and Shadow atlases use dedicated square sizes for consistent quality.
-        // Keep packed elevation at 2K, but render the binary cast-shadow mask larger:
-        // otherwise the final terrain pass has no data to reconstruct smooth silhouettes.
+        // Elevation and shadow atlases default to 2K. Edge cleanup happens in a
+        // separate blur pass so we do not pay the memory cost of a larger mask.
         const atlasSize = Terrain.ATLAS_SIZE;
         const maxTextureSize = painter.context.gl.getParameter(painter.context.gl.MAX_TEXTURE_SIZE) as number;
         const requestedShadowAtlasSize = typeof window !== 'undefined' && Number.isFinite((window as any)._shadowAtlasSize) ?
