@@ -42,6 +42,7 @@ uniform sampler2D u_dem_derivative;      // Prepared native hillshade derivative
 uniform float u_dem_derivative_available;
 uniform sampler2D u_elevation_atlas;     // seamless global elevation atlas (packed float)
 uniform float u_metersPerPixel;          // geographic scale for normal calculation
+uniform float u_shadow_atlas_size;
 uniform float u_max_steps;
 uniform float u_step_meters;
 uniform float u_shadow_soft_base;
@@ -206,7 +207,6 @@ vec3 applySkyLightTint(vec3 color, float altitude, vec3 horizonColor, vec3 fogCo
     return mix(color, lowLightColor, lowLightBlend);
 }
 
-const float SHADOW_ATLAS_SIZE = 2048.0;
 const float SHADOW_HIT_THRESHOLD = 0.28;
 float horizonChannelValue(vec4 packed, float channel) {
     if (channel < 0.5) return packed.r;
@@ -273,12 +273,12 @@ float triangularDither(vec2 p) {
 
 float orientedShadowHit(vec2 atlasUV, vec2 edgeNormal, vec2 offset, float radius, float edgeAA) {
     vec2 edgeTangent = vec2(-edgeNormal.y, edgeNormal.x);
-    vec2 sampleOffset = (edgeNormal * offset.x + edgeTangent * offset.y) * (radius / SHADOW_ATLAS_SIZE);
+    vec2 sampleOffset = (edgeNormal * offset.x + edgeTangent * offset.y) * (radius / max(u_shadow_atlas_size, 1.0));
     return shadowHitAt(atlasUV + sampleOffset, edgeAA);
 }
 
 vec2 shadowAtlasEdgeNormal(vec2 atlasUV, float rawMask) {
-    vec2 texel = vec2(1.0 / SHADOW_ATLAS_SIZE);
+    vec2 texel = vec2(1.0 / max(u_shadow_atlas_size, 1.0));
     float left = texture(u_shadow_atlas, clamp(atlasUV - vec2(texel.x, 0.0), vec2(0.0), vec2(1.0))).r;
     float right = texture(u_shadow_atlas, clamp(atlasUV + vec2(texel.x, 0.0), vec2(0.0), vec2(1.0))).r;
     float down = texture(u_shadow_atlas, clamp(atlasUV - vec2(0.0, texel.y), vec2(0.0), vec2(1.0))).r;
@@ -297,14 +297,14 @@ vec2 shadowAtlasEdgeNormal(vec2 atlasUV, float rawMask) {
 
 float remapShadowMask(float rawMask, vec2 atlasUV) {
     float edgeGradient = fwidth(rawMask);
-    float atlasFootprint = max(length(dFdx(atlasUV) * SHADOW_ATLAS_SIZE), length(dFdy(atlasUV) * SHADOW_ATLAS_SIZE));
+    float atlasFootprint = max(length(dFdx(atlasUV) * u_shadow_atlas_size), length(dFdy(atlasUV) * u_shadow_atlas_size));
     float edgeAA = clamp(max(edgeGradient * 0.52, 0.006 + atlasFootprint * 0.0035), 0.006, 0.046);
     float lowSunSoftness = 1.0 - smoothstep(radians(10.0), radians(34.0), u_sun_altitude);
     vec2 edgeNormal = shadowAtlasEdgeNormal(atlasUV, rawMask);
     float edgeActivity = smoothstep(0.0015, 0.028, edgeGradient);
     float sampleDither = triangularDither(gl_FragCoord.xy + atlasUV * 97.0);
     float jitterPixels = sampleDither * mix(0.42, 0.78, lowSunSoftness) * edgeActivity;
-    vec2 sampleUV = atlasUV + edgeNormal * (jitterPixels / SHADOW_ATLAS_SIZE);
+    vec2 sampleUV = atlasUV + edgeNormal * (jitterPixels / max(u_shadow_atlas_size, 1.0));
 
     float center = shadowHitAt(sampleUV, edgeAA);
     if (edgeGradient < 0.002 && (center < 0.001 || center > 0.999)) {

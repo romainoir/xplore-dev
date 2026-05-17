@@ -580,7 +580,8 @@ export function drawGlobalShadow(
     const worldCircumference = 40075016.7;
     const atlasWorldWidth = atlasBounds[2] - atlasBounds[0];
     const atlasWorldHeight = atlasBounds[3] - atlasBounds[1];
-    const atlasPixelSize = terrain._fboElevationTexture.size[0]; // Square atlas
+    const elevationAtlasPixelSize = terrain._fboElevationTexture.size[0];
+    const atlasPixelSize = terrain._fboShadowTexture.size[0]; // Square shadow mask atlas
 
     // Per-axis meters per pixel for correct raymarching in non-square Mercator regions
     const metersPerPixelX = (atlasWorldWidth * worldCircumference) / atlasPixelSize;
@@ -654,6 +655,7 @@ export function drawGlobalShadow(
             stepMeters: uniformValues['u_step_meters'],
             maxDistance: uniformValues['u_max_distance'],
             atlasPixelSize,
+            elevationAtlasPixelSize,
             metersPerPixelX,
             metersPerPixelY,
             progressivePhase: isProgressivePreview ? 'preview' : progressivePhase === 'full' ? 'full' : 'stable',
@@ -690,7 +692,7 @@ export function drawGlobalShadowBlur(painter: Painter) {
     gl.bindTexture(gl.TEXTURE_2D, terrainInstance._fboShadowTexture.texture);
 
     program.draw(context, gl.TRIANGLES, depthMode, stencilMode, colorMode, CullFaceMode.disabled,
-        { 'u_image': 0, 'u_direction': [1.0, 0.0] }, null, null, 'shadow-blur-h',
+        { 'u_image': 0, 'u_direction': [1.0, 0.0], 'u_texture_size': fboWidth }, null, null, 'shadow-blur-h',
         painter.rasterBoundsBuffer, painter.quadTriangleIndexBuffer, painter.rasterBoundsSegments);
 
     // --- Pass 2: Vertical Blur ---
@@ -703,7 +705,7 @@ export function drawGlobalShadowBlur(painter: Painter) {
     gl.bindTexture(gl.TEXTURE_2D, terrainInstance._fboShadowBlurTexture.texture);
 
     program.draw(context, gl.TRIANGLES, depthMode, stencilMode, colorMode, CullFaceMode.disabled,
-        { 'u_image': 0, 'u_direction': [0.0, 1.0] }, null, null, 'shadow-blur-v',
+        { 'u_image': 0, 'u_direction': [0.0, 1.0], 'u_texture_size': fboWidth }, null, null, 'shadow-blur-v',
         painter.rasterBoundsBuffer, painter.quadTriangleIndexBuffer, painter.rasterBoundsSegments);
 }
 

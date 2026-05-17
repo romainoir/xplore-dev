@@ -66,6 +66,7 @@ export type TerrainUniformsType = {
     'u_dem_derivative_available': Uniform1f;
     'u_elevation_atlas': Uniform1i;
     'u_metersPerPixel': Uniform1f;
+    'u_shadow_atlas_size': Uniform1f;
     'u_max_steps': Uniform1f;
     'u_step_meters': Uniform1f;
     'u_shadow_soft_base': Uniform1f;
@@ -139,6 +140,7 @@ const terrainUniforms = (context: Context, locations: UniformLocations): Terrain
     'u_dem_derivative_available': new Uniform1f(context, locations.u_dem_derivative_available),
     'u_elevation_atlas': new Uniform1i(context, locations.u_elevation_atlas),
     'u_metersPerPixel': new Uniform1f(context, locations.u_metersPerPixel),
+    'u_shadow_atlas_size': new Uniform1f(context, locations.u_shadow_atlas_size),
     'u_max_steps': new Uniform1f(context, locations.u_max_steps),
     'u_step_meters': new Uniform1f(context, locations.u_step_meters),
     'u_shadow_soft_base': new Uniform1f(context, locations.u_shadow_soft_base),
@@ -274,6 +276,7 @@ const terrainUniformValues = (
         'u_dem_derivative_available': 0,
         'u_elevation_atlas': 14, // Bind elevation atlas to unit 14
         'u_metersPerPixel': 40075016.7 / (512 * Math.pow(2, tile ? tile.tileID.canonical.z : zoom)),
+        'u_shadow_atlas_size': (painter?.style?.map?.terrain as any)?._fboShadowTexture?.size?.[0] || 2048.0,
         'u_max_steps': (() => {
             // Option D (Aggressive Interaction Degradation) caused fatal banding and "white holes" 
             // due to massive 5x stride jumps mathematically missing thin mountain ridges.

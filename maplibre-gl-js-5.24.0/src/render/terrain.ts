@@ -349,6 +349,7 @@ export class Terrain {
     _fboHorizon2: Framebuffer;
     _fboHorizon3: Framebuffer;
     static readonly ATLAS_SIZE = 2048;
+    static readonly SHADOW_ATLAS_SIZE = 4096;
     static readonly HORIZON_ATLAS_SIZE = 1024;
 
     getFramebuffer(texture: string): Framebuffer {
@@ -395,21 +396,37 @@ export class Terrain {
             this._fboDepthTexture = new Texture(painter.context, { width, height, data: null }, painter.context.gl.RGBA, { premultiply: false });
             this._fboDepthTexture.bind(painter.context.gl.NEAREST, painter.context.gl.CLAMP_TO_EDGE);
         }
-        // Elevation and Shadow atlases use a dedicated square size for consistent quality
+        // Elevation and Shadow atlases use dedicated square sizes for consistent quality.
+        // Keep packed elevation at 2K, but render the binary cast-shadow mask larger:
+        // otherwise the final terrain pass has no data to reconstruct smooth silhouettes.
         const atlasSize = Terrain.ATLAS_SIZE;
+        const maxTextureSize = painter.context.gl.getParameter(painter.context.gl.MAX_TEXTURE_SIZE) as number;
+        const requestedShadowAtlasSize = typeof window !== 'undefined' && Number.isFinite((window as any)._shadowAtlasSize) ?
+            Number((window as any)._shadowAtlasSize) :
+            Terrain.SHADOW_ATLAS_SIZE;
+        const shadowAtlasSize = Math.max(atlasSize, Math.min(maxTextureSize, Math.round(requestedShadowAtlasSize)));
         if (!this._fboElevationTexture) {
             this._fboElevationTexture = new Texture(painter.context, { width: atlasSize, height: atlasSize, data: null }, painter.context.gl.RGBA, { premultiply: false });
             // The elevation atlas stores a packed float in RGBA channels. Hardware linear
             // filtering corrupts the packed bytes, so shaders do their own bilinear decode.
             this._fboElevationTexture.bind(painter.context.gl.NEAREST, painter.context.gl.CLAMP_TO_EDGE);
         }
-        if (!this._fboShadowTexture) {
-            this._fboShadowTexture = new Texture(painter.context, { width: atlasSize, height: atlasSize, data: null }, painter.context.gl.RGBA, { premultiply: false });
-            this._fboShadowTexture.bind(painter.context.gl.LINEAR, painter.context.gl.CLAMP_TO_EDGE);
+        if (this._fboShadowTexture && this._fboShadowTexture.size[0] !== shadowAtlasSize) {
+            this._fboShadowTexture.destroy();
+            if (this._fboShadowBlurTexture) this._fboShadowBlurTexture.destroy();
+            if (this._fboShadow) this._fboShadow.destroy();
+            if (this._fboShadowBlur) this._fboShadowBlur.destroy();
+            delete this._fboShadowTexture;
+            delete this._fboShadowBlurTexture;
+            delete this._fboShadow;
+            delete this._fboShadowBlur;
+            delete (this as any)._shadowAtlasReady;
+            delete (this as any)._shadowAtlasReusedWhileMoving;
+            delete (this as any)._shadowAtlasNeedsRefreshAfterCameraMove;
         }
-        if (!this._fboShadowBlurTexture) {
-            this._fboShadowBlurTexture = new Texture(painter.context, { width: atlasSize, height: atlasSize, data: null }, painter.context.gl.RGBA, { premultiply: false });
-            this._fboShadowBlurTexture.bind(painter.context.gl.LINEAR, painter.context.gl.CLAMP_TO_EDGE);
+        if (!this._fboShadowTexture) {
+            this._fboShadowTexture = new Texture(painter.context, { width: shadowAtlasSize, height: shadowAtlasSize, data: null }, painter.context.gl.RGBA, { premultiply: false });
+            this._fboShadowTexture.bind(painter.context.gl.LINEAR, painter.context.gl.CLAMP_TO_EDGE);
         }
         if (!this._fboDaylightTexture) {
             this._fboDaylightTexture = new Texture(painter.context, { width: atlasSize, height: atlasSize, data: null }, painter.context.gl.RGBA, { premultiply: false });
@@ -451,14 +468,18 @@ export class Terrain {
         }
         if (texture === 'shadow') {
             if (!this._fboShadow) {
-                this._fboShadow = painter.context.createFramebuffer(atlasSize, atlasSize, false, false);
+                this._fboShadow = painter.context.createFramebuffer(shadowAtlasSize, shadowAtlasSize, false, false);
             }
             this._fboShadow.colorAttachment.set(this._fboShadowTexture.texture);
             return this._fboShadow;
         }
         if (texture === 'shadow_blur') {
+            if (!this._fboShadowBlurTexture) {
+                this._fboShadowBlurTexture = new Texture(painter.context, { width: shadowAtlasSize, height: shadowAtlasSize, data: null }, painter.context.gl.RGBA, { premultiply: false });
+                this._fboShadowBlurTexture.bind(painter.context.gl.LINEAR, painter.context.gl.CLAMP_TO_EDGE);
+            }
             if (!this._fboShadowBlur) {
-                this._fboShadowBlur = painter.context.createFramebuffer(atlasSize, atlasSize, false, false);
+                this._fboShadowBlur = painter.context.createFramebuffer(shadowAtlasSize, shadowAtlasSize, false, false);
             }
             this._fboShadowBlur.colorAttachment.set(this._fboShadowBlurTexture.texture);
             return this._fboShadowBlur;
