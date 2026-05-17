@@ -292,7 +292,7 @@ const terrainUniformValues = (
         'u_shadow_soft_base': (typeof window !== 'undefined' && (window as any)._shadowSoftBase !== undefined) ? (window as any)._shadowSoftBase : 10.0,
         'u_shadow_soft_mult': (typeof window !== 'undefined' && (window as any)._shadowSoftMult !== undefined) ? (window as any)._shadowSoftMult : 10.0,
         'u_shadow_soft_max': (typeof window !== 'undefined' && (window as any)._shadowSoftMax !== undefined) ? (window as any)._shadowSoftMax : 100.0,
-        'u_self_shadow_mult': (typeof window !== 'undefined' && (window as any)._selfShadowMult !== undefined) ? (window as any)._selfShadowMult : 1.0,
+        'u_self_shadow_mult': (typeof window !== 'undefined' && (window as any)._selfShadowMult !== undefined) ? (window as any)._selfShadowMult : 3.0,
     };
 };
 

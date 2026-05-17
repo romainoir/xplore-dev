@@ -87,7 +87,7 @@ function ensureShadowRuntimeDefaults() {
     setDefaultGlobal('_shadowUseHorizonCurrent', false);
     setDefaultGlobal('_terrainNativeDemZoom', true);
     setDefaultGlobal('_castShadowMult', 1.45);
-    setDefaultGlobal('_selfShadowMult', 1.0);
+    setDefaultGlobal('_selfShadowMult', 3.0);
     setDefaultGlobal('_horizonQualityPreset', 'balanced');
     setDefaultGlobal('_horizonDirectionBins', 16);
     setDefaultGlobal('_horizonEdgeSoftness', 1.0);
