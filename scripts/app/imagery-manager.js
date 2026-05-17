@@ -78,7 +78,7 @@ export const IMAGERY_OPTIONS = Object.freeze([
 
 // ─── LAYER_GROUPS ───
 export const LAYER_GROUPS = Object.freeze([
-    { id: 'sun-analysis', label: 'Sun Analysis', exclusive: true, members: ['shadow', 'daylight'] },
+    { id: 'sun-analysis', label: 'Sun Analysis', exclusive: true, members: ['shadow', 'daylight', 'sunrise-window', 'sunset-window'] },
     { id: 'vector', label: 'Vector', exclusive: false, members: ['contours', 'osm-features'] },
     { id: 'wikimedia-photos', label: 'Wikimedia Photos', exclusive: true, members: ['wikimedia-photos'] },
     { id: 'heatmap', label: 'Heatmap', exclusive: true, members: ['strava-heatmap-all', 'strava-winter', 'strava-backcountry-ski', 'strava-cycling', 'strava-run', 'ign-traces-hivernales'] },
@@ -103,6 +103,7 @@ export const ROUTE_LAYER_ORDER_TOP_TO_BOTTOM = Object.freeze([
 
 export const IMAGERY_OPTIONS_BY_ID = new Map(IMAGERY_OPTIONS.map(o => [o.id, o]));
 export const SUN_DURATION_ADDON_IDS = Object.freeze(['sunrise-window', 'sunset-window']);
+const SUN_DURATION_MODE_IDS = Object.freeze(['daylight', ...SUN_DURATION_ADDON_IDS]);
 
 export function clampOpacity(value) {
     if (typeof value !== 'number' || Number.isNaN(value)) return 0;
@@ -331,16 +332,21 @@ export function createImageryManager(map, deps = {}) {
 
     function updateImageryControlStates() {
         const activeGroupIds = new Set();
-        const daylightState = imageryState.get('daylight');
-        const daylightActive = Boolean(daylightState?.enabled && daylightState.opacity > 0);
+        const activeSunDurationId = SUN_DURATION_MODE_IDS.find(id => {
+            const state = imageryState.get(id);
+            return Boolean(state?.enabled && state.opacity > 0);
+        });
+        const daylightBaseActive = activeSunDurationId === 'daylight';
+        const sunDurationMenuOpen = Boolean(activeSunDurationId);
         imageryControls.forEach((control, id) => {
             const state = imageryState.get(id);
             let isActive = Boolean(state?.enabled && state.opacity > 0);
-            if (SUN_DURATION_ADDON_IDS.includes(id)) isActive = isActive && daylightActive;
+            if (id === 'daylight') isActive = daylightBaseActive;
+            if (SUN_DURATION_ADDON_IDS.includes(id)) isActive = activeSunDurationId === id;
             if (control.button) {
                 control.button.classList.toggle('active', isActive);
                 control.button.setAttribute('aria-pressed', String(isActive));
-                if (id === 'daylight') control.button.setAttribute('aria-expanded', String(daylightActive));
+                if (id === 'daylight') control.button.setAttribute('aria-expanded', String(sunDurationMenuOpen));
             }
             if (control.isGroupMember) {
                 if (isActive) { const group = LAYER_GROUP_BY_MEMBER_ID.get(id); if (group) activeGroupIds.add(group.id); }
@@ -351,7 +357,7 @@ export function createImageryManager(map, deps = {}) {
             if (control.sliderWrapper) control.sliderWrapper.classList.toggle('active', isActive);
         });
         document.querySelectorAll('.shadow-sub-menu[data-parent-id="daylight"]').forEach(menu => {
-            menu.classList.toggle('visible', daylightActive);
+            menu.classList.toggle('visible', sunDurationMenuOpen);
         });
 
         // Dynamic background for Analysis Toggles
@@ -375,13 +381,15 @@ export function createImageryManager(map, deps = {}) {
 
     function applyImageryState() {
         let sunAnalysisRequiresTerrain = false;
-        const daylightState = imageryState.get('daylight');
-        const daylightVisible = Boolean(daylightState?.enabled && clampOpacity(daylightState?.opacity ?? 0) > 0);
+        const activeSunDurationId = SUN_DURATION_MODE_IDS.find(id => {
+            const state = imageryState.get(id);
+            return Boolean(state?.enabled && clampOpacity(state.opacity ?? 0) > 0);
+        });
         IMAGERY_OPTIONS.forEach((option) => {
             const state = imageryState.get(option.id);
             const opacity = clampOpacity(state?.opacity ?? 0);
             let visible = Boolean(state?.enabled && opacity > 0);
-            if (SUN_DURATION_ADDON_IDS.includes(option.id)) visible = visible && daylightVisible;
+            if (SUN_DURATION_MODE_IDS.includes(option.id)) visible = visible && option.id === activeSunDurationId;
             if ((option.id === 'shadow' || option.id === 'daylight' || option.id === 'sunrise-window' || option.id === 'sunset-window') && visible) {
                 sunAnalysisRequiresTerrain = true;
             }

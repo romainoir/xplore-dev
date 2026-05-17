@@ -736,12 +736,29 @@ async function init() {
     const enableSunDurationBase = () => {
       const daylightOption = IMAGERY_OPTIONS.find(o => o.id === 'daylight');
       const daylightState = imagery.imageryState.get('daylight');
+      disableSunDurationAddons();
       if (daylightState) {
         daylightState.enabled = true;
         if (daylightState.opacity <= 0) daylightState.opacity = typeof daylightOption?.defaultOpacity === 'number' ? daylightOption.defaultOpacity : 1.0;
       }
       const shadowState = imagery.imageryState.get('shadow');
       if (shadowState) shadowState.enabled = false;
+    };
+    const enableSunDurationAddon = (addonOption, enabled) => {
+      const daylightState = imagery.imageryState.get('daylight');
+      if (daylightState) daylightState.enabled = false;
+      SUN_DURATION_ADDON_IDS.forEach((id) => {
+        const state = imagery.imageryState.get(id);
+        if (state) state.enabled = false;
+      });
+      const shadowState = imagery.imageryState.get('shadow');
+      if (shadowState) shadowState.enabled = false;
+      const addonState = imagery.imageryState.get(addonOption.id);
+      if (!addonState) return;
+      addonState.enabled = enabled;
+      if (enabled && addonState.opacity <= 0) {
+        addonState.opacity = typeof addonOption.defaultOpacity === 'number' ? addonOption.defaultOpacity : 1.0;
+      }
     };
     const refreshImageryAfterToolboxChange = () => {
       imagery.applyImageryState();
@@ -793,6 +810,7 @@ async function init() {
         cur.enabled = nextEnabled;
         if (nextEnabled && cur.opacity <= 0) cur.opacity = typeof option.defaultOpacity === 'number' ? option.defaultOpacity : 1.0;
         if (option.id === 'shadow' && nextEnabled) disableSunDurationAddons();
+        if (option.id === 'daylight' && nextEnabled) enableSunDurationBase();
         if (option.id === 'daylight' && !nextEnabled) disableSunDurationAddons();
         refreshImageryAfterToolboxChange();
         if (isTerrainToolboxMember) setToolboxOpen('terrain', false);
@@ -834,11 +852,7 @@ async function init() {
             const addonState = imagery.imageryState.get(addonOption.id);
             if (!addonState) return;
             const active = Boolean(addonState.enabled && addonState.opacity > 0);
-            enableSunDurationBase();
-            addonState.enabled = !active;
-            if (addonState.enabled && addonState.opacity <= 0) {
-              addonState.opacity = typeof addonOption.defaultOpacity === 'number' ? addonOption.defaultOpacity : 1.0;
-            }
+            enableSunDurationAddon(addonOption, !active);
             refreshImageryAfterToolboxChange();
           });
 
