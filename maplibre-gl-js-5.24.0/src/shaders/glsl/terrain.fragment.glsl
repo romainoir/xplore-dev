@@ -399,12 +399,15 @@ void main() {
         localRelief = localIgorReliefMask(sampleReliefGradient(clamp(v_dem_coord, vec2(1.0), vec2(u_dem_ao_dim))));
     }
 
+    float reliefShadowStrength = mix(1.0, clamp(u_self_shadow_mult, 0.0, 4.0), 0.85);
+    float reliefHighlightStrength = mix(1.0, clamp(u_self_shadow_mult, 0.0, 4.0), 0.45);
+
     if (u_igor_relief_enabled > 0.5) {
         vec3 highlightTint = mix(vec3(0.86, 0.91, 1.0), vec3(1.0, 0.94, 0.80), tintMix);
-        float reliefHighlight = localRelief.y * (0.035 + effectiveShadowStrength * 0.11) * mix(0.55, 1.0, skyAmbient);
+        float reliefHighlight = localRelief.y * (0.035 + effectiveShadowStrength * 0.11) * reliefHighlightStrength * mix(0.55, 1.0, skyAmbient);
         vec3 ambientLiftTint = mix(vec3(0.72, 0.80, 1.0), vec3(1.0, 0.88, 0.66), tintMix);
-        float ambientReliefAO = localRelief.x * (0.035 + skyAmbient * 0.040);
-        float ambientReliefLift = localRelief.y * 0.014 * mix(0.55, 1.0, skyAmbient);
+        float ambientReliefAO = localRelief.x * (0.035 + skyAmbient * 0.040) * reliefShadowStrength;
+        float ambientReliefLift = localRelief.y * 0.014 * reliefHighlightStrength * mix(0.55, 1.0, skyAmbient);
         fragColor.rgb = mix(fragColor.rgb, highlightTint, reliefHighlight);
         fragColor.rgb *= 1.0 - ambientReliefAO;
         fragColor.rgb = mix(fragColor.rgb, ambientLiftTint, ambientReliefLift);
@@ -436,8 +439,8 @@ void main() {
     // post-shadow AO pass, opaque cast shadows flatten the integrated Igor detail.
     if (u_igor_relief_enabled > 0.5) {
         castPresence = clamp(max(shadowMask, farTerrainShadow) * effectiveShadowStrength, 0.0, 1.0);
-        float reliefAO = localRelief.x * castPresence * 0.105;
-        float reliefLift = localRelief.y * (0.014 + castPresence * 0.025) * mix(0.55, 1.0, skyAmbient);
+        float reliefAO = localRelief.x * castPresence * 0.105 * reliefShadowStrength;
+        float reliefLift = localRelief.y * (0.014 + castPresence * 0.025) * reliefHighlightStrength * mix(0.55, 1.0, skyAmbient);
         vec3 ambientLiftTint = vec3(0.62, 0.66, 0.74);
         fragColor.rgb *= 1.0 - reliefAO;
         fragColor.rgb = mix(fragColor.rgb, ambientLiftTint, reliefLift);
