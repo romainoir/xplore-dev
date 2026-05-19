@@ -404,6 +404,11 @@ export class Terrain {
             Number((window as any)._shadowAtlasSize) :
             Terrain.SHADOW_ATLAS_SIZE;
         const shadowAtlasSize = Math.max(atlasSize, Math.min(maxTextureSize, Math.round(requestedShadowAtlasSize)));
+        const requestedShadowMaskScale = typeof window !== 'undefined' && Number.isFinite((window as any)._shadowMaskScale) ?
+            Number((window as any)._shadowMaskScale) :
+            0.5;
+        const shadowMaskScale = Math.max(0.25, Math.min(1.0, requestedShadowMaskScale));
+        const shadowMaskSize = Math.max(512, Math.min(shadowAtlasSize, Math.round(shadowAtlasSize * shadowMaskScale)));
         if (!this._fboElevationTexture) {
             this._fboElevationTexture = new Texture(painter.context, { width: atlasSize, height: atlasSize, data: null }, painter.context.gl.RGBA, { premultiply: false });
             // The elevation atlas stores a packed float in RGBA channels. Hardware linear
@@ -426,6 +431,15 @@ export class Terrain {
         if (!this._fboShadowTexture) {
             this._fboShadowTexture = new Texture(painter.context, { width: shadowAtlasSize, height: shadowAtlasSize, data: null }, painter.context.gl.RGBA, { premultiply: false });
             this._fboShadowTexture.bind(painter.context.gl.LINEAR, painter.context.gl.CLAMP_TO_EDGE);
+        }
+        if (this._fboShadowBlurTexture && this._fboShadowBlurTexture.size[0] !== shadowMaskSize) {
+            this._fboShadowBlurTexture.destroy();
+            if (this._fboShadowBlur) this._fboShadowBlur.destroy();
+            delete this._fboShadowBlurTexture;
+            delete this._fboShadowBlur;
+            delete (this as any)._shadowAtlasReady;
+            delete (this as any)._shadowAtlasReusedWhileMoving;
+            delete (this as any)._shadowAtlasNeedsRefreshAfterCameraMove;
         }
         if (!this._fboDaylightTexture) {
             this._fboDaylightTexture = new Texture(painter.context, { width: atlasSize, height: atlasSize, data: null }, painter.context.gl.RGBA, { premultiply: false });
@@ -474,11 +488,11 @@ export class Terrain {
         }
         if (texture === 'shadow_blur') {
             if (!this._fboShadowBlurTexture) {
-                this._fboShadowBlurTexture = new Texture(painter.context, { width: shadowAtlasSize, height: shadowAtlasSize, data: null }, painter.context.gl.RGBA, { premultiply: false });
+                this._fboShadowBlurTexture = new Texture(painter.context, { width: shadowMaskSize, height: shadowMaskSize, data: null }, painter.context.gl.RGBA, { premultiply: false });
                 this._fboShadowBlurTexture.bind(painter.context.gl.LINEAR, painter.context.gl.CLAMP_TO_EDGE);
             }
             if (!this._fboShadowBlur) {
-                this._fboShadowBlur = painter.context.createFramebuffer(shadowAtlasSize, shadowAtlasSize, false, false);
+                this._fboShadowBlur = painter.context.createFramebuffer(shadowMaskSize, shadowMaskSize, false, false);
             }
             this._fboShadowBlur.colorAttachment.set(this._fboShadowBlurTexture.texture);
             return this._fboShadowBlur;

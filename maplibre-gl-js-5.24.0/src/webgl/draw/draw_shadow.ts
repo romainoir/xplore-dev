@@ -582,21 +582,29 @@ export function drawGlobalShadow(
     const atlasWorldHeight = atlasBounds[3] - atlasBounds[1];
     const elevationAtlasPixelSize = terrain._fboElevationTexture.size[0];
     const atlasPixelSize = terrain._fboShadowTexture.size[0]; // Square shadow mask atlas
+    const rawShadowFbo = terrain.getFramebuffer('shadow_blur');
+    const rawAtlasPixelSize = terrain._fboShadowBlurTexture?.size?.[0] || atlasPixelSize;
 
-    // Per-axis meters per pixel for correct raymarching in non-square Mercator regions
-    const metersPerPixelX = (atlasWorldWidth * worldCircumference) / atlasPixelSize;
-    const metersPerPixelY = (atlasWorldHeight * worldCircumference) / atlasPixelSize;
+    // Per-axis meters per raw-shadow pixel. The final atlas stays 2K, but
+    // the raw mask can be lower-res and bilinearly upsampled to remove
+    // terrain-tile stair steps without reducing long-distance shadow reach.
+    const metersPerPixelX = (atlasWorldWidth * worldCircumference) / rawAtlasPixelSize;
+    const metersPerPixelY = (atlasWorldHeight * worldCircumference) / rawAtlasPixelSize;
 
 
     const uniformValues = shadowGlobalUniformValues(painter, layer, metersPerPixelX, metersPerPixelY);
 
-    // 2. Render to Shadow FBO
-    context.bindFramebuffer.set(terrain.getFramebuffer('shadow').framebuffer);
-    context.viewport.set([0, 0, terrain._fboShadowTexture.size[0], terrain._fboShadowTexture.size[1]]);
+    // 2. Render the raw mask into a lower-res FBO, then upsample into the
+    // final 2K shadow atlas with LINEAR filtering.
+    context.bindFramebuffer.set(rawShadowFbo.framebuffer);
+    context.viewport.set([0, 0, rawAtlasPixelSize, rawAtlasPixelSize]);
     context.clear({ color: Color.transparent }); // Clear to no shadow (0)
 
     const opacity = layer.paint.get('shadow-opacity') as number;
     if (typeof opacity === 'number' && opacity <= 0.003 && (globalThis as any)._shadowDebugMode !== 2) {
+        context.bindFramebuffer.set(terrain.getFramebuffer('shadow').framebuffer);
+        context.viewport.set([0, 0, atlasPixelSize, atlasPixelSize]);
+        context.clear({ color: Color.transparent });
         context.bindFramebuffer.set(null);
         context.viewport.set([0, 0, painter.width, painter.height]);
         (terrain as any)._shadowAtlasReady = true;
@@ -627,17 +635,13 @@ export function drawGlobalShadow(
         uniformValues, null, null, layer.id, painter.rasterBoundsBuffer,
         painter.quadTriangleIndexBuffer, painter.rasterBoundsSegments);
 
-    // A small atlas-space blur is cheaper and cleaner than screen-space
-    // dithering for hiding raymarch stair-steps on the binary shadow mask.
-    const isTimeSliding = typeof window !== 'undefined' && (window as any)._isInteractingWithTime;
+    // Bilinear upsample is the edge cleanup: it keeps the final atlas at 2K
+    // for terrain sampling, but avoids exposing raw 1:1 mask stair steps.
     const progressivePhase = typeof window !== 'undefined' ? (window as any)._shadowProgressivePhase : '';
     const isProgressivePreview = progressivePhase === 'preview';
-    const useEdgeCleanup = typeof window === 'undefined' || (window as any)._shadowEdgeCleanup !== false;
-    const blurStart = debugEnabled ? performance.now() : 0;
-    if (useEdgeCleanup && !isTimeSliding && !isProgressivePreview) {
-        drawGlobalShadowBlur(painter);
-    }
-    const blurMs = debugEnabled && useEdgeCleanup && !isTimeSliding && !isProgressivePreview ? performance.now() - blurStart : 0;
+    const upsampleStart = debugEnabled ? performance.now() : 0;
+    drawGlobalShadowUpsample(painter);
+    const upsampleMs = debugEnabled ? performance.now() - upsampleStart : 0;
 
     // Unbind FBO to prevent feedback loop when terrain shader samples the shadow texture
     context.bindFramebuffer.set(null);
@@ -648,11 +652,14 @@ export function drawGlobalShadow(
     if (debugEnabled) {
         (window as any)._shadowPassDebug = {
             durationMs: performance.now() - debugStart,
-            blurMs,
+            blurMs: upsampleMs,
+            upsampleMs,
             maxSteps: uniformValues['u_max_steps'],
             stepMeters: uniformValues['u_step_meters'],
             maxDistance: uniformValues['u_max_distance'],
             atlasPixelSize,
+            rawAtlasPixelSize,
+            rawToFinalScale: atlasPixelSize / Math.max(rawAtlasPixelSize, 1),
             elevationAtlasPixelSize,
             metersPerPixelX,
             metersPerPixelY,
@@ -660,6 +667,29 @@ export function drawGlobalShadow(
             timestamp: performance.now()
         };
     }
+}
+
+function drawGlobalShadowUpsample(painter: Painter) {
+    const context = painter.context;
+    const gl = context.gl;
+    const terrainInstance = painter.style.map.terrain;
+    if (!terrainInstance || !terrainInstance._fboShadowTexture || !terrainInstance._fboShadowBlurTexture) return;
+
+    const finalSize = terrainInstance._fboShadowTexture.size[0];
+    const rawSize = terrainInstance._fboShadowBlurTexture.size[0];
+    const program = painter.useProgram('shadowBlur');
+
+    context.bindFramebuffer.set(terrainInstance.getFramebuffer('shadow').framebuffer);
+    context.viewport.set([0, 0, finalSize, finalSize]);
+    context.clear({ color: Color.transparent });
+
+    context.activeTexture.set(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, terrainInstance._fboShadowBlurTexture.texture);
+
+    program.draw(context, gl.TRIANGLES,
+        DepthMode.disabled, StencilMode.disabled, ColorMode.unblended, CullFaceMode.disabled,
+        { 'u_image': 0, 'u_direction': [0.0, 0.0], 'u_texture_size': rawSize, 'u_blur_radius': 0.0 }, null, null, 'shadow-upsample',
+        painter.rasterBoundsBuffer, painter.quadTriangleIndexBuffer, painter.rasterBoundsSegments);
 }
 
 /**
@@ -677,7 +707,7 @@ export function drawGlobalShadowBlur(painter: Painter) {
     const fboHeight = terrainInstance._fboShadowTexture.size[1];
     const blurRadius = typeof window !== 'undefined' && Number.isFinite((window as any)._shadowBlurRadius) ?
         Number((window as any)._shadowBlurRadius) :
-        0.95;
+        2.75;
     const program = painter.useProgram('shadowBlur');
     const colorMode = ColorMode.unblended;
     const depthMode = DepthMode.disabled;

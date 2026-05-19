@@ -55,6 +55,7 @@ export class TerrainTileManager extends Evented {
      * raster-dem tiles will load for performance the actualZoom - deltaZoom zoom-level.
      */
     deltaZoom: number;
+    _effectiveDeltaZoom: number;
     /**
      * used to determine whether depth & coord framebuffers need updating
      */
@@ -69,7 +70,8 @@ export class TerrainTileManager extends Evented {
         this.minzoom = 0;
         this.maxzoom = 22;
         this.deltaZoom = 1;
-        this.tileSize = tileManager._source.tileSize * 2 ** this.deltaZoom;
+        this._effectiveDeltaZoom = this._resolveEffectiveDeltaZoom();
+        this.tileSize = tileManager._source.tileSize * 2 ** this._effectiveDeltaZoom;
         tileManager.usedForTerrain = true;
         tileManager.tileSize = this.tileSize;
     }
@@ -83,12 +85,41 @@ export class TerrainTileManager extends Evented {
         return this.tileManager._source;
     }
 
+    _resolveEffectiveDeltaZoom(): number {
+        if (typeof window !== 'undefined' && (window as any)._terrainNativeDemZoom === true) {
+            return 0;
+        }
+        return this.deltaZoom;
+    }
+
+    _syncEffectiveDeltaZoom(): void {
+        const effectiveDeltaZoom = this._resolveEffectiveDeltaZoom();
+        const tileSize = this.tileManager._source.tileSize * 2 ** effectiveDeltaZoom;
+        if (effectiveDeltaZoom === this._effectiveDeltaZoom && tileSize === this.tileSize) {
+            return;
+        }
+
+        this._effectiveDeltaZoom = effectiveDeltaZoom;
+        this.tileSize = tileSize;
+        this.tileManager.tileSize = tileSize;
+        this._sourceTileCache = {};
+        this._tiles = {};
+        this._renderableTilesKeys = [];
+        this._lastTilesetChange = now();
+    }
+
+    getEffectiveDeltaZoom(): number {
+        this._syncEffectiveDeltaZoom();
+        return this._effectiveDeltaZoom;
+    }
+
     /**
      * Load Terrain Tiles, create internal render-to-texture tiles, free GPU memory.
      * @param transform - the operation to do
      * @param terrain - the terrain
      */
     update(transform: ITransform, terrain: Terrain): void {
+        this._syncEffectiveDeltaZoom();
         // load raster-dem tiles for the current scene.
         this.tileManager.update(transform, terrain);
         // create internal render-to-texture tiles for the current scene.
@@ -268,8 +299,9 @@ export class TerrainTileManager extends Evented {
      * @returns the tile
      */
     getSourceTile(tileID: OverscaledTileID, searchForDEM?: boolean): Tile | undefined {
+        this._syncEffectiveDeltaZoom();
         const source = this.tileManager._source;
-        let z = tileID.overscaledZ - this.deltaZoom;
+        let z = tileID.overscaledZ - this._effectiveDeltaZoom;
         if (z > source.maxzoom) z = source.maxzoom;
         if (z < source.minzoom) return undefined;
         // cache for tileID to terrain-tileID

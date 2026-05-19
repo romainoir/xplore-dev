@@ -24,6 +24,8 @@ export type ShadowGlobalUniformsType = {
     'u_max_steps': Uniform1f;
     'u_step_meters': Uniform1f;
     'u_max_distance': Uniform1f;
+    'u_near_cascade_distance': Uniform1f;
+    'u_mid_cascade_distance': Uniform1f;
 };
 
 export type ShadowUniformsType = {
@@ -88,6 +90,8 @@ const shadowGlobalUniforms = (context: Context, locations: UniformLocations): Sh
     'u_max_steps': new Uniform1f(context, locations.u_max_steps),
     'u_step_meters': new Uniform1f(context, locations.u_step_meters),
     'u_max_distance': new Uniform1f(context, locations.u_max_distance),
+    'u_near_cascade_distance': new Uniform1f(context, locations.u_near_cascade_distance),
+    'u_mid_cascade_distance': new Uniform1f(context, locations.u_mid_cascade_distance),
 });
 
 const shadowUniforms = (context: Context, locations: UniformLocations): ShadowUniformsType => ({
@@ -293,7 +297,12 @@ const shadowGlobalUniformValues = (
     const altRad = shadowProps.altitudeRadians;
     const dirX = Math.sin(dirRad);
     const dirY = -Math.cos(dirRad);
-    const maxDistance = Math.max(1000, shadowProps.maxDistance || 5000);
+    const reachProfile = typeof window !== 'undefined' ? (window as any)._shadowReachProfile : null;
+    const numberFromProfile = (key: string, fallback: number): number => {
+        const value = reachProfile?.[key];
+        return Number.isFinite(value) ? Number(value) : fallback;
+    };
+    const maxDistance = Math.max(1000, shadowProps.maxDistance || 5000, numberFromProfile('maxDistance', 0));
 
     const isMapMoving = painter.options.moving;
     const isTimeSliding = typeof window !== 'undefined' && (window as any)._isInteractingWithTime;
@@ -302,16 +311,18 @@ const shadowGlobalUniformValues = (
 
     const atlasGsd = Math.max(metersPerPixelX, metersPerPixelY);
     const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
-    const passMaxDistance = isProgressivePreview ? Math.min(maxDistance, 4200.0) : maxDistance;
+    const passMaxDistance = isProgressivePreview ? Math.min(maxDistance, numberFromProfile('previewMaxDistance', 4200.0)) : maxDistance;
+    const nearCascadeMeters = numberFromProfile('nearCascadeMeters', 1100.0);
+    const midCascadeMeters = numberFromProfile('midCascadeMeters', 3500.0);
 
-    const qualityScale = isProgressivePreview ? 6.0 : isTimeSliding ? 5.0 : isMapMoving ? 3.0 : 1.25;
-    const maxPreviewStep = isProgressivePreview ? 128.0 : isTimeSliding ? 96.0 : isMapMoving ? 56.0 : 18.0;
-    const minPreviewSteps = isProgressivePreview ? 18.0 : isTimeSliding ? 24.0 : isMapMoving ? 48.0 : 96.0;
+    const qualityScale = isProgressivePreview ? 6.0 : isTimeSliding ? 5.0 : isMapMoving ? 3.0 : 1.0;
+    const maxPreviewStep = isProgressivePreview ? 128.0 : isTimeSliding ? 96.0 : isMapMoving ? 56.0 : 14.0;
+    const minPreviewSteps = isProgressivePreview ? 18.0 : isTimeSliding ? 24.0 : isMapMoving ? 48.0 : 128.0;
     const maxPreviewSteps = isProgressivePreview ? 56.0 : isTimeSliding ? 80.0 : isMapMoving ? 160.0 : 384.0;
 
-    let stepMeters = clamp(atlasGsd * qualityScale, isProgressivePreview ? 28.0 : isTimeSliding ? 18.0 : isMapMoving ? 10.0 : 5.0, maxPreviewStep);
-    const nearDistance = Math.min(isProgressivePreview ? 700.0 : 1100.0, passMaxDistance);
-    const midDistance = Math.min(isProgressivePreview ? 2200.0 : 3500.0, passMaxDistance);
+    let stepMeters = clamp(atlasGsd * qualityScale, isProgressivePreview ? 28.0 : isTimeSliding ? 18.0 : isMapMoving ? 10.0 : 4.0, maxPreviewStep);
+    const nearDistance = Math.min(isProgressivePreview ? Math.min(900.0, nearCascadeMeters) : nearCascadeMeters, passMaxDistance);
+    const midDistance = Math.min(isProgressivePreview ? Math.min(2800.0, midCascadeMeters) : midCascadeMeters, passMaxDistance);
     const estimatedSteps =
         nearDistance / stepMeters +
         Math.max(0, midDistance - nearDistance) / (stepMeters * 2.75) +
@@ -325,6 +336,7 @@ const shadowGlobalUniformValues = (
             maxSteps,
             maxDistance: passMaxDistance,
             cascades: [nearDistance, midDistance, passMaxDistance],
+            reachProfile,
             progressivePhase: isProgressivePreview ? 'preview' : progressivePhase === 'full' ? 'full' : 'stable',
             interacting: isMapMoving || isTimeSliding || isProgressivePreview,
             timeSliding: isTimeSliding
@@ -342,6 +354,8 @@ const shadowGlobalUniformValues = (
         'u_max_steps': maxSteps,
         'u_step_meters': stepMeters,
         'u_max_distance': passMaxDistance,
+        'u_near_cascade_distance': nearDistance,
+        'u_mid_cascade_distance': midDistance,
     };
 };
 

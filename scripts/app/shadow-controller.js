@@ -26,11 +26,41 @@ function rgbString(rgb) {
     return `rgb(${Math.round(rgb[0])}, ${Math.round(rgb[1])}, ${Math.round(rgb[2])})`;
 }
 
+function shadowReachProfileForSun(altitudeDeg) {
+    const lowSun = 1 - smoothstep(8, 24, altitudeDeg);
+    const horizonSun = 1 - smoothstep(2.5, 9, altitudeDeg);
+    const veryLowSun = 1 - smoothstep(0.8, 4.5, altitudeDeg);
+    const longReach = clamp(lowSun * 0.62 + horizonSun * 0.30 + veryLowSun * 0.08, 0, 1);
+
+    return {
+        lowSun,
+        horizonSun,
+        veryLowSun,
+        longReach,
+        maxDistance: Math.round(mixNumber(8000, 18000, longReach)),
+        midReachMeters: Math.round(mixNumber(2200, 5600, longReach)),
+        farReachMeters: Math.round(mixNumber(5000, 18000, longReach)),
+        nearCascadeMeters: Math.round(mixNumber(1100, 1600, longReach)),
+        midCascadeMeters: Math.round(mixNumber(3500, 5600, longReach)),
+        maxTiles: Math.round(mixNumber(72, 112, longReach)),
+        maxCoreTiles: Math.round(mixNumber(32, 40, longReach)),
+        zoomBias: mixNumber(0, 0.15, lowSun),
+        previewMaxDistance: Math.round(mixNumber(4200, 7200, longReach)),
+        previewMidReachMeters: Math.round(mixNumber(1400, 2800, longReach)),
+        previewFarReachMeters: Math.round(mixNumber(3400, 7200, longReach)),
+        previewMaxTiles: Math.round(mixNumber(28, 42, longReach)),
+        previewMaxCoreTiles: Math.round(mixNumber(10, 14, longReach)),
+        previewZoomBias: mixNumber(-1.35, -0.95, lowSun)
+    };
+}
+
 function publishSolarState(date, center, sunPos, sunAzimuthDeg, sunAltitudeDeg) {
     const azimuthRad = sunAzimuthDeg * Math.PI / 180;
+    const reachProfile = shadowReachProfileForSun(sunAltitudeDeg);
     window._skySunAzimuthRad = azimuthRad;
     window._skySunAltitudeRad = sunPos.altitude;
     window._actualSunAltitudeRad = sunPos.altitude;
+    window._shadowReachProfile = reachProfile;
     window._shadowSunDirection = [
         Math.sin(azimuthRad),
         -Math.cos(azimuthRad)
@@ -42,7 +72,8 @@ function publishSolarState(date, center, sunPos, sunAzimuthDeg, sunAltitudeDeg) 
         azimuthDeg: sunAzimuthDeg,
         azimuthRad,
         altitudeDeg: sunAltitudeDeg,
-        altitudeRad: sunPos.altitude
+        altitudeRad: sunPos.altitude,
+        reachProfile
     };
 }
 
@@ -87,14 +118,15 @@ function ensureShadowRuntimeDefaults() {
     setDefaultGlobal('_shadowUseHorizonCurrent', false);
     setDefaultGlobal('_terrainNativeDemZoom', true);
     setDefaultGlobal('_castShadowMult', 1.45);
-    setDefaultGlobal('_selfShadowMult', 3.0);
+    setDefaultGlobal('_selfShadowMult', 1.8);
     setDefaultGlobal('_horizonQualityPreset', 'balanced');
     setDefaultGlobal('_horizonDirectionBins', 16);
     setDefaultGlobal('_horizonEdgeSoftness', 1.0);
     setDefaultGlobal('_horizonEdgeNaturalness', 0.0);
     setDefaultGlobal('_shadowAtlasSize', 2048);
+    setDefaultGlobal('_shadowMaskScale', 0.5);
     setDefaultGlobal('_shadowEdgeCleanup', true);
-    setDefaultGlobal('_shadowBlurRadius', 0.95);
+    setDefaultGlobal('_shadowBlurRadius', 2.75);
     setDefaultGlobal('_shadowCameraMoving', false);
     setDefaultGlobal('_shadowCameraRefreshHold', false);
     setDefaultGlobal('_shadowProgressivePhase', 'stable');
@@ -263,6 +295,7 @@ export function createShadowController(map, deps = {}) {
 
             safeSetPaint('shadow-coarse', 'shadow-direction', sunAzi);
             safeSetPaint('shadow-coarse', 'shadow-altitude', renderAltitude);
+            safeSetPaint('shadow-coarse', 'shadow-max-distance', window._shadowReachProfile?.maxDistance || 8000);
             safeSetPaint('shadow-coarse', 'shadow-shadow-color', colors.shadow);
             safeSetPaint('shadow-coarse', 'shadow-highlight-color', colors.highlight);
             safeSetPaint('terrain-derivative-cache', 'hillshade-illumination-direction', sunAzi);

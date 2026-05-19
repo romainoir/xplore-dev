@@ -158,6 +158,8 @@ export function createImageryManager(map, deps = {}) {
     // ─── State ───
     const imageryState = new Map();
     const imageryControls = new Map();
+    const nativeHillshadeRestoreVisibility = new Map();
+    let nativeHillshadeSuppressionActive = false;
 
     IMAGERY_OPTIONS.forEach((option, index) => {
         const paintOpacity = option?.paint && typeof option.paint['raster-opacity'] === 'number' ? clampOpacity(option.paint['raster-opacity']) : 1;
@@ -176,6 +178,43 @@ export function createImageryManager(map, deps = {}) {
     const SHADOW_TOOLBOX_IDS = ['shadow', 'daylight', ...SUN_DURATION_ADDON_IDS];
     const TERRAIN_TOOLBOX_IDS = ['aspect', 'slope', 'avalanche'];
     const SNOW_TOOLBOX_IDS = ['snow', 'snow-depth'];
+
+    function syncNativeHillshadeVisibilityForShadow(shadowActive) {
+        if (typeof window !== 'undefined') {
+            window._xploreShadowSuppressesNativeHillshade = Boolean(shadowActive);
+        }
+
+        const nativeHillshadeLayerIds = ['hillshade', 'hillshade2'];
+        if (shadowActive) {
+            if (!nativeHillshadeSuppressionActive) {
+                nativeHillshadeRestoreVisibility.clear();
+                nativeHillshadeLayerIds.forEach((id) => {
+                    if (!map.getLayer(id)) return;
+                    try {
+                        nativeHillshadeRestoreVisibility.set(id, map.getLayoutProperty(id, 'visibility') || 'visible');
+                    } catch (_) {
+                        nativeHillshadeRestoreVisibility.set(id, 'visible');
+                    }
+                });
+                nativeHillshadeSuppressionActive = true;
+            }
+            nativeHillshadeLayerIds.forEach((id) => {
+                if (!map.getLayer(id)) return;
+                try { map.setLayoutProperty(id, 'visibility', 'none'); } catch (_) { }
+            });
+            return;
+        }
+
+        if (!nativeHillshadeSuppressionActive) return;
+        const vectorBaseHidden = typeof window !== 'undefined' && window._xploreVectorBaseVisible === false;
+        nativeHillshadeLayerIds.forEach((id) => {
+            if (!map.getLayer(id)) return;
+            const restoreVisibility = vectorBaseHidden ? 'none' : (nativeHillshadeRestoreVisibility.get(id) || 'visible');
+            try { map.setLayoutProperty(id, 'visibility', restoreVisibility); } catch (_) { }
+        });
+        nativeHillshadeRestoreVisibility.clear();
+        nativeHillshadeSuppressionActive = false;
+    }
 
     // Build imageryOrder with group members kept contiguous
     let imageryOrder = [];
@@ -433,6 +472,8 @@ export function createImageryManager(map, deps = {}) {
         if (typeof viewModeController?.setAnalysisTerrainRequired === 'function') {
             viewModeController.setAnalysisTerrainRequired(sunAnalysisRequiresTerrain);
         }
+        const shadowState = imageryState.get('shadow');
+        syncNativeHillshadeVisibilityForShadow(Boolean(shadowState?.enabled && clampOpacity(shadowState.opacity ?? 0) > 0));
         updateAnalyticalLegends();
     }
 

@@ -40,6 +40,11 @@ export function applyHillshadeAppearance(map) {
     if (!map.getLayer('hillshade')) return;
 
     const style = HILLSHADE_METHOD_STYLES.igor;
+    const shadowState = typeof window !== 'undefined' ? window.imageryState?.get?.('shadow') : null;
+    const suppressNativeHillshade = Boolean(
+        (typeof window !== 'undefined' && window._xploreShadowSuppressesNativeHillshade === true) ||
+        (shadowState?.enabled && clampOpacity(shadowState.opacity ?? 0) > 0)
+    );
     map.setPaintProperty('hillshade', 'hillshade-illumination-anchor', 'map');
     map.setPaintProperty('hillshade', 'hillshade-method', 'igor');
 
@@ -47,7 +52,10 @@ export function applyHillshadeAppearance(map) {
     map.setPaintProperty('hillshade', 'hillshade-shadow-color', style.shadowColor);
     map.setPaintProperty('hillshade', 'hillshade-accent-color', style.accentColor || style.shadowColor);
     map.setPaintProperty('hillshade', 'hillshade-exaggeration', style.exaggeration);
-    map.setLayoutProperty('hillshade', 'visibility', 'visible');
+    map.setLayoutProperty('hillshade', 'visibility', suppressNativeHillshade ? 'none' : 'visible');
+    if (suppressNativeHillshade && map.getLayer('hillshade2')) {
+        map.setLayoutProperty('hillshade2', 'visibility', 'none');
+    }
 
 
 }

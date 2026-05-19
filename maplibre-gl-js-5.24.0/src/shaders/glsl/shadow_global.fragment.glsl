@@ -8,6 +8,8 @@ uniform float u_max_steps;
 uniform float u_step_meters;
 uniform vec2 u_dimension;
 uniform float u_max_distance;
+uniform float u_near_cascade_distance;
+uniform float u_mid_cascade_distance;
 
 in vec2 v_pos; // Viewport UV (0..1)
 
@@ -23,9 +25,6 @@ highp float unpack(highp vec4 color) {
 
 const float WORLD_CIRCUMFERENCE = 40075016.7;
 const float EMPTY_ELEVATION = -9900.0;
-const float NEAR_CASCADE_METERS = 1100.0;
-const float MID_CASCADE_METERS = 3500.0;
-
 // Safe Bilinear Fetch to prevent corrupt RGBA base-256 wrapping interpolation
 float sampleElevationBilinear(vec2 uv) {
     vec2 dim = u_dimension;
@@ -58,15 +57,16 @@ float hash12(vec2 p) {
 }
 
 float cascadeStepMultiplier(float distanceMeters) {
-    float nearToMid = smoothstep(NEAR_CASCADE_METERS * 0.75, NEAR_CASCADE_METERS * 1.25, distanceMeters);
-    float midToFar = smoothstep(MID_CASCADE_METERS * 0.75, MID_CASCADE_METERS * 1.25, distanceMeters);
+    float nearDistance = max(u_near_cascade_distance, 1.0);
+    float midDistance = max(u_mid_cascade_distance, nearDistance + 1.0);
+    float nearToMid = smoothstep(nearDistance * 0.75, nearDistance * 1.25, distanceMeters);
+    float midToFar = smoothstep(midDistance * 0.75, midDistance * 1.25, distanceMeters);
     return mix(mix(1.0, 2.75, nearToMid), 7.0, midToFar);
 }
 
 float sampleElevationCascade(vec2 uv, float distanceMeters) {
-    if (distanceMeters > MID_CASCADE_METERS) {
-        return sampleElevationNearest(uv);
-    }
+    // Manual bilinear sampling is more expensive than nearest, but it removes
+    // far-cascade blockiness in cast-shadow silhouettes after camera idle.
     return sampleElevationBilinear(uv);
 }
 
@@ -119,7 +119,7 @@ void main() {
 
         float elev = sampleElevationCascade(currentUV, distanceMeters);
         float margin = elev - currentRayHeight;
-        if (distanceMeters > MID_CASCADE_METERS && margin > -u_step_meters * 2.0) {
+        if (distanceMeters > u_mid_cascade_distance && margin > -u_step_meters * 2.0) {
             elev = sampleElevationBilinear(currentUV);
             margin = elev - currentRayHeight;
         }

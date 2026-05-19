@@ -988,6 +988,7 @@ async function init() {
     // Hide/show hillshade + terrain background + all non-overlay vector layers
     const TERRAIN_BG_LAYERS = ['hillshade', 'hillshade2', 'terrain-bg', 'terrain'];
     const setVectorBaseVisible = (visible) => {
+      window._xploreVectorBaseVisible = Boolean(visible);
       const vis = visible ? 'visible' : 'none';
       // Hillshade and terrain raster
       TERRAIN_BG_LAYERS.forEach(id => {

@@ -64,14 +64,7 @@ export type TerrainUniformsType = {
     'u_dem_ao_meters_per_pixel': Uniform1f;
     'u_dem_derivative': Uniform1i;
     'u_dem_derivative_available': Uniform1f;
-    'u_elevation_atlas': Uniform1i;
-    'u_metersPerPixel': Uniform1f;
     'u_shadow_atlas_size': Uniform1f;
-    'u_max_steps': Uniform1f;
-    'u_step_meters': Uniform1f;
-    'u_shadow_soft_base': Uniform1f;
-    'u_shadow_soft_mult': Uniform1f;
-    'u_shadow_soft_max': Uniform1f;
     'u_self_shadow_mult': Uniform1f;
 };
 
@@ -138,14 +131,7 @@ const terrainUniforms = (context: Context, locations: UniformLocations): Terrain
     'u_dem_ao_meters_per_pixel': new Uniform1f(context, locations.u_dem_ao_meters_per_pixel),
     'u_dem_derivative': new Uniform1i(context, locations.u_dem_derivative),
     'u_dem_derivative_available': new Uniform1f(context, locations.u_dem_derivative_available),
-    'u_elevation_atlas': new Uniform1i(context, locations.u_elevation_atlas),
-    'u_metersPerPixel': new Uniform1f(context, locations.u_metersPerPixel),
     'u_shadow_atlas_size': new Uniform1f(context, locations.u_shadow_atlas_size),
-    'u_max_steps': new Uniform1f(context, locations.u_max_steps),
-    'u_step_meters': new Uniform1f(context, locations.u_step_meters),
-    'u_shadow_soft_base': new Uniform1f(context, locations.u_shadow_soft_base),
-    'u_shadow_soft_mult': new Uniform1f(context, locations.u_shadow_soft_mult),
-    'u_shadow_soft_max': new Uniform1f(context, locations.u_shadow_soft_max),
     'u_self_shadow_mult': new Uniform1f(context, locations.u_self_shadow_mult),
 });
 
@@ -249,8 +235,7 @@ const terrainUniformValues = (
             if (typeof window !== 'undefined') {
                 const imageryState = (window as any).imageryState;
                 const shadowEnabled = imageryState?.get?.('shadow')?.enabled === true;
-                if (shadowEnabled) return 1.0;
-                if ((window as any)._xploreSunAnalysisTerrain === true) return 1.0;
+                return shadowEnabled ? 1.0 : 0.0;
             }
             return 0.0;
         })(),
@@ -274,25 +259,8 @@ const terrainUniformValues = (
         'u_dem_ao_meters_per_pixel': 40075016.7 / (512 * Math.pow(2, tile ? tile.tileID.canonical.z : zoom)),
         'u_dem_derivative': 12,
         'u_dem_derivative_available': 0,
-        'u_elevation_atlas': 14, // Bind elevation atlas to unit 14
-        'u_metersPerPixel': 40075016.7 / (512 * Math.pow(2, tile ? tile.tileID.canonical.z : zoom)),
         'u_shadow_atlas_size': (painter?.style?.map?.terrain as any)?._fboShadowTexture?.size?.[0] || 2048.0,
-        'u_max_steps': (() => {
-            // Option D (Aggressive Interaction Degradation) caused fatal banding and "white holes" 
-            // due to massive 5x stride jumps mathematically missing thin mountain ridges.
-            // We now use a high-quality constant step count, linked to the UI Debug Slider.
-            // Never degrade step count during panning or time-scrubbing to prevent artifacts.
-            return (typeof window !== 'undefined' && (window as any)._shadowMaxSteps) ? (window as any)._shadowMaxSteps : 80.0;
-        })(),
-        'u_step_meters': (() => {
-            // Keep base stride constant. The shader's interactionScale magically multiplies 
-            // the distance based on u_max_steps.
-            return (typeof window !== 'undefined' && (window as any)._shadowStepSize) ? (window as any)._shadowStepSize * 10.0 : 40.0;
-        })(),
-        'u_shadow_soft_base': (typeof window !== 'undefined' && (window as any)._shadowSoftBase !== undefined) ? (window as any)._shadowSoftBase : 10.0,
-        'u_shadow_soft_mult': (typeof window !== 'undefined' && (window as any)._shadowSoftMult !== undefined) ? (window as any)._shadowSoftMult : 10.0,
-        'u_shadow_soft_max': (typeof window !== 'undefined' && (window as any)._shadowSoftMax !== undefined) ? (window as any)._shadowSoftMax : 100.0,
-        'u_self_shadow_mult': (typeof window !== 'undefined' && (window as any)._selfShadowMult !== undefined) ? (window as any)._selfShadowMult : 3.0,
+        'u_self_shadow_mult': (typeof window !== 'undefined' && (window as any)._selfShadowMult !== undefined) ? (window as any)._selfShadowMult : 1.8,
     };
 };
 

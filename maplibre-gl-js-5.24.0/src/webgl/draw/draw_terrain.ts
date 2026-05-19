@@ -308,6 +308,33 @@ function collectLodTileIDs(visibleBounds: MercatorBounds, dx: number, dy: number
     return atlas;
 }
 
+function numberFromProfile(profile: any, key: string, fallback: number): number {
+    const value = profile?.[key];
+    return Number.isFinite(value) ? Number(value) : fallback;
+}
+
+function getShadowAtlasLodOptions(previewAtlas: boolean): AtlasLodOptions {
+    const profile = typeof window !== 'undefined' ? (window as any)._shadowReachProfile : null;
+
+    if (previewAtlas) {
+        return {
+            maxTiles: Math.round(numberFromProfile(profile, 'previewMaxTiles', 28)),
+            maxCoreTiles: Math.round(numberFromProfile(profile, 'previewMaxCoreTiles', 10)),
+            zoomBias: numberFromProfile(profile, 'previewZoomBias', -1.35),
+            midReachMeters: numberFromProfile(profile, 'previewMidReachMeters', 1400),
+            farReachMeters: numberFromProfile(profile, 'previewFarReachMeters', 3400)
+        };
+    }
+
+    return {
+        maxTiles: Math.round(numberFromProfile(profile, 'maxTiles', MAX_ELEVATION_ATLAS_TILES)),
+        maxCoreTiles: Math.round(numberFromProfile(profile, 'maxCoreTiles', MAX_CORE_ATLAS_TILES)),
+        zoomBias: numberFromProfile(profile, 'zoomBias', 0),
+        midReachMeters: numberFromProfile(profile, 'midReachMeters', MID_SHADOW_REACH_METERS),
+        farReachMeters: numberFromProfile(profile, 'farReachMeters', SHADOW_REACH_METERS)
+    };
+}
+
 /**
  * Redraw the Depth Framebuffer
  * @param painter - the painter
@@ -415,11 +442,12 @@ function drawElevation(painter: Painter, terrain: Terrain) {
     const source = terrain.tileManager.getSource();
     const sourceMinZoom = source.minzoom ?? terrain.tileManager.minzoom ?? 0;
     const sourceMaxZoom = source.maxzoom ?? terrain.tileManager.maxzoom ?? 22;
-    const terrainDeltaZoom = terrain.tileManager.deltaZoom ?? 0;
+    const terrainDeltaZoom = terrain.tileManager.getEffectiveDeltaZoom();
     const targetMinZoom = sourceMinZoom + terrainDeltaZoom;
     const targetMaxZoom = sourceMaxZoom + terrainDeltaZoom;
     const progressivePhase = typeof window !== 'undefined' ? (window as any)._shadowProgressivePhase : '';
     const previewAtlas = progressivePhase === 'preview';
+    const atlasLodOptions = getShadowAtlasLodOptions(previewAtlas);
     const atlasCells = collectLodTileIDs(
         { minX, minY, maxX, maxY },
         dxRes,
@@ -427,13 +455,7 @@ function drawElevation(painter: Painter, terrain: Terrain) {
         tr.zoom,
         targetMinZoom,
         targetMaxZoom,
-        previewAtlas ? {
-            maxTiles: 28,
-            maxCoreTiles: 10,
-            zoomBias: -1.35,
-            midReachMeters: 1400,
-            farReachMeters: 3400
-        } : {}
+        atlasLodOptions
     );
     const captureTileIDs = atlasCells.tileIDs;
 
@@ -528,7 +550,11 @@ function drawElevation(painter: Painter, terrain: Terrain) {
             size: atlasSize,
             tiles: capturedIds,
             lodZooms: atlasCells.lodZooms,
-            maxTiles: previewAtlas ? 28 : MAX_ELEVATION_ATLAS_TILES,
+            maxTiles: atlasLodOptions.maxTiles ?? MAX_ELEVATION_ATLAS_TILES,
+            maxCoreTiles: atlasLodOptions.maxCoreTiles ?? MAX_CORE_ATLAS_TILES,
+            midReachMeters: atlasLodOptions.midReachMeters ?? MID_SHADOW_REACH_METERS,
+            farReachMeters: atlasLodOptions.farReachMeters ?? SHADOW_REACH_METERS,
+            reachProfile: typeof window !== 'undefined' ? (window as any)._shadowReachProfile : null,
             progressivePhase: previewAtlas ? 'preview' : progressivePhase === 'full' ? 'full' : 'stable',
             parentFallbackCount,
             flatFallbackCount,
@@ -736,14 +762,6 @@ function drawTerrain(painter: Painter, terrain: Terrain, tiles: Array<Tile>, ren
         if (terrainData && (terrainData as any).texture) {
             gl.bindTexture(gl.TEXTURE_2D, (terrainData as any).texture);
         }
-        // Elevation Atlas: bind the seamless global elevation FBO to unit 14
-        context.activeTexture.set(gl.TEXTURE14);
-        const elevFbo = terrain.getFramebuffer('elevation');
-        const elevTex = elevFbo ? elevFbo.colorAttachment.get() : null;
-        if (elevTex) {
-            gl.bindTexture(gl.TEXTURE_2D, elevTex);
-        }
-
         const uniformValues = terrainUniformValues(eleDelta, fogMatrix, painter.style.sky, tr.pitch, isRenderingGlobe, tr.zoom, painter, tile);
         uniformValues['u_tile_zoom'] = tile.tileID.canonical.z;
         uniformValues['u_dem_derivative'] = 12;
