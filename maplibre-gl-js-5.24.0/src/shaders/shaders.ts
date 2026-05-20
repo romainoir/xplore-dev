@@ -45,6 +45,11 @@ import shadowPrepareFrag from './glsl/shadow_prepare.fragment.glsl.g';
 import shadowPrepareVert from './glsl/shadow_prepare.vertex.glsl.g';
 import shadowGlobalFrag from './glsl/shadow_global.fragment.glsl.g';
 import shadowGlobalVert from './glsl/shadow_global.vertex.glsl.g';
+import shadowSweepInitFrag from './glsl/shadow_sweep_init.fragment.glsl.g';
+import shadowSweepStepFrag from './glsl/shadow_sweep_step.fragment.glsl.g';
+import shadowSweepFinalFrag from './glsl/shadow_sweep_final.fragment.glsl.g';
+import shadowHizMipFrag from './glsl/shadow_hiz_mip.fragment.glsl.g';
+import shadowHizGlobalFrag from './glsl/shadow_hiz_global.fragment.glsl.g';
 import shadowBlurFrag from './glsl/shadow_blur.fragment.glsl.g';
 import shadowBlurVert from './glsl/shadow_blur.vertex.glsl.g';
 import daylightFrag from './glsl/daylight.fragment.glsl.g';
@@ -119,6 +124,11 @@ export const shaders = {
     shadow: prepare(shadowFrag, shadowVert),
     shadowPrepare: prepare(shadowPrepareFrag, shadowPrepareVert),
     shadowGlobal: prepare(shadowGlobalFrag, shadowGlobalVert),
+    shadowSweepInit: prepare(shadowSweepInitFrag, shadowGlobalVert),
+    shadowSweepStep: prepare(shadowSweepStepFrag, shadowGlobalVert),
+    shadowSweepFinal: prepare(shadowSweepFinalFrag, shadowGlobalVert),
+    shadowHizMip: prepare(shadowHizMipFrag, shadowGlobalVert),
+    shadowHizGlobal: prepare(shadowHizGlobalFrag, shadowGlobalVert),
     shadowBlur: prepare(shadowBlurFrag, shadowBlurVert),
     horizonPrepare: prepare(horizonPrepareFrag, shadowGlobalVert),
     daylightPrepare: prepare(daylightPrepareFrag, shadowGlobalVert),

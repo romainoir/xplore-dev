@@ -2408,6 +2408,20 @@ export class Map extends Camera {
     }
 
     /**
+     * Reads one of the cached shadow atlas FBOs for manual debug snapshots.
+     *
+     * This stalls the GPU and should only be called from explicit debug UI
+     * actions, not every frame.
+     *
+     * @param kind - `shadow`, `raw`, `near`, or `near-raw`
+     * @returns atlas pixels plus atlas size, or null when the FBO is not ready
+     */
+    readShadowAtlasPixels(kind: string = 'shadow'): {kind: string; size: number; pixels: Uint8Array} | null {
+        if (!this.terrain) return null;
+        return this.terrain.readShadowAtlasPixels(kind);
+    }
+
+    /**
      * Reads cached sun-analysis atlas values for a location.
      *
      * Xplore uses this for lightweight hover readouts on Sunlight Hours,

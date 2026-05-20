@@ -41,9 +41,13 @@ export function applyHillshadeAppearance(map) {
 
     const style = HILLSHADE_METHOD_STYLES.igor;
     const shadowState = typeof window !== 'undefined' ? window.imageryState?.get?.('shadow') : null;
+    const shadowV2State = typeof window !== 'undefined' ? window.imageryState?.get?.('shadow-v2') : null;
+    const shadowV3State = typeof window !== 'undefined' ? window.imageryState?.get?.('shadow-v3') : null;
     const suppressNativeHillshade = Boolean(
         (typeof window !== 'undefined' && window._xploreShadowSuppressesNativeHillshade === true) ||
-        (shadowState?.enabled && clampOpacity(shadowState.opacity ?? 0) > 0)
+        (shadowState?.enabled && clampOpacity(shadowState.opacity ?? 0) > 0) ||
+        (shadowV2State?.enabled && clampOpacity(shadowV2State.opacity ?? 0) > 0) ||
+        (shadowV3State?.enabled && clampOpacity(shadowV3State.opacity ?? 0) > 0)
     );
     map.setPaintProperty('hillshade', 'hillshade-illumination-anchor', 'map');
     map.setPaintProperty('hillshade', 'hillshade-method', 'igor');
@@ -255,6 +259,29 @@ export function applyOverlays(map, deps = {}) {
         }
     }, topLabelId || undefined);
 
+    ensureL({
+        id: 'daylight-v2-native',
+        type: 'daylight',
+        source: 'terrainSource',
+        layout: { 'visibility': 'none' },
+        paint: {
+            'daylight-opacity': 0.94,
+            'daylight-color-ramp': [
+                'interpolate',
+                ['linear'],
+                ['line-progress'],
+                0.00, '#16051f',
+                0.10, '#3b0f70',
+                0.22, '#7a1f6a',
+                0.36, '#b21f47',
+                0.52, '#e34a28',
+                0.68, '#f98e09',
+                0.84, '#f9d64a',
+                1.00, '#fff7bc'
+            ]
+        }
+    }, topLabelId || undefined);
+
     const sunWindowPaint = {
         'daylight-opacity': 0.86,
         'daylight-color-ramp': [
@@ -290,6 +317,40 @@ export function applyOverlays(map, deps = {}) {
     // shadow_debug_poc.html; horizon atlases are reserved for daylight duration.
     ensureL({
         id: 'shadow-coarse',
+        type: 'shadow',
+        source: 'terrainSource',
+        layout: { 'visibility': 'none' },
+        paint: {
+            'shadow-opacity': 1.0,
+            'shadow-color': '#000000',
+            'shadow-shadow-color': '#000000',
+            'shadow-highlight-color': '#ffffff',
+            'shadow-direction': 315,
+            'shadow-altitude': 45,
+            'shadow-max-distance': 8000,
+            'shadow-penumbra': 1.0
+        }
+    });
+
+    ensureL({
+        id: 'shadow-v2-coarse',
+        type: 'shadow',
+        source: 'terrainSource',
+        layout: { 'visibility': 'none' },
+        paint: {
+            'shadow-opacity': 1.0,
+            'shadow-color': '#000000',
+            'shadow-shadow-color': '#000000',
+            'shadow-highlight-color': '#ffffff',
+            'shadow-direction': 315,
+            'shadow-altitude': 45,
+            'shadow-max-distance': 8000,
+            'shadow-penumbra': 1.0
+        }
+    });
+
+    ensureL({
+        id: 'shadow-v3-coarse',
         type: 'shadow',
         source: 'terrainSource',
         layout: { 'visibility': 'none' },

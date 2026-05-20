@@ -12,6 +12,7 @@ import { createImageryManager, IMAGERY_OPTIONS, LAYER_GROUP_BY_MEMBER_ID, SUN_DU
 import { applyOverlays, applyHillshadeAppearance, injectOverlaysIntoStyle } from './overlay-manager.js';
 import { createRoutingOrchestrator } from './routing-orchestrator.js';
 import { createShadowController } from './shadow-controller.js';
+import { initShadowV3DebugOverlay } from './shadow-v3-debug-overlay.js?v=20260520-shadow-v3-component-1';
 import {
   initTerrainAnalysisConfig,
   setupTerrainHoverInfo,
@@ -43,6 +44,8 @@ import {
 async function init() {
   // ── 1. Create Map ──
   const { map } = await createMap();
+  const shadowV3DebugOverlay = initShadowV3DebugOverlay(map);
+  window.ShadowV3DebugOverlay = shadowV3DebugOverlay;
 
   // ── 2. Contours are shader-based (terrain_program.ts reads window.imageryState) ──
 
@@ -532,6 +535,7 @@ async function init() {
   const debugLayersToggle = document.getElementById('debugLayersToggle');
   const debugNetworkToggle = document.getElementById('debugNetworkToggle');
   const debugShadowTunerToggle = document.getElementById('debugShadowTunerToggle');
+  const debugShadowV3AtlasToggle = document.getElementById('debugShadowV3AtlasToggle');
   const debugTileBordersToggle = document.getElementById('debugTileBordersToggle');
 
   const setDebugOptionsOpen = (open) => {
@@ -553,6 +557,7 @@ async function init() {
         if (debugTileBordersToggle?.checked) { debugTileBordersToggle.checked = false; debugTileBordersToggle.dispatchEvent(new Event('change')); }
         if (debugNetworkToggle?.checked) { debugNetworkToggle.checked = false; debugNetworkToggle.dispatchEvent(new Event('change')); }
         if (debugShadowTunerToggle?.checked) { debugShadowTunerToggle.checked = false; debugShadowTunerToggle.dispatchEvent(new Event('change')); }
+        if (debugShadowV3AtlasToggle?.checked) { debugShadowV3AtlasToggle.checked = false; debugShadowV3AtlasToggle.dispatchEvent(new Event('change')); }
       }
       console.log(`[Settings] Debug mode ${debugModeToggle.checked ? 'enabled' : 'disabled'}`);
     });
@@ -727,6 +732,13 @@ async function init() {
     if (toolboxes.terrain.box) toolboxes.terrain.box.textContent = '';
     if (toolboxes.snow.box) toolboxes.snow.box.textContent = '';
 
+    const SHADOW_MODE_IDS = ['shadow', 'shadow-v2', 'shadow-v3'];
+    const disableShadowModes = () => {
+      SHADOW_MODE_IDS.forEach((id) => {
+        const state = imagery.imageryState.get(id);
+        if (state) state.enabled = false;
+      });
+    };
     const disableSunDurationAddons = () => {
       SUN_DURATION_ADDON_IDS.forEach((id) => {
         const state = imagery.imageryState.get(id);
@@ -741,8 +753,7 @@ async function init() {
         daylightState.enabled = true;
         if (daylightState.opacity <= 0) daylightState.opacity = typeof daylightOption?.defaultOpacity === 'number' ? daylightOption.defaultOpacity : 1.0;
       }
-      const shadowState = imagery.imageryState.get('shadow');
-      if (shadowState) shadowState.enabled = false;
+      disableShadowModes();
     };
     const enableSunDurationAddon = (addonOption, enabled) => {
       const daylightState = imagery.imageryState.get('daylight');
@@ -751,8 +762,7 @@ async function init() {
         const state = imagery.imageryState.get(id);
         if (state) state.enabled = false;
       });
-      const shadowState = imagery.imageryState.get('shadow');
-      if (shadowState) shadowState.enabled = false;
+      disableShadowModes();
       const addonState = imagery.imageryState.get(addonOption.id);
       if (!addonState) return;
       addonState.enabled = enabled;
@@ -809,7 +819,7 @@ async function init() {
         }
         cur.enabled = nextEnabled;
         if (nextEnabled && cur.opacity <= 0) cur.opacity = typeof option.defaultOpacity === 'number' ? option.defaultOpacity : 1.0;
-        if (option.id === 'shadow' && nextEnabled) disableSunDurationAddons();
+        if (SHADOW_MODE_IDS.includes(option.id) && nextEnabled) disableSunDurationAddons();
         if (option.id === 'daylight' && nextEnabled) enableSunDurationBase();
         if (option.id === 'daylight' && !nextEnabled) disableSunDurationAddons();
         refreshImageryAfterToolboxChange();

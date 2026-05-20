@@ -41,13 +41,20 @@ export type TerrainUniformsType = {
     'u_zoom': Uniform1f;
     'u_tile_zoom': Uniform1f;
     'u_shadow_atlas': Uniform1i;
+    'u_shadow_near_atlas': Uniform1i;
     'u_horizon0': Uniform1i;
     'u_horizon1': Uniform1i;
     'u_horizon2': Uniform1i;
     'u_horizon3': Uniform1i;
     'u_atlas_bounds': Uniform4f;
+    'u_near_atlas_bounds': Uniform4f;
     'u_tile_id': Uniform3f;
     'u_shadow_intensity': Uniform1f;
+    'u_shadow_near_available': Uniform1f;
+    'u_shadow_near_fade': Uniform1f;
+    'u_shadow_near_debug_tint': Uniform1f;
+    'u_shadow_display_mode': Uniform1f;
+    'u_shadow_component_mode': Uniform1f;
     'u_horizon_available': Uniform1f;
     'u_horizon_bins': Uniform1f;
     'u_horizon_edge_softness': Uniform1f;
@@ -65,7 +72,13 @@ export type TerrainUniformsType = {
     'u_dem_derivative': Uniform1i;
     'u_dem_derivative_available': Uniform1f;
     'u_shadow_atlas_size': Uniform1f;
+    'u_shadow_near_atlas_size': Uniform1f;
     'u_self_shadow_mult': Uniform1f;
+    'u_contact_shadow_enabled': Uniform1f;
+    'u_contact_shadow_strength': Uniform1f;
+    'u_contact_shadow_distance': Uniform1f;
+    'u_contact_shadow_steps': Uniform1f;
+    'u_shadow_white_base': Uniform1f;
 };
 
 export type TerrainElevationUniformsType = {
@@ -108,13 +121,20 @@ const terrainUniforms = (context: Context, locations: UniformLocations): Terrain
     'u_zoom': new Uniform1f(context, locations.u_zoom),
     'u_tile_zoom': new Uniform1f(context, locations.u_tile_zoom),
     'u_shadow_atlas': new Uniform1i(context, locations.u_shadow_atlas),
+    'u_shadow_near_atlas': new Uniform1i(context, locations.u_shadow_near_atlas),
     'u_horizon0': new Uniform1i(context, locations.u_horizon0),
     'u_horizon1': new Uniform1i(context, locations.u_horizon1),
     'u_horizon2': new Uniform1i(context, locations.u_horizon2),
     'u_horizon3': new Uniform1i(context, locations.u_horizon3),
     'u_atlas_bounds': new Uniform4f(context, locations.u_atlas_bounds),
+    'u_near_atlas_bounds': new Uniform4f(context, locations.u_near_atlas_bounds),
     'u_tile_id': new Uniform3f(context, locations.u_tile_id),
     'u_shadow_intensity': new Uniform1f(context, locations.u_shadow_intensity),
+    'u_shadow_near_available': new Uniform1f(context, locations.u_shadow_near_available),
+    'u_shadow_near_fade': new Uniform1f(context, locations.u_shadow_near_fade),
+    'u_shadow_near_debug_tint': new Uniform1f(context, locations.u_shadow_near_debug_tint),
+    'u_shadow_display_mode': new Uniform1f(context, locations.u_shadow_display_mode),
+    'u_shadow_component_mode': new Uniform1f(context, locations.u_shadow_component_mode),
     'u_horizon_available': new Uniform1f(context, locations.u_horizon_available),
     'u_horizon_bins': new Uniform1f(context, locations.u_horizon_bins),
     'u_horizon_edge_softness': new Uniform1f(context, locations.u_horizon_edge_softness),
@@ -132,7 +152,13 @@ const terrainUniforms = (context: Context, locations: UniformLocations): Terrain
     'u_dem_derivative': new Uniform1i(context, locations.u_dem_derivative),
     'u_dem_derivative_available': new Uniform1f(context, locations.u_dem_derivative_available),
     'u_shadow_atlas_size': new Uniform1f(context, locations.u_shadow_atlas_size),
+    'u_shadow_near_atlas_size': new Uniform1f(context, locations.u_shadow_near_atlas_size),
     'u_self_shadow_mult': new Uniform1f(context, locations.u_self_shadow_mult),
+    'u_contact_shadow_enabled': new Uniform1f(context, locations.u_contact_shadow_enabled),
+    'u_contact_shadow_strength': new Uniform1f(context, locations.u_contact_shadow_strength),
+    'u_contact_shadow_distance': new Uniform1f(context, locations.u_contact_shadow_distance),
+    'u_contact_shadow_steps': new Uniform1f(context, locations.u_contact_shadow_steps),
+    'u_shadow_white_base': new Uniform1f(context, locations.u_shadow_white_base),
 });
 
 const terrainElevationUniforms = (context: Context, locations: UniformLocations): TerrainElevationUniformsType => ({
@@ -149,6 +175,28 @@ const terrainCoordsUniforms = (context: Context, locations: UniformLocations): T
     'u_ele_delta': new Uniform1f(context, locations.u_ele_delta)
 });
 
+function imageryLayerEnabled(id: string): boolean {
+    if (typeof window === 'undefined') return false;
+    const state = (window as any).imageryState?.get?.(id);
+    return !!(state?.enabled && (state.opacity ?? 1) > 0);
+}
+
+function getActiveShadowLayer(painter?: Painter | null, zoom: number = 0): any | null {
+    const candidates: Array<[string, string]> = [
+        ['shadow-v3', 'shadow-v3-coarse'],
+        ['shadow-v2', 'shadow-v2-coarse'],
+        ['shadow', 'shadow-coarse']
+    ];
+
+    for (const [stateId, layerId] of candidates) {
+        if (!imageryLayerEnabled(stateId)) continue;
+        const layer = painter?.style?.getLayer(layerId) as any;
+        if (layer && !layer.isHidden(zoom)) return layer;
+    }
+
+    return null;
+}
+
 const terrainUniformValues = (
     eleDelta: number,
     fogMatrix: mat4,
@@ -159,8 +207,10 @@ const terrainUniformValues = (
     painter?: Painter | null,
     tile?: Tile | null): UniformValues<TerrainUniformsType> => {
 
+    const activeShadowLayer = getActiveShadowLayer(painter, zoom);
+
     // Contour defaults — always on unless explicitly disabled
-    let contourEnabled = 1.0;
+    let contourEnabled = activeShadowLayer ? 0.0 : 1.0;
     if (typeof window !== 'undefined' && (window as any).imageryState) {
         const cs = (window as any).imageryState.get('contours');
         if (cs && cs.enabled === false) contourEnabled = 0.0;
@@ -192,6 +242,16 @@ const terrainUniformValues = (
         }
     }
 
+    const activeShadowIsV2 = activeShadowLayer?.id === 'shadow-v2-coarse' || activeShadowLayer?.id === 'shadow-v3-coarse';
+    const activeShadowIsV3 = activeShadowLayer?.id === 'shadow-v3-coarse';
+    const contactBlockedByInteraction = !!painter?.options?.moving ||
+        !!painter?.options?.rotating ||
+        (typeof window !== 'undefined' && ((window as any)._isInteractingWithTime === true || (window as any)._shadowProgressivePhase === 'preview'));
+    const v3ContactEnabled = activeShadowIsV3 &&
+        !contactBlockedByInteraction &&
+        typeof window !== 'undefined' &&
+        (window as any)._shadowV3ContactShadows === true;
+
     return {
         'u_texture': 0,
         'u_ele_delta': eleDelta,
@@ -209,17 +269,52 @@ const terrainUniformValues = (
         'u_zoom': zoom,
         'u_tile_zoom': 0,
         'u_shadow_atlas': 15, // Bind shadow atlas to unit 15
+        'u_shadow_near_atlas': 14,
         'u_horizon0': 8,
         'u_horizon1': 9,
         'u_horizon2': 10,
         'u_horizon3': 11,
         'u_atlas_bounds': (painter?.style?.map?.terrain as any)?._elevationAtlasBounds || [0, 0, 1, 1],
+        'u_near_atlas_bounds': (painter?.style?.map?.terrain as any)?._shadowNearAtlasBounds || [0, 0, 1, 1],
         'u_tile_id': tile ? [tile.tileID.canonical.z, tile.tileID.canonical.x, tile.tileID.canonical.y] : [0, 0, 0],
         'u_shadow_intensity': (() => {
-            const sl = painter?.style?.getLayer('shadow-coarse') as any;
-            if (!sl || sl.isHidden(zoom)) return 0.0;
-            const opacity = sl.getPaintProperty('shadow-opacity');
+            if (!activeShadowLayer || activeShadowLayer.isHidden(zoom)) return 0.0;
+            const opacity = activeShadowLayer.getPaintProperty('shadow-opacity');
             return typeof opacity === 'number' ? opacity : 1.0;
+        })(),
+        'u_shadow_near_available': (() => {
+            const terrain = painter?.style?.map?.terrain as any;
+            return terrain?._shadowNearAtlasReady && terrain?._fboNearShadowTexture ? 1.0 : 0.0;
+        })(),
+        'u_shadow_near_fade': (() => {
+            const map = painter?.style?.map as any;
+            const terrain = map?.terrain as any;
+            if (!terrain?._shadowNearAtlasReady || !terrain?._fboNearShadowTexture) return 0.0;
+            const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+            const start = Number.isFinite(terrain._shadowNearAtlasReadyAt) ? terrain._shadowNearAtlasReadyAt : now;
+            const duration = 360;
+            const fade = Math.max(0, Math.min(1, (now - start) / duration));
+            if (fade < 1 && !terrain._shadowNearFadeRepaintQueued) {
+                terrain._shadowNearFadeRepaintQueued = true;
+                const schedule = typeof window !== 'undefined' && window.requestAnimationFrame ?
+                    window.requestAnimationFrame.bind(window) :
+                    (callback: FrameRequestCallback) => setTimeout(() => callback(now), 16) as any;
+                schedule(() => {
+                    terrain._shadowNearFadeRepaintQueued = false;
+                    map?.triggerRepaint?.();
+                });
+            }
+            return fade;
+        })(),
+        'u_shadow_near_debug_tint': (typeof window !== 'undefined' && (window as any)._shadowNearDebugTint === true) ? 1.0 : 0.0,
+        'u_shadow_display_mode': activeShadowIsV2 ? 1.0 : 0.0,
+        'u_shadow_component_mode': (() => {
+            if (!activeShadowIsV3 || typeof window === 'undefined') return 0.0;
+            const mode = (window as any)._shadowV3ComponentMode;
+            if (mode === 'global') return 1.0;
+            if (mode === 'near') return 2.0;
+            if (mode === 'self') return 3.0;
+            return 0.0;
         })(),
         'u_horizon_available': (() => {
             if (typeof window === 'undefined' || (window as any)._shadowUseHorizonCurrent !== true) return 0.0;
@@ -234,7 +329,9 @@ const terrainUniformValues = (
         'u_igor_relief_enabled': (() => {
             if (typeof window !== 'undefined') {
                 const imageryState = (window as any).imageryState;
-                const shadowEnabled = imageryState?.get?.('shadow')?.enabled === true;
+                const shadowEnabled = imageryState?.get?.('shadow')?.enabled === true ||
+                    imageryState?.get?.('shadow-v2')?.enabled === true ||
+                    imageryState?.get?.('shadow-v3')?.enabled === true;
                 return shadowEnabled ? 1.0 : 0.0;
             }
             return 0.0;
@@ -243,13 +340,18 @@ const terrainUniformValues = (
             if (typeof window !== 'undefined' && (window as any)._actualSunAltitudeRad !== undefined) {
                 return (window as any)._actualSunAltitudeRad;
             }
-            const sl = painter?.style?.getLayer('shadow-coarse') as any;
-            return sl?.getShadowProperties ? sl.getShadowProperties().altitudeRadians : 0.5;
+            return activeShadowLayer?.getShadowProperties ? activeShadowLayer.getShadowProperties().altitudeRadians : 0.5;
         })(),
         'u_sun_direction': (() => {
-            const sl = painter?.style?.getLayer('shadow-coarse') as any;
-            if (!sl?.getShadowProperties) return [0.707, -0.707];
-            const dir = sl.getShadowProperties().directionRadians;
+            if (activeShadowIsV2 && typeof window !== 'undefined') {
+                const sunDirection = (window as any)._shadowSunDirection;
+                if (Array.isArray(sunDirection) && sunDirection.length >= 2 &&
+                    Number.isFinite(sunDirection[0]) && Number.isFinite(sunDirection[1])) {
+                    return [sunDirection[0], sunDirection[1]];
+                }
+            }
+            if (!activeShadowLayer?.getShadowProperties) return [0.707, -0.707];
+            const dir = activeShadowLayer.getShadowProperties().directionRadians;
             return [Math.sin(dir), -Math.cos(dir)];
         })(),
         'u_dem_ao': 13, // Per-tile DEM texture at unit 13 for full-res AO
@@ -260,7 +362,13 @@ const terrainUniformValues = (
         'u_dem_derivative': 12,
         'u_dem_derivative_available': 0,
         'u_shadow_atlas_size': (painter?.style?.map?.terrain as any)?._fboShadowTexture?.size?.[0] || 2048.0,
+        'u_shadow_near_atlas_size': (painter?.style?.map?.terrain as any)?._fboNearShadowTexture?.size?.[0] || 1024.0,
         'u_self_shadow_mult': (typeof window !== 'undefined' && (window as any)._selfShadowMult !== undefined) ? (window as any)._selfShadowMult : 1.8,
+        'u_contact_shadow_enabled': v3ContactEnabled ? 1.0 : 0.0,
+        'u_contact_shadow_strength': (typeof window !== 'undefined' && Number.isFinite((window as any)._shadowV3ContactStrength)) ? (window as any)._shadowV3ContactStrength : 0.72,
+        'u_contact_shadow_distance': (typeof window !== 'undefined' && Number.isFinite((window as any)._shadowV3ContactDistance)) ? (window as any)._shadowV3ContactDistance : 520.0,
+        'u_contact_shadow_steps': (typeof window !== 'undefined' && Number.isFinite((window as any)._shadowV3ContactSteps)) ? (window as any)._shadowV3ContactSteps : 10.0,
+        'u_shadow_white_base': activeShadowLayer ? 1.0 : 0.0,
     };
 };
 

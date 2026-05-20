@@ -203,7 +203,10 @@ export function updateAnalyticalLegends(map, imageryState, updateShadowTime) {
     if (imageryState.get('snow-depth')?.enabled) activeAnalyzers.push('snow-depth');
     if (
         imageryState.get('shadow')?.enabled ||
+        imageryState.get('shadow-v2')?.enabled ||
+        imageryState.get('shadow-v3')?.enabled ||
         imageryState.get('daylight')?.enabled ||
+        imageryState.get('daylight-v2')?.enabled ||
         imageryState.get('sunrise-window')?.enabled ||
         imageryState.get('sunset-window')?.enabled
     ) activeAnalyzers.push('shadow');
@@ -366,7 +369,9 @@ function createShadowLegend(map, updateShadowTime, imageryState) {
     const content = document.createElement('div');
     content.className = 'shadow-legend__content';
 
-    const shadowActive = imageryState?.get?.('shadow')?.enabled === true;
+    const shadowActive = imageryState?.get?.('shadow')?.enabled === true ||
+        imageryState?.get?.('shadow-v2')?.enabled === true ||
+        imageryState?.get?.('shadow-v3')?.enabled === true;
     const now = new Date(window.skySimulationDate || Date.now());
     const startOfYear = new Date(now.getFullYear(), 0, 0);
     const diff = now - startOfYear;
@@ -396,6 +401,7 @@ function createShadowLegend(map, updateShadowTime, imageryState) {
         <div class="shadow-legend__fog-row"><label>Horizon</label><input type="range" id="fogHoriz" min="-1" max="5" step="0.1" value="0.5"></div>
       </div>
       <button id="shdDbgTgl" class="shadow-legend__btn shadow-legend__btn--debug" data-off="${!window._shadowDebugMode}">Debug ${window._shadowDebugMode ? 'ON' : 'OFF'}</button>
+      <button id="shdV3AtlasDbgTgl" class="shadow-legend__btn shadow-legend__btn--debug" data-off="${!window._shadowV3DebugOverlayEnabled}">V3 Atlas ${window._shadowV3DebugOverlayEnabled ? 'ON' : 'OFF'}</button>
     </div>` : ''}`;
 
     // Wire up shadow time sliders
@@ -405,12 +411,28 @@ function createShadowLegend(map, updateShadowTime, imageryState) {
     const tLb = content.querySelector('#shadowTimeLabel');
     const nBtn = content.querySelector('#shadowNowBtn');
     let timeInteractionTimer = null;
+    let timeRefineTimer = null;
 
     const markTimeInteraction = () => {
         window._isInteractingWithTime = true;
+        if (shadowActive) window._shadowProgressivePhase = 'preview';
         clearTimeout(timeInteractionTimer);
+        clearTimeout(timeRefineTimer);
         timeInteractionTimer = window.setTimeout(() => {
             window._isInteractingWithTime = false;
+            if (updateShadowTime) {
+                if (shadowActive) window._shadowProgressivePhase = 'full';
+                updateShadowTime(buildDate());
+                if (shadowActive) {
+                    timeRefineTimer = window.setTimeout(() => {
+                        if (window._isInteractingWithTime || window._shadowCameraRefreshHold || window._shadowProgressivePhase === 'held') return;
+                        window._shadowProgressivePhase = 'refine';
+                        updateShadowTime(buildDate(), { forceRepaint: false, skipNearRefine: true });
+                        if (map) map.triggerRepaint();
+                    }, 450);
+                }
+                return;
+            }
             if (map) map.triggerRepaint();
         }, 180);
     };
@@ -482,6 +504,16 @@ function createShadowLegend(map, updateShadowTime, imageryState) {
             if (map) map.triggerRepaint();
         });
     }
+    const v3AtlasDbgTgl = content.querySelector('#shdV3AtlasDbgTgl');
+    if (v3AtlasDbgTgl) {
+        v3AtlasDbgTgl.addEventListener('click', () => {
+            const enabled = !window._shadowV3DebugOverlayEnabled;
+            window.ShadowV3DebugOverlay?.setEnabled?.(enabled);
+            v3AtlasDbgTgl.dataset.off = String(!enabled);
+            v3AtlasDbgTgl.textContent = `V3 Atlas ${enabled ? 'ON' : 'OFF'}`;
+            if (map) map.triggerRepaint();
+        });
+    }
     const fogGrnd = content.querySelector('#fogGrnd');
     const fogHoriz = content.querySelector('#fogHoriz');
     if (fogGrnd) {
@@ -524,7 +556,7 @@ export function setupTerrainHoverInfo(map, imageryState) {
             return;
         }
 
-        if (activeLayer === 'daylight' || activeLayer === 'sunrise-window' || activeLayer === 'sunset-window') {
+        if (activeLayer === 'daylight' || activeLayer === 'daylight-v2' || activeLayer === 'sunrise-window' || activeLayer === 'sunset-window') {
             const content = buildSunExposureHoverContent(map, e.lngLat, activeLayer);
             if (content) {
                 hoverEl.innerHTML = content;
@@ -583,6 +615,7 @@ function getActiveAnalysisLayer(imageryState) {
     if (!imageryState) return null;
     if (imageryState.get('sunrise-window')?.enabled) return 'sunrise-window';
     if (imageryState.get('sunset-window')?.enabled) return 'sunset-window';
+    if (imageryState.get('daylight-v2')?.enabled) return 'daylight-v2';
     if (imageryState.get('daylight')?.enabled) return 'daylight';
     if (imageryState.get('avalanche')?.enabled) return 'avalanche';
     if (imageryState.get('slope')?.enabled) return 'slope';

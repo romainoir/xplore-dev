@@ -91,7 +91,13 @@ function getSunDirection(light: Light): number {
 }
 
 function getMercatorSkySun(painter: Painter, light: Light, transform: IReadonlyTransform): {sunPos: vec3; sunAltitude: number} {
-    const shadowLayer = painter.style.getLayer('shadow-coarse') as any;
+    const shadowV3Active = typeof window !== 'undefined' &&
+        (window as any).imageryState?.get?.('shadow-v3')?.enabled === true &&
+        ((window as any).imageryState?.get?.('shadow-v3')?.opacity ?? 1) > 0;
+    const shadowV2Active = typeof window !== 'undefined' &&
+        (window as any).imageryState?.get?.('shadow-v2')?.enabled === true &&
+        ((window as any).imageryState?.get?.('shadow-v2')?.opacity ?? 1) > 0;
+    const shadowLayer = painter.style.getLayer(shadowV3Active ? 'shadow-v3-coarse' : shadowV2Active ? 'shadow-v2-coarse' : 'shadow-coarse') as any;
     const shadowProps = shadowLayer?.getShadowProperties?.();
     const solarState = typeof window !== 'undefined' ? (window as any)._xploreSolarState : null;
     const sunDirection = typeof solarState?.azimuthRad === 'number' ?

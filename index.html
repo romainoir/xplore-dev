@@ -10,7 +10,7 @@
 
   <!-- MapLibre GL JS - Local fork (terrain analysis support) -->
   <link href="./maplibre-gl-js-5.24.0/src/css/maplibre-gl.css" rel="stylesheet" />
-  <script src="./scripts/map/maplibre-gl-dev.js?v=20260430-maplibre-524-1"></script>
+  <script src="./scripts/map/maplibre-gl-dev.js?v=20260520-shadow-v3-component-1"></script>
 
   <!-- PMTiles v4 -->
   <script src="https://unpkg.com/pmtiles@4.3.0/dist/pmtiles.js"></script>
@@ -390,6 +390,10 @@
                 <input type="checkbox" id="debugShadowTunerToggle" class="settings-panel__checkbox" />
               </div>
               <div class="settings-panel__row">
+                <label for="debugShadowV3AtlasToggle">Shadow V3 Atlas</label>
+                <input type="checkbox" id="debugShadowV3AtlasToggle" class="settings-panel__checkbox" />
+              </div>
+              <div class="settings-panel__row">
                 <label for="debugTileBordersToggle">Tile Borders</label>
                 <input type="checkbox" id="debugTileBordersToggle" class="settings-panel__checkbox" />
               </div>
@@ -406,9 +410,45 @@
   <!-- Terrain Hover Info -->
   <div id="terrainHoverInfo" class="terrain-hover-info" aria-hidden="true"></div>
 
+  <!-- Shadow V3 Atlas Debug -->
+  <section id="shadowV3DebugOverlay" class="shadow-v3-debug" aria-hidden="true">
+    <div class="shadow-v3-debug__header">
+      <div>
+        <div class="shadow-v3-debug__title">Shadow V3 Atlas</div>
+        <div id="shadowV3DebugStatus" class="shadow-v3-debug__status">Waiting for atlas metadata.</div>
+      </div>
+      <div class="shadow-v3-debug__header-actions">
+        <button id="shadowV3DebugSide" class="shadow-v3-debug__side" type="button">Left</button>
+        <button id="shadowV3DebugClose" class="shadow-v3-debug__close" type="button"
+          aria-label="Close Shadow V3 debug">&times;</button>
+      </div>
+    </div>
+    <div class="shadow-v3-debug__body">
+      <div class="shadow-v3-debug__canvas-wrap">
+        <canvas id="shadowV3DebugCanvas" width="720" height="520"></canvas>
+        <div id="shadowV3DebugZoomLabel" class="shadow-v3-debug__zoom">zoom 1.00x</div>
+      </div>
+      <div class="shadow-v3-debug__actions">
+        <button id="shadowV3DebugResetView" type="button">Reset View</button>
+        <button id="shadowV3DebugCaptureAll" type="button">Capture All</button>
+        <button id="shadowV3DebugBackgroundNone" type="button">No BG</button>
+        <button id="shadowV3DebugCaptureElevation" type="button">Elevation BG</button>
+        <button id="shadowV3DebugCaptureShadow" type="button">Shadow BG</button>
+        <button id="shadowV3DebugCaptureRaw" type="button">Raw BG</button>
+        <button id="shadowV3DebugCaptureNear" type="button">Near BG</button>
+        <button id="shadowV3DebugModeFull" type="button">Full</button>
+        <button id="shadowV3DebugModeGlobal" type="button">Global</button>
+        <button id="shadowV3DebugModeNear" type="button">Near</button>
+        <button id="shadowV3DebugModeSelf" type="button">Self</button>
+        <button id="shadowV3DebugCopy" type="button">Copy</button>
+      </div>
+      <textarea id="shadowV3DebugLog" class="shadow-v3-debug__log" readonly spellcheck="false">Debug disabled.</textarea>
+    </div>
+  </section>
 
 
-  <script type="module" src="./scripts/app/xploremap-app.js?v=20260430-sun-window-split-1"></script>
+
+  <script type="module" src="./scripts/app/xploremap-app.js?v=20260520-shadow-v3-component-1"></script>
 </body>
 
 </html>

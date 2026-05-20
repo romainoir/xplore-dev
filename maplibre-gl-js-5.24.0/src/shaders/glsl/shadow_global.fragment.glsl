@@ -10,6 +10,7 @@ uniform vec2 u_dimension;
 uniform float u_max_distance;
 uniform float u_near_cascade_distance;
 uniform float u_mid_cascade_distance;
+uniform float u_ridge_sample_strength;
 
 in vec2 v_pos; // Viewport UV (0..1)
 
@@ -70,6 +71,32 @@ float sampleElevationCascade(vec2 uv, float distanceMeters) {
     return sampleElevationBilinear(uv);
 }
 
+float sampleElevationRidgeAware(vec2 uv, float distanceMeters) {
+    float center = sampleElevationBilinear(uv);
+    float nearRidgeWindow = 1.0 - smoothstep(u_near_cascade_distance * 0.65, u_mid_cascade_distance * 1.05, distanceMeters);
+    float ridgeStrength = clamp(u_ridge_sample_strength, 0.0, 1.0) * nearRidgeWindow;
+    if (ridgeStrength <= 0.001) {
+        return center;
+    }
+
+    vec2 atlasSpan = max(u_atlas_bounds.zw - u_atlas_bounds.xy, vec2(1.0e-9));
+    vec2 rayDir = vec2(u_sunDirection.x / atlasSpan.x, -u_sunDirection.y / atlasSpan.y);
+    float rayLen = length(rayDir);
+    rayDir = rayLen > 0.00001 ? rayDir / rayLen : vec2(1.0, 0.0);
+    vec2 texel = vec2(1.0) / max(u_dimension, vec2(1.0));
+
+    float lowSunRidge = 1.0 - smoothstep(radians(14.0), radians(34.0), u_sunAltitude);
+    float radius = mix(0.38, 0.82, lowSunRidge);
+    vec2 rayStep = rayDir * texel * radius;
+
+    float ridge = center;
+    ridge = max(ridge, sampleElevationBilinear(uv + rayStep));
+    ridge = max(ridge, sampleElevationBilinear(uv - rayStep));
+
+    float lift = max(ridge - center, 0.0);
+    return center + lift * ridgeStrength;
+}
+
 void main() {
     if (u_sunAltitude <= 0.001) {
         fragColor = vec4(0.0);
@@ -117,10 +144,10 @@ void main() {
         if (currentUV.x < 0.0 || currentUV.x > 1.0 || currentUV.y < 0.0 || currentUV.y > 1.0) break;
         if (currentRayHeight > 8900.0) break;
 
-        float elev = sampleElevationCascade(currentUV, distanceMeters);
+        float elev = sampleElevationRidgeAware(currentUV, distanceMeters);
         float margin = elev - currentRayHeight;
         if (distanceMeters > u_mid_cascade_distance && margin > -u_step_meters * 2.0) {
-            elev = sampleElevationBilinear(currentUV);
+            elev = sampleElevationRidgeAware(currentUV, distanceMeters);
             margin = elev - currentRayHeight;
         }
         
@@ -136,7 +163,7 @@ void main() {
                 vec2 midUV = mix(loUV, hiUV, 0.5);
                 float midRayHeight = mix(loRayHeight, hiRayHeight, 0.5);
                 float midDistance = mix(loDistance, hiDistance, 0.5);
-                float midElev = sampleElevationBilinear(midUV);
+                float midElev = sampleElevationRidgeAware(midUV, midDistance);
 
                 if (midElev > midRayHeight) {
                     hiUV = midUV;

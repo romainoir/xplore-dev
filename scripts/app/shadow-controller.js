@@ -5,9 +5,10 @@
 
 const SHADOW_MIN_RENDER_ALTITUDE = 2;
 const SHADOW_MAX_RENDER_ALTITUDE = 89.5;
-const CAMERA_SHADOW_SETTLE_MS = 450;
-const CAMERA_SHADOW_FINE_DELAY_MS = 1200;
+const CAMERA_SHADOW_SETTLE_MS = 300;
+const CAMERA_SHADOW_REFINE_DELAY_MS = 450;
 const CAMERA_SHADOW_IDLE_TIMEOUT_MS = 1800;
+const SHADOW_RENDER_LAYER_IDS = Object.freeze(['shadow-coarse', 'shadow-v2-coarse', 'shadow-v3-coarse']);
 
 function clamp(value, min, max) {
     return Math.max(min, Math.min(max, value));
@@ -42,15 +43,21 @@ function shadowReachProfileForSun(altitudeDeg) {
         farReachMeters: Math.round(mixNumber(5000, 18000, longReach)),
         nearCascadeMeters: Math.round(mixNumber(1100, 1600, longReach)),
         midCascadeMeters: Math.round(mixNumber(3500, 5600, longReach)),
-        maxTiles: Math.round(mixNumber(72, 112, longReach)),
-        maxCoreTiles: Math.round(mixNumber(32, 40, longReach)),
-        zoomBias: mixNumber(0, 0.15, lowSun),
+        maxTiles: Math.round(mixNumber(88, 128, longReach)),
+        maxCoreTiles: Math.round(mixNumber(44, 56, longReach)),
+        zoomBias: mixNumber(0.25, 0.45, lowSun),
         previewMaxDistance: Math.round(mixNumber(4200, 7200, longReach)),
         previewMidReachMeters: Math.round(mixNumber(1400, 2800, longReach)),
         previewFarReachMeters: Math.round(mixNumber(3400, 7200, longReach)),
         previewMaxTiles: Math.round(mixNumber(28, 42, longReach)),
         previewMaxCoreTiles: Math.round(mixNumber(10, 14, longReach)),
-        previewZoomBias: mixNumber(-1.35, -0.95, lowSun)
+        previewZoomBias: mixNumber(-1.35, -0.95, lowSun),
+        refineMaxDistance: Math.round(mixNumber(3200, 6200, longReach)),
+        refineMidReachMeters: Math.round(mixNumber(900, 1600, longReach)),
+        refineFarReachMeters: Math.round(mixNumber(2800, 6200, longReach)),
+        refineMaxTiles: Math.round(mixNumber(52, 68, longReach)),
+        refineMaxCoreTiles: Math.round(mixNumber(30, 38, longReach)),
+        refineZoomBias: mixNumber(0.85, 1.05, lowSun)
     };
 }
 
@@ -124,7 +131,22 @@ function ensureShadowRuntimeDefaults() {
     setDefaultGlobal('_horizonEdgeSoftness', 1.0);
     setDefaultGlobal('_horizonEdgeNaturalness', 0.0);
     setDefaultGlobal('_shadowAtlasSize', 2048);
-    setDefaultGlobal('_shadowMaskScale', 0.5);
+    setDefaultGlobal('_shadowMaskScale', 1.0);
+    setDefaultGlobal('_shadowNearAtlasSize', 2048);
+    setDefaultGlobal('_shadowNearMaskScale', 1.0);
+    setDefaultGlobal('_shadowNearDebugTint', false);
+    setDefaultGlobal('_shadowUseLogSweep', false);
+    setDefaultGlobal('_shadowV3UseHiZ', false);
+    setDefaultGlobal('_shadowV3AtlasSize', 4096);
+    setDefaultGlobal('_shadowV3MaskScale', 0.5);
+    setDefaultGlobal('_shadowV3NearAtlasSize', 4096);
+    setDefaultGlobal('_shadowV3NearMaskScale', 0.5);
+    setDefaultGlobal('_shadowV3ComponentMode', 'full');
+    setDefaultGlobal('_shadowV3ContactShadows', false);
+    setDefaultGlobal('_shadowV3ContactStrength', 0.72);
+    setDefaultGlobal('_shadowV3ContactDistance', 520);
+    setDefaultGlobal('_shadowV3ContactSteps', 10);
+    setDefaultGlobal('_shadowRidgeSampleStrength', 0.42);
     setDefaultGlobal('_shadowEdgeCleanup', true);
     setDefaultGlobal('_shadowBlurRadius', 2.75);
     setDefaultGlobal('_shadowCameraMoving', false);
@@ -149,7 +171,7 @@ export function createShadowController(map, deps = {}) {
     let cameraShadowDeferred = false;
     let cameraShadowRefreshTimer = null;
     let cameraShadowIdleTimer = null;
-    let cameraShadowFullTimer = null;
+    let cameraShadowRefineTimer = null;
     let cameraShadowIdleRelease = null;
 
     function safeSetPaint(layerId, property, value) {
@@ -159,6 +181,14 @@ export function createShadowController(map, deps = {}) {
 
     function currentShadowDate() {
         return new Date(lastAppliedDate?.getTime?.() || window.skySimulationDate || Date.now());
+    }
+
+    function invalidateNearShadowRefine() {
+        const terrain = map?.terrain;
+        if (!terrain) return;
+        terrain._shadowNearAtlasReady = false;
+        delete terrain._shadowNearAtlasReadyAt;
+        delete terrain._shadowNearFadeRepaintQueued;
     }
 
     function invalidateDaylightCacheIfDayChanged(date) {
@@ -174,10 +204,10 @@ export function createShadowController(map, deps = {}) {
     function clearCameraShadowRefreshTimers() {
         clearTimeout(cameraShadowRefreshTimer);
         clearTimeout(cameraShadowIdleTimer);
-        clearTimeout(cameraShadowFullTimer);
+        clearTimeout(cameraShadowRefineTimer);
         cameraShadowRefreshTimer = null;
         cameraShadowIdleTimer = null;
-        cameraShadowFullTimer = null;
+        cameraShadowRefineTimer = null;
 
         if (cameraShadowIdleRelease && map && typeof map.off === 'function') {
             map.off('idle', cameraShadowIdleRelease);
@@ -192,26 +222,44 @@ export function createShadowController(map, deps = {}) {
         window._shadowCameraMoving = true;
         window._shadowCameraRefreshHold = true;
         window._shadowProgressivePhase = 'held';
+        invalidateNearShadowRefine();
     }
 
     function releaseCameraShadowRefresh() {
         if (!cameraShadowDeferred || cameraMoving) return;
+        // Camera moves should keep the previous stable shadow while moving,
+        // then refresh directly at full quality after idle. The low-res
+        // preview phase is reserved for time-slider interaction, where the
+        // sun direction changes continuously and immediate feedback matters.
         clearCameraShadowRefreshTimers();
-        window._shadowCameraRefreshHold = false;
-        window._shadowProgressivePhase = 'preview';
-        updateShadowTime(currentShadowDate(), { forceRepaint: false });
-        map?.triggerRepaint();
-        cameraShadowFullTimer = window.setTimeout(releaseCameraShadowFullRefresh, CAMERA_SHADOW_FINE_DELAY_MS);
+        releaseCameraShadowFullRefresh();
     }
 
     function releaseCameraShadowFullRefresh() {
-        cameraShadowFullTimer = null;
         if (!cameraShadowDeferred || cameraMoving) return;
         cameraShadowDeferred = false;
         window._shadowCameraRefreshHold = false;
         window._shadowProgressivePhase = 'full';
         updateShadowTime(currentShadowDate(), { forceRepaint: false });
         map?.triggerRepaint();
+        scheduleCameraShadowNearRefine();
+    }
+
+    function releaseCameraShadowNearRefine() {
+        cameraShadowRefineTimer = null;
+        if (window._isInteractingWithTime) {
+            scheduleCameraShadowNearRefine();
+            return;
+        }
+        if (cameraMoving || window._shadowCameraRefreshHold) return;
+        window._shadowProgressivePhase = 'refine';
+        updateShadowTime(currentShadowDate(), { forceRepaint: false, skipNearRefine: true });
+        map?.triggerRepaint();
+    }
+
+    function scheduleCameraShadowNearRefine() {
+        clearTimeout(cameraShadowRefineTimer);
+        cameraShadowRefineTimer = window.setTimeout(releaseCameraShadowNearRefine, CAMERA_SHADOW_REFINE_DELAY_MS);
     }
 
     function waitForCameraShadowIdle() {
@@ -267,6 +315,9 @@ export function createShadowController(map, deps = {}) {
      */
     function updateShadowTime(date, options = {}) {
         if (!date || !(date instanceof Date)) return;
+        if (!options.skipNearRefine) {
+            invalidateNearShadowRefine();
+        }
         lastAppliedDate = date;
         window.skySimulationDate = date.getTime();
         window._daylightDateMs = date.getTime();
@@ -293,11 +344,13 @@ export function createShadowController(map, deps = {}) {
                 skyAmbient: colors.skyAmbient
             };
 
-            safeSetPaint('shadow-coarse', 'shadow-direction', sunAzi);
-            safeSetPaint('shadow-coarse', 'shadow-altitude', renderAltitude);
-            safeSetPaint('shadow-coarse', 'shadow-max-distance', window._shadowReachProfile?.maxDistance || 8000);
-            safeSetPaint('shadow-coarse', 'shadow-shadow-color', colors.shadow);
-            safeSetPaint('shadow-coarse', 'shadow-highlight-color', colors.highlight);
+            SHADOW_RENDER_LAYER_IDS.forEach((layerId) => {
+                safeSetPaint(layerId, 'shadow-direction', sunAzi);
+                safeSetPaint(layerId, 'shadow-altitude', renderAltitude);
+                safeSetPaint(layerId, 'shadow-max-distance', window._shadowReachProfile?.maxDistance || 8000);
+                safeSetPaint(layerId, 'shadow-shadow-color', colors.shadow);
+                safeSetPaint(layerId, 'shadow-highlight-color', colors.highlight);
+            });
             safeSetPaint('terrain-derivative-cache', 'hillshade-illumination-direction', sunAzi);
             safeSetPaint('terrain-derivative-cache', 'hillshade-illumination-altitude', renderAltitude);
 
@@ -315,6 +368,18 @@ export function createShadowController(map, deps = {}) {
             viewModeController.updateSkyForTime(date);
         }
         if (options.forceRepaint !== false) map.triggerRepaint();
+        const phase = window._shadowProgressivePhase;
+        const canScheduleNearRefine = !options.skipNearRefine &&
+            phase !== 'held' &&
+            phase !== 'preview' &&
+            phase !== 'full' &&
+            phase !== 'refine' &&
+            !window._isInteractingWithTime &&
+            !cameraMoving &&
+            !window._shadowCameraRefreshHold;
+        if (canScheduleNearRefine) {
+            scheduleCameraShadowNearRefine();
+        }
     }
 
     window.setTimeout(() => updateShadowTime(currentShadowDate(), { forceRepaint: false }), 0);

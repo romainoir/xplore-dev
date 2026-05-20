@@ -26,6 +26,7 @@ export type ShadowGlobalUniformsType = {
     'u_max_distance': Uniform1f;
     'u_near_cascade_distance': Uniform1f;
     'u_mid_cascade_distance': Uniform1f;
+    'u_ridge_sample_strength': Uniform1f;
 };
 
 export type ShadowUniformsType = {
@@ -79,6 +80,52 @@ export type ShadowBlurUniformsType = {
     'u_blur_radius': Uniform1f;
 };
 
+export type ShadowSweepInitUniformsType = {
+    'u_image': Uniform1i;
+    'u_dimension': Uniform2f;
+};
+
+export type ShadowSweepStepUniformsType = {
+    'u_state': Uniform1i;
+    'u_sunDirection': Uniform2f;
+    'u_sunAltitude': Uniform1f;
+    'u_metersPerPixel': Uniform2f;
+    'u_dimension': Uniform2f;
+    'u_atlas_bounds': Uniform4f;
+    'u_jump_pixels': Uniform1f;
+};
+
+export type ShadowSweepFinalUniformsType = {
+    'u_state': Uniform1i;
+    'u_elevation': Uniform1i;
+    'u_dimension': Uniform2f;
+    'u_metersPerPixel': Uniform2f;
+};
+
+export type ShadowHizMipUniformsType = {
+    'u_image': Uniform1i;
+    'u_src_dimension': Uniform2f;
+};
+
+export type ShadowHizGlobalUniformsType = {
+    'u_image': Uniform1i;
+    'u_hiz1': Uniform1i;
+    'u_hiz2': Uniform1i;
+    'u_hiz3': Uniform1i;
+    'u_hiz4': Uniform1i;
+    'u_hiz5': Uniform1i;
+    'u_sunDirection': Uniform2f;
+    'u_sunAltitude': Uniform1f;
+    'u_metersPerPixel': Uniform2f;
+    'u_dimension': Uniform2f;
+    'u_atlas_bounds': Uniform4f;
+    'u_max_distance': Uniform1f;
+    'u_step_meters': Uniform1f;
+    'u_max_steps': Uniform1f;
+    'u_near_cascade_distance': Uniform1f;
+    'u_mid_cascade_distance': Uniform1f;
+};
+
 const shadowGlobalUniforms = (context: Context, locations: UniformLocations): ShadowGlobalUniformsType => ({
     'u_image': new Uniform1i(context, locations.u_image),
     'u_sunDirection': new Uniform2f(context, locations.u_sunDirection),
@@ -92,6 +139,7 @@ const shadowGlobalUniforms = (context: Context, locations: UniformLocations): Sh
     'u_max_distance': new Uniform1f(context, locations.u_max_distance),
     'u_near_cascade_distance': new Uniform1f(context, locations.u_near_cascade_distance),
     'u_mid_cascade_distance': new Uniform1f(context, locations.u_mid_cascade_distance),
+    'u_ridge_sample_strength': new Uniform1f(context, locations.u_ridge_sample_strength),
 });
 
 const shadowUniforms = (context: Context, locations: UniformLocations): ShadowUniformsType => ({
@@ -143,6 +191,52 @@ const shadowBlurUniforms = (context: Context, locations: UniformLocations): Shad
     'u_direction': new Uniform2f(context, locations.u_direction),
     'u_texture_size': new Uniform1f(context, locations.u_texture_size),
     'u_blur_radius': new Uniform1f(context, locations.u_blur_radius),
+});
+
+const shadowSweepInitUniforms = (context: Context, locations: UniformLocations): ShadowSweepInitUniformsType => ({
+    'u_image': new Uniform1i(context, locations.u_image),
+    'u_dimension': new Uniform2f(context, locations.u_dimension),
+});
+
+const shadowSweepStepUniforms = (context: Context, locations: UniformLocations): ShadowSweepStepUniformsType => ({
+    'u_state': new Uniform1i(context, locations.u_state),
+    'u_sunDirection': new Uniform2f(context, locations.u_sunDirection),
+    'u_sunAltitude': new Uniform1f(context, locations.u_sunAltitude),
+    'u_metersPerPixel': new Uniform2f(context, locations.u_metersPerPixel),
+    'u_dimension': new Uniform2f(context, locations.u_dimension),
+    'u_atlas_bounds': new Uniform4f(context, locations.u_atlas_bounds),
+    'u_jump_pixels': new Uniform1f(context, locations.u_jump_pixels),
+});
+
+const shadowSweepFinalUniforms = (context: Context, locations: UniformLocations): ShadowSweepFinalUniformsType => ({
+    'u_state': new Uniform1i(context, locations.u_state),
+    'u_elevation': new Uniform1i(context, locations.u_elevation),
+    'u_dimension': new Uniform2f(context, locations.u_dimension),
+    'u_metersPerPixel': new Uniform2f(context, locations.u_metersPerPixel),
+});
+
+const shadowHizMipUniforms = (context: Context, locations: UniformLocations): ShadowHizMipUniformsType => ({
+    'u_image': new Uniform1i(context, locations.u_image),
+    'u_src_dimension': new Uniform2f(context, locations.u_src_dimension),
+});
+
+const shadowHizGlobalUniforms = (context: Context, locations: UniformLocations): ShadowHizGlobalUniformsType => ({
+    'u_image': new Uniform1i(context, locations.u_image),
+    'u_hiz1': new Uniform1i(context, locations.u_hiz1),
+    'u_hiz2': new Uniform1i(context, locations.u_hiz2),
+    'u_hiz3': new Uniform1i(context, locations.u_hiz3),
+    'u_hiz4': new Uniform1i(context, locations.u_hiz4),
+    'u_hiz5': new Uniform1i(context, locations.u_hiz5),
+    'u_sunDirection': new Uniform2f(context, locations.u_sunDirection),
+    'u_sunAltitude': new Uniform1f(context, locations.u_sunAltitude),
+    'u_metersPerPixel': new Uniform2f(context, locations.u_metersPerPixel),
+    'u_dimension': new Uniform2f(context, locations.u_dimension),
+    'u_atlas_bounds': new Uniform4f(context, locations.u_atlas_bounds),
+    'u_max_distance': new Uniform1f(context, locations.u_max_distance),
+    'u_step_meters': new Uniform1f(context, locations.u_step_meters),
+    'u_max_steps': new Uniform1f(context, locations.u_max_steps),
+    'u_near_cascade_distance': new Uniform1f(context, locations.u_near_cascade_distance),
+    'u_mid_cascade_distance': new Uniform1f(context, locations.u_mid_cascade_distance),
 });
 
 const shadowUniformValues = (
@@ -287,10 +381,15 @@ const shadowGlobalUniformValues = (
     painter: Painter,
     layer: ShadowStyleLayer,
     metersPerPixelX: number,
-    metersPerPixelY: number
+    metersPerPixelY: number,
+    options: {
+        atlasBounds?: [number, number, number, number] | number[];
+        elevationAtlasSize?: number;
+        target?: 'global' | 'near';
+    } = {}
 ): UniformValues<ShadowGlobalUniformsType> => {
     const terrain = painter.style.map.terrain;
-    const atlasBounds = (terrain as any)?._elevationAtlasBounds || [0, 0, 1, 1];
+    const atlasBounds = options.atlasBounds || (terrain as any)?._elevationAtlasBounds || [0, 0, 1, 1];
 
     const shadowProps = layer.getShadowProperties();
     const dirRad = shadowProps.directionRadians;
@@ -308,17 +407,24 @@ const shadowGlobalUniformValues = (
     const isTimeSliding = typeof window !== 'undefined' && (window as any)._isInteractingWithTime;
     const progressivePhase = typeof window !== 'undefined' ? (window as any)._shadowProgressivePhase : '';
     const isProgressivePreview = progressivePhase === 'preview';
+    const isNearRefine = options.target === 'near' || progressivePhase === 'refine';
 
     const atlasGsd = Math.max(metersPerPixelX, metersPerPixelY);
     const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
-    const passMaxDistance = isProgressivePreview ? Math.min(maxDistance, numberFromProfile('previewMaxDistance', 4200.0)) : maxDistance;
+    const passMaxDistance = isProgressivePreview ?
+        Math.min(maxDistance, numberFromProfile('previewMaxDistance', 4200.0)) :
+        isNearRefine ? Math.min(maxDistance, numberFromProfile('refineMaxDistance', 4200.0)) :
+            maxDistance;
     const nearCascadeMeters = numberFromProfile('nearCascadeMeters', 1100.0);
     const midCascadeMeters = numberFromProfile('midCascadeMeters', 3500.0);
+    const ridgeSampleStrength = typeof window !== 'undefined' && Number.isFinite((window as any)._shadowRidgeSampleStrength) ?
+        Number((window as any)._shadowRidgeSampleStrength) :
+        0.62;
 
-    const qualityScale = isProgressivePreview ? 6.0 : isTimeSliding ? 5.0 : isMapMoving ? 3.0 : 1.0;
-    const maxPreviewStep = isProgressivePreview ? 128.0 : isTimeSliding ? 96.0 : isMapMoving ? 56.0 : 14.0;
-    const minPreviewSteps = isProgressivePreview ? 18.0 : isTimeSliding ? 24.0 : isMapMoving ? 48.0 : 128.0;
-    const maxPreviewSteps = isProgressivePreview ? 56.0 : isTimeSliding ? 80.0 : isMapMoving ? 160.0 : 384.0;
+    const qualityScale = isProgressivePreview ? 6.0 : isNearRefine ? 0.68 : isTimeSliding ? 5.0 : isMapMoving ? 3.0 : 0.78;
+    const maxPreviewStep = isProgressivePreview ? 128.0 : isNearRefine ? 8.0 : isTimeSliding ? 96.0 : isMapMoving ? 56.0 : 10.0;
+    const minPreviewSteps = isProgressivePreview ? 18.0 : isNearRefine ? 150.0 : isTimeSliding ? 24.0 : isMapMoving ? 48.0 : 160.0;
+    const maxPreviewSteps = isProgressivePreview ? 56.0 : isNearRefine ? 320.0 : isTimeSliding ? 80.0 : isMapMoving ? 160.0 : 384.0;
 
     let stepMeters = clamp(atlasGsd * qualityScale, isProgressivePreview ? 28.0 : isTimeSliding ? 18.0 : isMapMoving ? 10.0 : 4.0, maxPreviewStep);
     const nearDistance = Math.min(isProgressivePreview ? Math.min(900.0, nearCascadeMeters) : nearCascadeMeters, passMaxDistance);
@@ -337,9 +443,11 @@ const shadowGlobalUniformValues = (
             maxDistance: passMaxDistance,
             cascades: [nearDistance, midDistance, passMaxDistance],
             reachProfile,
-            progressivePhase: isProgressivePreview ? 'preview' : progressivePhase === 'full' ? 'full' : 'stable',
+            progressivePhase: isProgressivePreview ? 'preview' : isNearRefine ? 'refine' : progressivePhase === 'full' ? 'full' : 'stable',
+            target: options.target || 'global',
             interacting: isMapMoving || isTimeSliding || isProgressivePreview,
-            timeSliding: isTimeSliding
+            timeSliding: isTimeSliding,
+            ridgeSampleStrength
         };
     }
 
@@ -348,7 +456,7 @@ const shadowGlobalUniformValues = (
         'u_sunDirection': [dirX, dirY],
         'u_sunAltitude': altRad,
         'u_metersPerPixel': [metersPerPixelX, metersPerPixelY],
-        'u_dimension': [Terrain.ATLAS_SIZE, Terrain.ATLAS_SIZE],
+        'u_dimension': [options.elevationAtlasSize || Terrain.ATLAS_SIZE, options.elevationAtlasSize || Terrain.ATLAS_SIZE],
         'u_atlas_bounds': atlasBounds,
         'u_inv_proj_matrix': [0, 0], // Map to atlas using bounds instead
         'u_max_steps': maxSteps,
@@ -356,6 +464,7 @@ const shadowGlobalUniformValues = (
         'u_max_distance': passMaxDistance,
         'u_near_cascade_distance': nearDistance,
         'u_mid_cascade_distance': midDistance,
+        'u_ridge_sample_strength': clamp(ridgeSampleStrength, 0.0, 1.0),
     };
 };
 
@@ -364,5 +473,10 @@ export {
     shadowUniformValues,
     shadowGlobalUniforms,
     shadowGlobalUniformValues,
-    shadowBlurUniforms
+    shadowBlurUniforms,
+    shadowSweepInitUniforms,
+    shadowSweepStepUniforms,
+    shadowSweepFinalUniforms,
+    shadowHizMipUniforms,
+    shadowHizGlobalUniforms
 };

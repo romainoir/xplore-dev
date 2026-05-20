@@ -6,7 +6,7 @@ import {debugUniforms} from './debug_program';
 import {heatmapUniforms, heatmapTextureUniforms} from './heatmap_program';
 import {hillshadeUniforms, hillshadePrepareUniforms} from './hillshade_program';
 import {colorReliefUniforms} from './color_relief_program';
-import {shadowUniforms, shadowGlobalUniforms, shadowBlurUniforms} from './shadow_program';
+import {shadowUniforms, shadowGlobalUniforms, shadowBlurUniforms, shadowSweepInitUniforms, shadowSweepStepUniforms, shadowSweepFinalUniforms, shadowHizMipUniforms, shadowHizGlobalUniforms} from './shadow_program';
 import {shadowPrepareUniforms} from './shadow_prepare_program';
 import {daylightPrepareUniforms, daylightUniforms} from './daylight_program';
 import {horizonPrepareUniforms} from './horizon_program';
@@ -42,6 +42,11 @@ export const programUniforms = {
     shadow: shadowUniforms,
     shadowPrepare: shadowPrepareUniforms,
     shadowGlobal: shadowGlobalUniforms,
+    shadowSweepInit: shadowSweepInitUniforms,
+    shadowSweepStep: shadowSweepStepUniforms,
+    shadowSweepFinal: shadowSweepFinalUniforms,
+    shadowHizMip: shadowHizMipUniforms,
+    shadowHizGlobal: shadowHizGlobalUniforms,
     shadowBlur: shadowBlurUniforms,
     horizonPrepare: horizonPrepareUniforms,
     daylightPrepare: daylightPrepareUniforms,

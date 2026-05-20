@@ -20,7 +20,7 @@ import {Texture} from '../webgl/texture';
 import {Color} from '@maplibre/maplibre-gl-style-spec';
 import {selectDebugSource, webglDrawFunctions, type DrawFunctions} from '../webgl/draw';
 import {drawGlobalShadow} from '../webgl/draw/draw_shadow';
-import {drawElevation, getShadowAtlasVisibleBounds} from '../webgl/draw/draw_terrain';
+import {drawElevation, drawNearElevation, getShadowAtlasVisibleBounds} from '../webgl/draw/draw_terrain';
 import {type OverscaledTileID} from '../tile/tile_id';
 import {Mesh} from './mesh';
 import {MercatorShaderDefine, MercatorShaderVariantKey} from '../geo/projection/mercator_projection';
@@ -670,7 +670,8 @@ export class Painter {
         const isTimeSliding = typeof window !== 'undefined' && (window as any)._isInteractingWithTime;
         const isCameraRefreshHeld = typeof window !== 'undefined' && (window as any)._shadowCameraRefreshHold;
         const progressivePhase = typeof window !== 'undefined' ? (window as any)._shadowProgressivePhase : '';
-        const isProgressiveRefresh = progressivePhase === 'preview' || progressivePhase === 'full';
+        const isNearRefine = progressivePhase === 'refine';
+        const isProgressiveRefresh = progressivePhase === 'preview' || progressivePhase === 'full' || isNearRefine;
         const isInteracting = isMapMoving || isTimeSliding || isCameraRefreshHeld;
         const wasInteracting = !!(this as any)._wasInteracting;
         (this as any)._wasInteracting = isInteracting;
@@ -701,7 +702,13 @@ export class Painter {
             doUpdate = true;
         }
 
-        const shadowLayer = this.style.getLayer('shadow-coarse') as ShadowStyleLayer;
+        const shadowV3Active = typeof window !== 'undefined' &&
+            (window as any).imageryState?.get?.('shadow-v3')?.enabled === true &&
+            ((window as any).imageryState?.get?.('shadow-v3')?.opacity ?? 1) > 0;
+        const shadowV2Active = typeof window !== 'undefined' &&
+            (window as any).imageryState?.get?.('shadow-v2')?.enabled === true &&
+            ((window as any).imageryState?.get?.('shadow-v2')?.opacity ?? 1) > 0;
+        const shadowLayer = this.style.getLayer(shadowV3Active ? 'shadow-v3-coarse' : shadowV2Active ? 'shadow-v2-coarse' : 'shadow-coarse') as ShadowStyleLayer;
         let shadowPropsChanged = false;
         let shadowProps: ReturnType<ShadowStyleLayer['getShadowProperties']> | null = null;
         if (shadowLayer) {
@@ -736,6 +743,19 @@ export class Painter {
             return;
         }
 
+        const canDrawNearOnly = !shadowPropsChanged && !tilesChanged && !(terrain as any)._shadowAtlasNeedsRefreshAfterCameraMove;
+        if (isNearRefine && canDrawNearOnly && shadowLayer && !shadowLayer.isHidden(this.transform.zoom) &&
+            (terrain as any)._shadowAtlasReady && (terrain as any)._elevationAtlasBounds) {
+            delete (terrain as any)._shadowAtlasNeedsRefreshAfterCameraMove;
+            drawNearElevation(this, terrain);
+            drawGlobalShadow(this, shadowLayer, 'near');
+            if (typeof window !== 'undefined') {
+                (window as any)._shadowProgressiveLastPhase = 'refine';
+                (window as any)._shadowProgressivePhase = 'stable';
+            }
+            return;
+        }
+
         const cachedAtlasBounds = (terrain as any)._elevationAtlasBounds;
         const cachedAtlasPhase = (terrain as any)._elevationAtlasProgressivePhase;
         const atlasVisible = shadowLayer && cachedAtlasBounds ? getShadowAtlasVisibleBounds(this, terrain) : null;
@@ -746,6 +766,7 @@ export class Painter {
         const fullMustRefinePreview = progressivePhase === 'full' && cachedAtlasPhase === 'preview';
         const canReuseCoveredAtlas = !isTimeSliding &&
             !shadowPropsChanged &&
+            !isNearRefine &&
             !fullMustRefinePreview &&
             !!(terrain as any)._shadowAtlasReady &&
             Array.isArray(cachedAtlasBounds) &&
@@ -775,13 +796,19 @@ export class Painter {
         }
 
         delete (terrain as any)._shadowAtlasNeedsRefreshAfterCameraMove;
+        let completedProgressivePhase = progressivePhase;
         drawElevation(this, terrain);
         if (shadowLayer && !shadowLayer.isHidden(this.transform.zoom)) {
             drawGlobalShadow(this, shadowLayer);
+            if (isNearRefine && (terrain as any)._shadowAtlasReady && (terrain as any)._elevationAtlasBounds) {
+                drawNearElevation(this, terrain);
+                drawGlobalShadow(this, shadowLayer, 'near');
+                completedProgressivePhase = 'refine-after-global';
+            }
         }
 
         if (typeof window !== 'undefined' && isProgressiveRefresh) {
-            (window as any)._shadowProgressiveLastPhase = progressivePhase;
+            (window as any)._shadowProgressiveLastPhase = completedProgressivePhase;
             (window as any)._shadowProgressivePhase = progressivePhase === 'preview' ? 'preview-complete' : 'stable';
         }
     }

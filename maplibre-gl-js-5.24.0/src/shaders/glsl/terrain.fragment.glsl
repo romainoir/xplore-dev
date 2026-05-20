@@ -13,12 +13,19 @@ uniform float u_zoom;
 uniform float u_tile_zoom;
 
 uniform sampler2D u_shadow_atlas;
+uniform sampler2D u_shadow_near_atlas;
 uniform sampler2D u_horizon0;
 uniform sampler2D u_horizon1;
 uniform sampler2D u_horizon2;
 uniform sampler2D u_horizon3;
 uniform highp vec4 u_atlas_bounds; // [minX, minY, maxX, maxY]
+uniform highp vec4 u_near_atlas_bounds; // [minX, minY, maxX, maxY]
 uniform float u_shadow_intensity;
+uniform float u_shadow_near_available;
+uniform float u_shadow_near_fade;
+uniform float u_shadow_near_debug_tint;
+uniform float u_shadow_display_mode;
+uniform float u_shadow_component_mode;
 uniform float u_horizon_available;
 uniform float u_horizon_bins;
 uniform float u_horizon_edge_softness;
@@ -39,9 +46,16 @@ uniform float u_dem_ao_meters_per_pixel; // source DEM GSD in meters
 uniform sampler2D u_dem_derivative;      // Prepared native hillshade derivative texture
 uniform float u_dem_derivative_available;
 uniform float u_shadow_atlas_size;
+uniform float u_shadow_near_atlas_size;
+uniform float u_contact_shadow_enabled;
+uniform float u_contact_shadow_strength;
+uniform float u_contact_shadow_distance;
+uniform float u_contact_shadow_steps;
+uniform float u_shadow_white_base;
 
 in vec2 v_texture_pos;
 in vec2 v_atlas_uv;
+in vec2 v_near_atlas_uv;
 in float v_fog_depth;
 in float v_elevation;
 in float v_dist_linear;
@@ -127,7 +141,12 @@ vec2 sampleReliefGradient(vec2 coord) {
         return samplePreparedDemGradient(coord);
     }
 
-    return sampleDemGradient(coord);
+    // Do not run the 16-sample DEM Sobel fallback in the terrain fragment
+    // shader. During pan/zoom, newly visible tiles often do not have their
+    // prepared derivative texture yet; the fallback made those interactive
+    // frames dramatically more expensive. A neutral gradient is cheaper and
+    // the native derivative cache fills in after the camera settles.
+    return vec2(0.0);
 }
 
 float skyAmbientAmount(float altitude) {
@@ -255,6 +274,36 @@ vec2 shadowAtlasEdgeNormal(vec2 atlasUV, float rawMask) {
 }
 
 float remapShadowMask(float rawMask, vec2 atlasUV) {
+    if (u_shadow_display_mode > 0.5) {
+        float edgeGradient = fwidth(rawMask);
+        float atlasFootprint = max(length(dFdx(atlasUV) * u_shadow_atlas_size), length(dFdy(atlasUV) * u_shadow_atlas_size));
+        float aa = clamp(max(edgeGradient * 0.36, 0.0035 + atlasFootprint * 0.0018), 0.0035, 0.026);
+        float base = smoothstep(0.10 - aa, 0.88 + aa, rawMask);
+        if (edgeGradient < 0.0015 && (base < 0.001 || base > 0.999)) {
+            return base;
+        }
+
+        vec2 edgeNormal = shadowAtlasEdgeNormal(atlasUV, rawMask);
+        float atlasScale = max(u_shadow_atlas_size, 1.0);
+        float lowSunSoftness = 1.0 - smoothstep(radians(10.0), radians(34.0), u_sun_altitude);
+        float radius = clamp(mix(0.80, 1.45, lowSunSoftness) + atlasFootprint * 0.28, 0.80, 2.10);
+        float edgeBand = smoothstep(0.03, 0.42, base) * (1.0 - smoothstep(0.58, 0.98, base));
+        float stableNoise = valueNoise(atlasUV * atlasScale * 0.65 + vec2(41.0, 137.0)) * 0.65 +
+            valueNoise(atlasUV * atlasScale * 1.37 + vec2(211.0, 17.0)) * 0.35;
+        float jitter = (stableNoise - 0.5) * edgeBand * 0.018;
+        vec2 texelNormal = edgeNormal / atlasScale;
+        vec2 texelTangent = vec2(-texelNormal.y, texelNormal.x);
+        float s0 = smoothstep(0.10 - aa + jitter, 0.88 + aa + jitter, rawMask);
+        float s1 = shadowHitAt(atlasUV + texelNormal * radius, aa, jitter * 0.35);
+        float s2 = shadowHitAt(atlasUV - texelNormal * radius, aa, jitter * 0.35);
+        float s3 = shadowHitAt(atlasUV + texelTangent * radius * 0.62, aa, jitter * 0.20);
+        float s4 = shadowHitAt(atlasUV - texelTangent * radius * 0.62, aa, jitter * 0.20);
+        float filtered = (s0 * 2.60 + s1 * 0.92 + s2 * 0.92 + s3 * 0.42 + s4 * 0.42) / 5.28;
+        float crisp = smoothstep(0.16, 0.84, filtered);
+
+        return clamp(mix(filtered, crisp, 0.10), 0.0, 1.0);
+    }
+
     float edgeGradient = fwidth(rawMask);
     float atlasFootprint = max(length(dFdx(atlasUV) * u_shadow_atlas_size), length(dFdy(atlasUV) * u_shadow_atlas_size));
     float edgeAA = clamp(max(edgeGradient * 0.48, 0.004 + atlasFootprint * 0.0028), 0.004, 0.038);
@@ -302,16 +351,138 @@ float remapShadowMask(float rawMask, vec2 atlasUV) {
     return clamp(mix(filtered, crisp, crispAmount), 0.0, 1.0);
 }
 
-float localIgorReliefShadow(vec2 gradient) {
+float nearShadowHitAt(vec2 atlasUV, float edgeAA) {
+    float rawMask = texture(u_shadow_near_atlas, clamp(atlasUV, vec2(0.0), vec2(1.0))).r;
+    float aa = clamp(edgeAA * 0.45, 0.004, 0.028);
+    return smoothstep(0.025 - aa, 0.975 + aa, rawMask);
+}
+
+float remapNearShadowMask(float rawMask, vec2 atlasUV) {
+    float edgeGradient = fwidth(rawMask);
+    float atlasFootprint = max(length(dFdx(atlasUV) * u_shadow_near_atlas_size), length(dFdy(atlasUV) * u_shadow_near_atlas_size));
+    float edgeAA = clamp(max(edgeGradient * 0.52, 0.004 + atlasFootprint * 0.0025), 0.004, 0.035);
+    float center = nearShadowHitAt(atlasUV, edgeAA);
+    if (edgeGradient < 0.0015 && (center < 0.001 || center > 0.999)) {
+        return center;
+    }
+
+    vec2 texel = vec2(1.0 / max(u_shadow_near_atlas_size, 1.0));
+    float pcf =
+        center * 2.70 +
+        nearShadowHitAt(atlasUV + vec2( texel.x, 0.0), edgeAA) * 0.95 +
+        nearShadowHitAt(atlasUV + vec2(-texel.x, 0.0), edgeAA) * 0.95 +
+        nearShadowHitAt(atlasUV + vec2(0.0,  texel.y), edgeAA) * 0.95 +
+        nearShadowHitAt(atlasUV + vec2(0.0, -texel.y), edgeAA) * 0.95 +
+        nearShadowHitAt(atlasUV + vec2( texel.x,  texel.y), edgeAA) * 0.42 +
+        nearShadowHitAt(atlasUV + vec2(-texel.x,  texel.y), edgeAA) * 0.42 +
+        nearShadowHitAt(atlasUV + vec2( texel.x, -texel.y), edgeAA) * 0.42 +
+        nearShadowHitAt(atlasUV + vec2(-texel.x, -texel.y), edgeAA) * 0.42;
+
+    float filtered = pcf / 8.18;
+    return clamp(mix(filtered, smoothstep(0.18, 0.82, filtered), 0.035), 0.0, 1.0);
+}
+
+float atlasEdgeRoom(vec2 atlasUV) {
+    return min(min(atlasUV.x, 1.0 - atlasUV.x), min(atlasUV.y, 1.0 - atlasUV.y));
+}
+
+float rayRoomToAtlasEdge(vec2 atlasUV, vec2 rayDir) {
+    float tx = rayDir.x > 0.0001 ? (1.0 - atlasUV.x) / rayDir.x :
+        rayDir.x < -0.0001 ? atlasUV.x / -rayDir.x : 1.0e6;
+    float ty = rayDir.y > 0.0001 ? (1.0 - atlasUV.y) / rayDir.y :
+        rayDir.y < -0.0001 ? atlasUV.y / -rayDir.y : 1.0e6;
+    return min(tx, ty);
+}
+
+float nearAtlasCoverage(vec2 nearAtlasUV) {
+    vec2 nearSpan = max(u_near_atlas_bounds.zw - u_near_atlas_bounds.xy, vec2(1.0e-9));
+    vec2 sunDirNearUV = vec2(u_sun_direction.x / nearSpan.x, -u_sun_direction.y / nearSpan.y);
+    float sunDirLen = length(sunDirNearUV);
+    sunDirNearUV = sunDirLen > 0.00001 ? sunDirNearUV / sunDirLen : vec2(1.0, 0.0);
+
+    // The near cascade can only be trusted if the receiver is not close to the
+    // atlas border and there is enough room in the sunward direction for local
+    // casters. Otherwise it may miss far terrain that the global atlas still has.
+    float borderCoverage = smoothstep(0.012, 0.060, atlasEdgeRoom(nearAtlasUV));
+    float sunwardCoverage = smoothstep(0.045, 0.170, rayRoomToAtlasEdge(nearAtlasUV, sunDirNearUV));
+    return borderCoverage * sunwardCoverage;
+}
+
+float nearAtlasReplaceCoverage(vec2 nearAtlasUV) {
+    vec2 nearSpan = max(u_near_atlas_bounds.zw - u_near_atlas_bounds.xy, vec2(1.0e-9));
+    vec2 sunDirNearUV = vec2(u_sun_direction.x / nearSpan.x, -u_sun_direction.y / nearSpan.y);
+    float sunDirLen = length(sunDirNearUV);
+    sunDirNearUV = sunDirLen > 0.00001 ? sunDirNearUV / sunDirLen : vec2(1.0, 0.0);
+
+    // Replacement is stricter than additive coverage. In this central region,
+    // the near cascade has enough border/sunward room to clean coarse global
+    // edge pixels without deleting real long-range mountain shadows elsewhere.
+    float borderCoverage = smoothstep(0.075, 0.155, atlasEdgeRoom(nearAtlasUV));
+    float sunwardCoverage = smoothstep(0.180, 0.360, rayRoomToAtlasEdge(nearAtlasUV, sunDirNearUV));
+    return borderCoverage * sunwardCoverage;
+}
+
+float localIgorLambert(vec2 gradient) {
     vec3 normal = normalize(vec3(-gradient.x, -gradient.y, 1.0));
     vec3 lightDir = normalize(vec3(u_sun_direction, max(tan(max(u_sun_altitude, radians(1.5))), 0.03)));
-    float lambert = dot(normal, lightDir);
+    return dot(normal, lightDir);
+}
 
-    float slopeStrength = atan(length(gradient) * 2.0) * 2.0 / PI;
+float localIgorSlopeStrength(vec2 gradient) {
+    return atan(length(gradient) * 2.0) * 2.0 / PI;
+}
+
+float localIgorReliefShadowFrom(float lambert, float slopeStrength) {
     float lowSunBoost = 1.0 - smoothstep(radians(18.0), radians(45.0), u_sun_altitude);
     float shadow = slopeStrength * (1.0 - smoothstep(0.08, 0.62, lambert)) * mix(0.92, 1.16, lowSunBoost);
 
     return clamp(shadow, 0.0, 1.0);
+}
+
+float localIgorReliefShadow(vec2 gradient) {
+    return localIgorReliefShadowFrom(localIgorLambert(gradient), localIgorSlopeStrength(gradient));
+}
+
+float localTerrainContactShadow(vec2 coord, float startElevation) {
+    if (u_contact_shadow_enabled < 0.5 || u_sun_altitude <= radians(0.25) || u_dem_ao_dim <= 2.0) {
+        return 0.0;
+    }
+
+    vec2 rayDir = normalize(u_sun_direction);
+    if (dot(rayDir, rayDir) < 0.5) {
+        return 0.0;
+    }
+
+    float demGsd = max(u_dem_ao_meters_per_pixel, 0.5);
+    float maxDistance = max(u_contact_shadow_distance, demGsd * 6.0);
+    float steps = clamp(floor(u_contact_shadow_steps + 0.5), 4.0, 14.0);
+    float stepMeters = max(maxDistance / steps, demGsd * 0.85);
+    float tanSun = max(tan(u_sun_altitude), 0.018);
+    float lowSunBoost = 1.0 - smoothstep(radians(10.0), radians(32.0), u_sun_altitude);
+    float hitBias = max(0.65, demGsd * mix(0.035, 0.020, lowSunBoost));
+    float contact = 0.0;
+
+    for (int i = 1; i <= 14; i++) {
+        if (float(i) > steps) break;
+
+        float distanceMeters = (float(i) - 0.35) * stepMeters;
+        if (distanceMeters > maxDistance) break;
+
+        vec2 sampleCoord = coord + rayDir * (distanceMeters / demGsd);
+        if (sampleCoord.x < 1.0 || sampleCoord.x > u_dem_ao_dim ||
+            sampleCoord.y < 1.0 || sampleCoord.y > u_dem_ao_dim) {
+            break;
+        }
+
+        float blockerElevation = sampleDemTexel(sampleCoord);
+        float rayHeight = startElevation + distanceMeters * tanSun + hitBias;
+        float excess = blockerElevation - rayHeight;
+        float hit = smoothstep(0.20, max(1.15, demGsd * 0.18), excess);
+        float distanceFade = 1.0 - smoothstep(maxDistance * 0.16, maxDistance, distanceMeters);
+        contact = max(contact, hit * distanceFade);
+    }
+
+    return clamp(contact * u_contact_shadow_strength, 0.0, 1.0);
 }
 
 vec4 applyTerrainFog(vec4 color) {
@@ -328,6 +499,7 @@ vec4 applyTerrainFog(vec4 color) {
 
 void main() {
     vec4 surface_color = texture(u_texture, vec2(v_texture_pos.x, 1.0 - v_texture_pos.y));
+    surface_color = mix(surface_color, vec4(1.0), clamp(u_shadow_white_base, 0.0, 1.0));
     fragColor = surface_color;
 
     // ── Distance-Based Fading Contour Lines ──
@@ -376,18 +548,22 @@ void main() {
     float skyAmbient = skyAmbientAmount(u_sun_altitude);
     float shadowStrength = clamp(u_shadow_intensity, 0.0, 1.0);
     float sunCastVisibility = smoothstep(radians(-0.15), radians(0.85), u_sun_altitude);
-    float effectiveShadowStrength = shadowStrength * sunCastVisibility;
 
     float localReliefShadow = 0.0;
+    vec2 localReliefGradient = vec2(0.0);
+    float localReliefLambert = 1.0;
+    float localReliefSlope = 0.0;
+    float localElevation = 0.0;
+    float contactShadow = 0.0;
     if (u_dem_ao_dim > 2.0 && (u_self_shadow_mult > 0.001 || u_igor_relief_enabled > 0.5)) {
-        localReliefShadow = localIgorReliefShadow(sampleReliefGradient(clamp(v_dem_coord, vec2(1.0), vec2(u_dem_ao_dim))));
+        localElevation = sampleDemTexel(clamp(v_dem_coord, vec2(1.0), vec2(u_dem_ao_dim)));
+        localReliefGradient = sampleReliefGradient(clamp(v_dem_coord, vec2(1.0), vec2(u_dem_ao_dim)));
+        localReliefLambert = localIgorLambert(localReliefGradient);
+        localReliefSlope = localIgorSlopeStrength(localReliefGradient);
+        localReliefShadow = localIgorReliefShadowFrom(localReliefLambert, localReliefSlope);
+        contactShadow = localTerrainContactShadow(clamp(v_dem_coord, vec2(1.0), vec2(u_dem_ao_dim)), localElevation);
     }
     float reliefShadowStrength = mix(0.70, clamp(u_self_shadow_mult, 0.0, 3.0), 0.55);
-
-    if (u_igor_relief_enabled > 0.5) {
-        float ambientReliefAO = localReliefShadow * (0.020 + skyAmbient * 0.030) * reliefShadowStrength;
-        fragColor.rgb *= 1.0 - ambientReliefAO;
-    }
 
     fragColor.rgb = applySkyLightTint(fragColor.rgb, u_sun_altitude, u_horizon_color.rgb, u_fog_color.rgb);
 
@@ -395,33 +571,95 @@ void main() {
     vec2 atlasUV = v_atlas_uv;
     bool atlasCovered = atlasUV.x >= -0.001 && atlasUV.x <= 1.001 && atlasUV.y >= -0.001 && atlasUV.y <= 1.001;
     float shadowMask = 0.0;
+    float nearShadowMask = 0.0;
+    float nearContribution = 0.0;
+    float rawAtlasShadow = 0.0;
+    float rawNearShadow = 0.0;
     float castPresence = 0.0;
-    if (atlasUV.x >= -0.001 && atlasUV.x <= 1.001 && atlasUV.y >= -0.001 && atlasUV.y <= 1.001) {
-        float rawAtlasShadow = clamp(texture(u_shadow_atlas, clamp(atlasUV, vec2(0.0), vec2(1.0))).r, 0.0, 1.0);
+    bool useGlobalCastShadow = u_shadow_component_mode < 1.5;
+    bool useNearCastShadow = u_shadow_component_mode < 0.5 || (u_shadow_component_mode > 1.5 && u_shadow_component_mode < 2.5);
+
+    if (useGlobalCastShadow &&
+        atlasUV.x >= -0.001 && atlasUV.x <= 1.001 && atlasUV.y >= -0.001 && atlasUV.y <= 1.001) {
+        rawAtlasShadow = clamp(texture(u_shadow_atlas, clamp(atlasUV, vec2(0.0), vec2(1.0))).r, 0.0, 1.0);
         float raymarchedShadow = remapShadowMask(rawAtlasShadow, atlasUV);
         float horizonShadow = horizonShadowMask(atlasUV);
         shadowMask = mix(raymarchedShadow, horizonShadow, clamp(u_horizon_available, 0.0, 1.0));
     }
+    if (useNearCastShadow &&
+        u_shadow_near_available > 0.5 &&
+        v_near_atlas_uv.x >= -0.001 && v_near_atlas_uv.x <= 1.001 &&
+        v_near_atlas_uv.y >= -0.001 && v_near_atlas_uv.y <= 1.001) {
+        rawNearShadow = clamp(texture(u_shadow_near_atlas, clamp(v_near_atlas_uv, vec2(0.0), vec2(1.0))).r, 0.0, 1.0);
+        nearShadowMask = remapNearShadowMask(rawNearShadow, v_near_atlas_uv);
+        float previousShadowMask = shadowMask;
+        float nearFade = smoothstep(0.0, 1.0, clamp(u_shadow_near_fade, 0.0, 1.0));
+        float nearCoverage = nearAtlasCoverage(v_near_atlas_uv) * nearFade;
+        float additiveShadow = max(shadowMask, nearShadowMask * nearCoverage);
+
+        // The global atlas is intentionally wide and coarse, so its transition
+        // pixels can remain visible around the refined near edge. Let the near
+        // atlas replace only partial global edges inside a stricter trusted
+        // region; preserve full global shadows for long-distance casters.
+        float globalPartialEdge = smoothstep(0.035, 0.30, shadowMask) * (1.0 - smoothstep(0.76, 0.97, shadowMask));
+        float replaceCoverage = nearAtlasReplaceCoverage(v_near_atlas_uv);
+        float nearAddsDetail = smoothstep(-0.02, 0.10, nearShadowMask - shadowMask);
+        float replaceWeight = replaceCoverage * globalPartialEdge * nearFade * nearAddsDetail;
+        shadowMask = mix(additiveShadow, max(additiveShadow, nearShadowMask), replaceWeight);
+        nearContribution = max(shadowMask - previousShadowMask, 0.0);
+    }
+    if (u_shadow_near_debug_tint > 0.5 && nearShadowMask > 0.01) {
+        float tintMask = clamp(max(nearContribution, nearShadowMask * 0.35), 0.0, 1.0);
+        fragColor.rgb = mix(fragColor.rgb, vec3(0.02, 0.72, 1.0), tintMask * 0.45);
+    }
 
     vec3 shadowTint = vec3(0.075, 0.085, 0.120);
-    // Keep local relief continuous for AO/detail, and use only this separate
-    // contact term as an occlusion mask so fine relief is not posterized.
-    float selfShadowSignal = clamp(localReliefShadow * u_self_shadow_mult, 0.0, 1.0);
-    float selfShadowContact = smoothstep(0.14, 0.82, selfShadowSignal);
-    float selfShadowMask = clamp(mix(selfShadowSignal * 0.58, selfShadowContact * 0.68, 0.30), 0.0, 1.0);
     float lowSunFarFallback = 1.0 - smoothstep(radians(7.0), radians(22.0), u_sun_altitude);
     float farTerrainSignal = clamp(localReliefShadow * u_self_shadow_mult * mix(0.28, 0.58, lowSunFarFallback), 0.0, 1.0);
-    float farTerrainShadow = smoothstep(0.025, 0.68, farTerrainSignal) * (atlasCovered ? 0.0 : 1.0);
-    float baseShadow = max(max(shadowMask, selfShadowMask), farTerrainShadow);
-    float shadowAlpha = clamp(baseShadow * effectiveShadowStrength * u_cast_shadow_mult * 0.62, 0.0, 0.74);
-    fragColor.rgb = mix(fragColor.rgb, shadowTint, shadowAlpha);
+    float farTerrainShadow = useGlobalCastShadow ? smoothstep(0.025, 0.68, farTerrainSignal) * (atlasCovered ? 0.0 : 1.0) : 0.0;
 
-    // Preserve fine terrain relief inside broad cast shadows. Without this
-    // post-shadow AO pass, opaque cast shadows flatten the integrated Igor detail.
-    if (u_igor_relief_enabled > 0.5) {
-        castPresence = clamp(max(shadowMask, farTerrainShadow) * effectiveShadowStrength, 0.0, 1.0);
-        float reliefAO = localReliefShadow * castPresence * 0.080 * reliefShadowStrength;
-        fragColor.rgb *= 1.0 - reliefAO;
+    if (u_shadow_display_mode > 0.5) {
+        // V2 follows copy 7's lighting model: Light = Ambient * AO + Sun * SelfLight * CastLight.
+        // This keeps self-shadow directional instead of letting static slope AO dominate.
+        float selfLight = smoothstep(0.0, 1.0, clamp(localReliefLambert, 0.0, 1.0));
+        float ao = 1.0 - smoothstep(0.10, 0.70, localReliefSlope) * 0.25;
+        float ambientConfig = 0.20;
+        float sunConfig = 1.0 - ambientConfig;
+        float castShadow = clamp(max(shadowMask, farTerrainShadow), 0.0, 1.0);
+        float castLight = 1.0 - castShadow * sunCastVisibility;
+        float totalLight = (ambientConfig * ao) + (sunConfig * selfLight * castLight);
+        float copy7Shadow = 1.0 - clamp(totalLight, 0.0, 1.0);
+        float shadowAlpha = clamp(copy7Shadow * shadowStrength * u_cast_shadow_mult * 0.52, 0.0, 0.76);
+        fragColor.rgb = mix(fragColor.rgb, shadowTint, shadowAlpha);
+        float contactOnly = contactShadow * (1.0 - smoothstep(0.08, 0.78, castShadow)) * sunCastVisibility;
+        fragColor.rgb = mix(fragColor.rgb, shadowTint, contactOnly * shadowStrength * 0.22);
+
+        if (u_igor_relief_enabled > 0.5) {
+            castPresence = clamp(castShadow * shadowStrength * sunCastVisibility, 0.0, 1.0);
+            float reliefAO = localReliefShadow * castPresence * 0.060 * reliefShadowStrength;
+            fragColor.rgb *= 1.0 - reliefAO;
+        }
+    } else {
+        // V1 keeps its original atlas/edge filtering, but now uses the same
+        // copy 7 intensity balance as V2 for cast and self shadows.
+        float selfLight = smoothstep(0.0, 1.0, clamp(localReliefLambert, 0.0, 1.0));
+        float ao = 1.0 - smoothstep(0.10, 0.70, localReliefSlope) * 0.25;
+        float ambientConfig = 0.20;
+        float sunConfig = 1.0 - ambientConfig;
+        float castShadow = clamp(max(shadowMask, farTerrainShadow), 0.0, 1.0);
+        float castLight = 1.0 - castShadow * sunCastVisibility;
+        float totalLight = (ambientConfig * ao) + (sunConfig * selfLight * castLight);
+        float copy7Shadow = 1.0 - clamp(totalLight, 0.0, 1.0);
+        float shadowAlpha = clamp(copy7Shadow * shadowStrength * u_cast_shadow_mult * 0.52, 0.0, 0.76);
+        fragColor.rgb = mix(fragColor.rgb, shadowTint, shadowAlpha);
+        float contactOnly = contactShadow * (1.0 - smoothstep(0.08, 0.78, castShadow)) * sunCastVisibility;
+        fragColor.rgb = mix(fragColor.rgb, shadowTint, contactOnly * shadowStrength * 0.22);
+
+        if (u_igor_relief_enabled > 0.5) {
+            castPresence = clamp(castShadow * shadowStrength * sunCastVisibility, 0.0, 1.0);
+            float reliefAO = localReliefShadow * castPresence * 0.060 * reliefShadowStrength;
+            fragColor.rgb *= 1.0 - reliefAO;
+        }
     }
 
     // Fog is a final atmospheric composite over terrain lighting. Keeping it

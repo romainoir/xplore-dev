@@ -54875,13 +54875,28 @@ var shadowPrepareFrag = '\nuniform sampler2D u_image;uniform sampler2D u_dem_nor
 var shadowPrepareVert = 'in vec2 a_pos;out vec2 v_pos;void main() {vec2 pos=a_pos/8192.0;gl_Position=vec4(pos*2.0-1.0,0.0,1.0);v_pos=vec2(pos.x,1.0-pos.y);}';
 
 // This file is generated. Edit build/generate-shaders.ts, then run `npm run codegen`.
-var shadowGlobalFrag = 'uniform sampler2D u_image;uniform vec2 u_sunDirection;uniform float u_sunAltitude;uniform vec2 u_metersPerPixel;uniform vec4 u_atlas_bounds;uniform float u_max_steps;uniform float u_step_meters;uniform vec2 u_dimension;uniform float u_max_distance;uniform float u_near_cascade_distance;uniform float u_mid_cascade_distance;in vec2 v_pos;const highp vec4 bitUn=vec4(1./(256.*256.*256.),1./(256.*256.),1./256.,1.);highp float unpack(highp vec4 color) {return dot(color,bitUn);}\n#define hardMaxSteps 384.0\nconst float WORLD_CIRCUMFERENCE=40075016.7;const float EMPTY_ELEVATION=-9900.0;float sampleElevationBilinear(vec2 uv) {vec2 dim=u_dimension;vec2 pos=uv*dim;vec2 posCenter=pos-0.5;vec2 f=fract(posCenter);vec2 i=floor(posCenter)+0.5;vec4 t00=texture(u_image,(i+vec2(0.0,0.0))/dim);vec4 t10=texture(u_image,(i+vec2(1.0,0.0))/dim);vec4 t01=texture(u_image,(i+vec2(0.0,1.0))/dim);vec4 t11=texture(u_image,(i+vec2(1.0,1.0))/dim);float h00=unpack(t00)*20000.0-10000.0;float h10=unpack(t10)*20000.0-10000.0;float h01=unpack(t01)*20000.0-10000.0;float h11=unpack(t11)*20000.0-10000.0;return mix(mix(h00,h10,f.x),mix(h01,h11,f.x),f.y);}float sampleElevationNearest(vec2 uv) {return unpack(texture(u_image,uv))*20000.0-10000.0;}float hash12(vec2 p) {vec3 p3=fract(vec3(p.xyx)*0.1031);p3+=dot(p3,p3.yzx+33.33);return fract((p3.x+p3.y)*p3.z);}float cascadeStepMultiplier(float distanceMeters) {float nearDistance=max(u_near_cascade_distance,1.0);float midDistance=max(u_mid_cascade_distance,nearDistance+1.0);float nearToMid=smoothstep(nearDistance*0.75,nearDistance*1.25,distanceMeters);float midToFar=smoothstep(midDistance*0.75,midDistance*1.25,distanceMeters);return mix(mix(1.0,2.75,nearToMid),7.0,midToFar);}float sampleElevationCascade(vec2 uv,float distanceMeters) {return sampleElevationBilinear(uv);}void main() {if (u_sunAltitude <=0.001) {fragColor=vec4(0.0);return;}float startElevation=sampleElevationBilinear(v_pos);if (startElevation < EMPTY_ELEVATION) {fragColor=vec4(0.0);return;}vec2 worldStepPerMeter=vec2(u_sunDirection.x/WORLD_CIRCUMFERENCE,u_sunDirection.y/WORLD_CIRCUMFERENCE\n);vec2 sampleUVStepPerMeter=worldStepPerMeter/(u_atlas_bounds.zw-u_atlas_bounds.xy);sampleUVStepPerMeter.y=-sampleUVStepPerMeter.y;float tanSun=max(tan(u_sunAltitude),0.001);float jitterMeters=hash12(floor(v_pos*u_dimension)+u_sunDirection*37.0)*min(u_step_meters,45.0)*0.35;vec2 previousUV=v_pos+sampleUVStepPerMeter*jitterMeters;float previousRayHeight=startElevation+jitterMeters*tanSun;float distanceMeters=jitterMeters;float shadow=0.0;for (float i=0.0; i < hardMaxSteps; i++) {if (i >=u_max_steps || distanceMeters >=u_max_distance) break;float stepMeters=u_step_meters*cascadeStepMultiplier(distanceMeters);float nextDistance=min(distanceMeters+stepMeters,u_max_distance);stepMeters=nextDistance-distanceMeters;distanceMeters=nextDistance;vec2 currentUV=previousUV+sampleUVStepPerMeter*stepMeters;float currentRayHeight=previousRayHeight+stepMeters*tanSun;if (currentUV.x < 0.0 || currentUV.x > 1.0 || currentUV.y < 0.0 || currentUV.y > 1.0) break;if (currentRayHeight > 8900.0) break;float elev=sampleElevationCascade(currentUV,distanceMeters);float margin=elev-currentRayHeight;if (distanceMeters > u_mid_cascade_distance && margin >-u_step_meters*2.0) {elev=sampleElevationBilinear(currentUV);margin=elev-currentRayHeight;}if (margin > 0.0) {vec2 loUV=previousUV;vec2 hiUV=currentUV;float loRayHeight=previousRayHeight;float hiRayHeight=currentRayHeight;float loDistance=distanceMeters-stepMeters;float hiDistance=distanceMeters;for (int j=0; j < 5; j++) {vec2 midUV=mix(loUV,hiUV,0.5);float midRayHeight=mix(loRayHeight,hiRayHeight,0.5);float midDistance=mix(loDistance,hiDistance,0.5);float midElev=sampleElevationBilinear(midUV);if (midElev > midRayHeight) {hiUV=midUV;hiRayHeight=midRayHeight;hiDistance=midDistance;} else {loUV=midUV;loRayHeight=midRayHeight;loDistance=midDistance;}}float distanceFade=1.0-smoothstep(u_max_distance*0.94,u_max_distance,hiDistance);shadow=distanceFade;break;}previousUV=currentUV;previousRayHeight=currentRayHeight;}fragColor=vec4(vec3(shadow),1.0);}';
+var shadowGlobalFrag = 'uniform sampler2D u_image;uniform vec2 u_sunDirection;uniform float u_sunAltitude;uniform vec2 u_metersPerPixel;uniform vec4 u_atlas_bounds;uniform float u_max_steps;uniform float u_step_meters;uniform vec2 u_dimension;uniform float u_max_distance;uniform float u_near_cascade_distance;uniform float u_mid_cascade_distance;uniform float u_ridge_sample_strength;in vec2 v_pos;const highp vec4 bitUn=vec4(1./(256.*256.*256.),1./(256.*256.),1./256.,1.);highp float unpack(highp vec4 color) {return dot(color,bitUn);}\n#define hardMaxSteps 384.0\nconst float WORLD_CIRCUMFERENCE=40075016.7;const float EMPTY_ELEVATION=-9900.0;float sampleElevationBilinear(vec2 uv) {vec2 dim=u_dimension;vec2 pos=uv*dim;vec2 posCenter=pos-0.5;vec2 f=fract(posCenter);vec2 i=floor(posCenter)+0.5;vec4 t00=texture(u_image,(i+vec2(0.0,0.0))/dim);vec4 t10=texture(u_image,(i+vec2(1.0,0.0))/dim);vec4 t01=texture(u_image,(i+vec2(0.0,1.0))/dim);vec4 t11=texture(u_image,(i+vec2(1.0,1.0))/dim);float h00=unpack(t00)*20000.0-10000.0;float h10=unpack(t10)*20000.0-10000.0;float h01=unpack(t01)*20000.0-10000.0;float h11=unpack(t11)*20000.0-10000.0;return mix(mix(h00,h10,f.x),mix(h01,h11,f.x),f.y);}float sampleElevationNearest(vec2 uv) {return unpack(texture(u_image,uv))*20000.0-10000.0;}float hash12(vec2 p) {vec3 p3=fract(vec3(p.xyx)*0.1031);p3+=dot(p3,p3.yzx+33.33);return fract((p3.x+p3.y)*p3.z);}float cascadeStepMultiplier(float distanceMeters) {float nearDistance=max(u_near_cascade_distance,1.0);float midDistance=max(u_mid_cascade_distance,nearDistance+1.0);float nearToMid=smoothstep(nearDistance*0.75,nearDistance*1.25,distanceMeters);float midToFar=smoothstep(midDistance*0.75,midDistance*1.25,distanceMeters);return mix(mix(1.0,2.75,nearToMid),7.0,midToFar);}float sampleElevationCascade(vec2 uv,float distanceMeters) {return sampleElevationBilinear(uv);}float sampleElevationRidgeAware(vec2 uv,float distanceMeters) {float center=sampleElevationBilinear(uv);float nearRidgeWindow=1.0-smoothstep(u_near_cascade_distance*0.65,u_mid_cascade_distance*1.05,distanceMeters);float ridgeStrength=clamp(u_ridge_sample_strength,0.0,1.0)*nearRidgeWindow;if (ridgeStrength <=0.001) {return center;}vec2 atlasSpan=max(u_atlas_bounds.zw-u_atlas_bounds.xy,vec2(1.0e-9));vec2 rayDir=vec2(u_sunDirection.x/atlasSpan.x,-u_sunDirection.y/atlasSpan.y);float rayLen=length(rayDir);rayDir=rayLen > 0.00001 ? rayDir/rayLen : vec2(1.0,0.0);vec2 texel=vec2(1.0)/max(u_dimension,vec2(1.0));float lowSunRidge=1.0-smoothstep(radians(14.0),radians(34.0),u_sunAltitude);float radius=mix(0.38,0.82,lowSunRidge);vec2 rayStep=rayDir*texel*radius;float ridge=center;ridge=max(ridge,sampleElevationBilinear(uv+rayStep));ridge=max(ridge,sampleElevationBilinear(uv-rayStep));float lift=max(ridge-center,0.0);return center+lift*ridgeStrength;}void main() {if (u_sunAltitude <=0.001) {fragColor=vec4(0.0);return;}float startElevation=sampleElevationBilinear(v_pos);if (startElevation < EMPTY_ELEVATION) {fragColor=vec4(0.0);return;}vec2 worldStepPerMeter=vec2(u_sunDirection.x/WORLD_CIRCUMFERENCE,u_sunDirection.y/WORLD_CIRCUMFERENCE\n);vec2 sampleUVStepPerMeter=worldStepPerMeter/(u_atlas_bounds.zw-u_atlas_bounds.xy);sampleUVStepPerMeter.y=-sampleUVStepPerMeter.y;float tanSun=max(tan(u_sunAltitude),0.001);float jitterMeters=hash12(floor(v_pos*u_dimension)+u_sunDirection*37.0)*min(u_step_meters,45.0)*0.35;vec2 previousUV=v_pos+sampleUVStepPerMeter*jitterMeters;float previousRayHeight=startElevation+jitterMeters*tanSun;float distanceMeters=jitterMeters;float shadow=0.0;for (float i=0.0; i < hardMaxSteps; i++) {if (i >=u_max_steps || distanceMeters >=u_max_distance) break;float stepMeters=u_step_meters*cascadeStepMultiplier(distanceMeters);float nextDistance=min(distanceMeters+stepMeters,u_max_distance);stepMeters=nextDistance-distanceMeters;distanceMeters=nextDistance;vec2 currentUV=previousUV+sampleUVStepPerMeter*stepMeters;float currentRayHeight=previousRayHeight+stepMeters*tanSun;if (currentUV.x < 0.0 || currentUV.x > 1.0 || currentUV.y < 0.0 || currentUV.y > 1.0) break;if (currentRayHeight > 8900.0) break;float elev=sampleElevationRidgeAware(currentUV,distanceMeters);float margin=elev-currentRayHeight;if (distanceMeters > u_mid_cascade_distance && margin >-u_step_meters*2.0) {elev=sampleElevationRidgeAware(currentUV,distanceMeters);margin=elev-currentRayHeight;}if (margin > 0.0) {vec2 loUV=previousUV;vec2 hiUV=currentUV;float loRayHeight=previousRayHeight;float hiRayHeight=currentRayHeight;float loDistance=distanceMeters-stepMeters;float hiDistance=distanceMeters;for (int j=0; j < 5; j++) {vec2 midUV=mix(loUV,hiUV,0.5);float midRayHeight=mix(loRayHeight,hiRayHeight,0.5);float midDistance=mix(loDistance,hiDistance,0.5);float midElev=sampleElevationRidgeAware(midUV,midDistance);if (midElev > midRayHeight) {hiUV=midUV;hiRayHeight=midRayHeight;hiDistance=midDistance;} else {loUV=midUV;loRayHeight=midRayHeight;loDistance=midDistance;}}float distanceFade=1.0-smoothstep(u_max_distance*0.94,u_max_distance,hiDistance);shadow=distanceFade;break;}previousUV=currentUV;previousRayHeight=currentRayHeight;}fragColor=vec4(vec3(shadow),1.0);}';
 
 // This file is generated. Edit build/generate-shaders.ts, then run `npm run codegen`.
 var shadowGlobalVert = 'in vec2 a_pos;out vec2 v_pos;void main() {vec2 unit_pos=a_pos/8192.0;v_pos=unit_pos;gl_Position=vec4(unit_pos*2.0-1.0,0.0,1.0);}';
 
 // This file is generated. Edit build/generate-shaders.ts, then run `npm run codegen`.
-var shadowBlurFrag = 'uniform sampler2D u_image;uniform vec2 u_direction;uniform float u_texture_size;uniform float u_blur_radius;in vec2 v_pos;void main() {float weights[5]=float[](0.2270270270,0.1945945946,0.1216216216,0.0540540541,0.0162162162);vec2 tex_offset=(u_direction*max(u_blur_radius,0.0))/max(u_texture_size,1.0);vec3 result=texture(u_image,v_pos).rgb*weights[0];for(int i=1; i < 5;++i) {result+=texture(u_image,v_pos+tex_offset*float(i)).rgb*weights[i];result+=texture(u_image,v_pos-tex_offset*float(i)).rgb*weights[i];}fragColor=vec4(result,1.0);}';
+var shadowSweepInitFrag = 'uniform sampler2D u_image;uniform vec2 u_dimension;in vec2 v_pos;const highp vec4 bitUn=vec4(1./(256.*256.*256.),1./(256.*256.),1./256.,1.);const highp vec4 bitSh=vec4(256.*256.*256.,256.*256.,256.,1.);const highp vec4 bitMsk=vec4(0.,vec3(1./256.0));const float EMPTY_ELEVATION=-9900.0;highp float unpack(highp vec4 color) {return dot(color,bitUn);}highp vec4 pack(highp float value) {highp vec4 comp=fract(value*bitSh);comp-=comp.xxyz*bitMsk;return comp;}float sampleElevationBilinear(vec2 uv) {vec2 pos=uv*u_dimension;vec2 posCenter=pos-0.5;vec2 f=fract(posCenter);vec2 i=floor(posCenter)+0.5;vec4 t00=texture(u_image,(i+vec2(0.0,0.0))/u_dimension);vec4 t10=texture(u_image,(i+vec2(1.0,0.0))/u_dimension);vec4 t01=texture(u_image,(i+vec2(0.0,1.0))/u_dimension);vec4 t11=texture(u_image,(i+vec2(1.0,1.0))/u_dimension);float h00=unpack(t00)*20000.0-10000.0;float h10=unpack(t10)*20000.0-10000.0;float h01=unpack(t01)*20000.0-10000.0;float h11=unpack(t11)*20000.0-10000.0;return mix(mix(h00,h10,f.x),mix(h01,h11,f.x),f.y);}void main() {float elevation=sampleElevationBilinear(v_pos);if (elevation < EMPTY_ELEVATION) {elevation=-10000.0;}fragColor=pack(clamp((elevation+10000.0)/20000.0,0.0,1.0));}';
+
+// This file is generated. Edit build/generate-shaders.ts, then run `npm run codegen`.
+var shadowSweepStepFrag = 'uniform sampler2D u_state;uniform vec2 u_sunDirection;uniform float u_sunAltitude;uniform vec2 u_metersPerPixel;uniform vec2 u_dimension;uniform vec4 u_atlas_bounds;uniform float u_jump_pixels;in vec2 v_pos;const highp vec4 bitUn=vec4(1./(256.*256.*256.),1./(256.*256.),1./256.,1.);const highp vec4 bitSh=vec4(256.*256.*256.,256.*256.,256.,1.);const highp vec4 bitMsk=vec4(0.,vec3(1./256.0));highp float unpack(highp vec4 color) {return dot(color,bitUn);}highp vec4 pack(highp float value) {highp vec4 comp=fract(value*bitSh);comp-=comp.xxyz*bitMsk;return comp;}float unpackHeight(vec4 packed) {return unpack(packed)*20000.0-10000.0;}vec2 sunPixelDirection() {vec2 atlasSpan=max(u_atlas_bounds.zw-u_atlas_bounds.xy,vec2(1.0e-9));vec2 uvPerMeter=vec2(u_sunDirection.x/atlasSpan.x,-u_sunDirection.y/atlasSpan.y);vec2 pixelDir=uvPerMeter*u_dimension;float len=length(pixelDir);return len > 0.00001 ? pixelDir/len : vec2(1.0,0.0);}void main() {float currentScore=unpackHeight(texture(u_state,v_pos));vec2 pixelDir=sunPixelDirection();vec2 jumpPixels=pixelDir*u_jump_pixels;vec2 upstreamUV=v_pos+jumpPixels/u_dimension;if (upstreamUV.x >=0.0 && upstreamUV.x <=1.0 && upstreamUV.y >=0.0 && upstreamUV.y <=1.0) {float upstreamScore=unpackHeight(texture(u_state,upstreamUV));float jumpMeters=length(jumpPixels*u_metersPerPixel);float candidate=upstreamScore-jumpMeters*max(tan(u_sunAltitude),0.001);currentScore=max(currentScore,candidate);}fragColor=pack(clamp((currentScore+10000.0)/20000.0,0.0,1.0));}';
+
+// This file is generated. Edit build/generate-shaders.ts, then run `npm run codegen`.
+var shadowSweepFinalFrag = 'uniform sampler2D u_state;uniform sampler2D u_elevation;uniform vec2 u_dimension;uniform vec2 u_metersPerPixel;in vec2 v_pos;const highp vec4 bitUn=vec4(1./(256.*256.*256.),1./(256.*256.),1./256.,1.);const float EMPTY_ELEVATION=-9900.0;highp float unpack(highp vec4 color) {return dot(color,bitUn);}float unpackHeight(vec4 packed) {return unpack(packed)*20000.0-10000.0;}float sampleElevationBilinear(vec2 uv) {vec2 pos=uv*u_dimension;vec2 posCenter=pos-0.5;vec2 f=fract(posCenter);vec2 i=floor(posCenter)+0.5;vec4 t00=texture(u_elevation,(i+vec2(0.0,0.0))/u_dimension);vec4 t10=texture(u_elevation,(i+vec2(1.0,0.0))/u_dimension);vec4 t01=texture(u_elevation,(i+vec2(0.0,1.0))/u_dimension);vec4 t11=texture(u_elevation,(i+vec2(1.0,1.0))/u_dimension);float h00=unpackHeight(t00);float h10=unpackHeight(t10);float h01=unpackHeight(t01);float h11=unpackHeight(t11);return mix(mix(h00,h10,f.x),mix(h01,h11,f.x),f.y);}void main() {float receiverElevation=sampleElevationBilinear(v_pos);if (receiverElevation < EMPTY_ELEVATION) {fragColor=vec4(0.0);return;}float bestProjectedHeight=unpackHeight(texture(u_state,v_pos));float gsd=max(u_metersPerPixel.x,u_metersPerPixel.y);float bias=max(1.2,gsd*0.030);float edgeMeters=max(2.0,gsd*0.18);float shadow=smoothstep(bias,bias+edgeMeters,bestProjectedHeight-receiverElevation);fragColor=vec4(vec3(shadow),1.0);}';
+
+// This file is generated. Edit build/generate-shaders.ts, then run `npm run codegen`.
+var shadowHizMipFrag = 'uniform sampler2D u_image;uniform vec2 u_src_dimension;in vec2 v_pos;const highp vec4 bitUn=vec4(1./(256.*256.*256.),1./(256.*256.),1./256.,1.);const highp vec4 bitSh=vec4(256.*256.*256.,256.*256.,256.,1.);const highp vec4 bitMsk=vec4(0.,vec3(1./256.0));highp float unpack(highp vec4 color) {return dot(color,bitUn);}highp vec4 pack(highp float value) {highp vec4 comp=fract(value*bitSh);comp-=comp.xxyz*bitMsk;return comp;}void main() {vec2 srcTexel=1.0/max(u_src_dimension,vec2(1.0));vec2 srcBase=floor(v_pos*u_src_dimension*0.5)*2.0+0.5;vec2 uv00=srcBase/u_src_dimension;vec2 uv10=uv00+vec2(srcTexel.x,0.0);vec2 uv01=uv00+vec2(0.0,srcTexel.y);vec2 uv11=uv00+srcTexel;float h=unpack(texture(u_image,uv00));h=max(h,unpack(texture(u_image,uv10)));h=max(h,unpack(texture(u_image,uv01)));h=max(h,unpack(texture(u_image,uv11)));fragColor=pack(h);}';
+
+// This file is generated. Edit build/generate-shaders.ts, then run `npm run codegen`.
+var shadowHizGlobalFrag = 'uniform sampler2D u_image;uniform sampler2D u_hiz1;uniform sampler2D u_hiz2;uniform sampler2D u_hiz3;uniform sampler2D u_hiz4;uniform sampler2D u_hiz5;uniform vec2 u_sunDirection;uniform float u_sunAltitude;uniform vec2 u_metersPerPixel;uniform vec2 u_dimension;uniform vec4 u_atlas_bounds;uniform float u_max_distance;uniform float u_step_meters;uniform float u_max_steps;uniform float u_near_cascade_distance;uniform float u_mid_cascade_distance;in vec2 v_pos;const highp vec4 bitUn=vec4(1./(256.*256.*256.),1./(256.*256.),1./256.,1.);const float WORLD_CIRCUMFERENCE=40075016.7;const float EMPTY_ELEVATION=-9900.0;\n#define hardMaxSteps 192.0\nhighp float unpack(highp vec4 color) {return dot(color,bitUn);}float unpackHeight(vec4 color) {return unpack(color)*20000.0-10000.0;}float samplePackedBilinear(sampler2D image,vec2 uv,vec2 dim) {vec2 pos=uv*dim;vec2 posCenter=pos-0.5;vec2 f=fract(posCenter);vec2 i=floor(posCenter)+0.5;float h00=unpackHeight(texture(image,(i+vec2(0.0,0.0))/dim));float h10=unpackHeight(texture(image,(i+vec2(1.0,0.0))/dim));float h01=unpackHeight(texture(image,(i+vec2(0.0,1.0))/dim));float h11=unpackHeight(texture(image,(i+vec2(1.0,1.0))/dim));return mix(mix(h00,h10,f.x),mix(h01,h11,f.x),f.y);}float sampleBaseElevation(vec2 uv) {return samplePackedBilinear(u_image,clamp(uv,vec2(0.0),vec2(1.0)),u_dimension);}float sampleMaxLevel(vec2 uv,float level) {vec2 safeUv=clamp(uv,vec2(0.0),vec2(1.0));if (level < 0.5) return sampleBaseElevation(safeUv);if (level < 1.5) return unpackHeight(texture(u_hiz1,safeUv));if (level < 2.5) return unpackHeight(texture(u_hiz2,safeUv));if (level < 3.5) return unpackHeight(texture(u_hiz3,safeUv));if (level < 4.5) return unpackHeight(texture(u_hiz4,safeUv));return unpackHeight(texture(u_hiz5,safeUv));}float hash12(vec2 p) {vec3 p3=fract(vec3(p.xyx)*0.1031);p3+=dot(p3,p3.yzx+33.33);return fract((p3.x+p3.y)*p3.z);}float levelStepMeters(float level) {float basePixelMeters=max(u_metersPerPixel.x,u_metersPerPixel.y);float levelPixels=exp2(level);float lowSun=1.0-smoothstep(radians(12.0),radians(32.0),u_sunAltitude);float multiplier=mix(1.05,0.80,lowSun);return max(u_step_meters,basePixelMeters*levelPixels*multiplier);}void main() {if (u_sunAltitude <=0.001) {fragColor=vec4(0.0);return;}float startElevation=sampleBaseElevation(v_pos);if (startElevation < EMPTY_ELEVATION) {fragColor=vec4(0.0);return;}vec2 worldStepPerMeter=vec2(u_sunDirection.x/WORLD_CIRCUMFERENCE,u_sunDirection.y/WORLD_CIRCUMFERENCE\n);vec2 sampleUVStepPerMeter=worldStepPerMeter/max(u_atlas_bounds.zw-u_atlas_bounds.xy,vec2(1.0e-9));sampleUVStepPerMeter.y=-sampleUVStepPerMeter.y;float tanSun=max(tan(u_sunAltitude),0.001);float jitterMeters=hash12(floor(v_pos*u_dimension*0.5)+u_sunDirection*71.0)*min(u_step_meters,35.0)*0.22;vec2 currentUV=v_pos+sampleUVStepPerMeter*jitterMeters;float distanceMeters=jitterMeters;float currentRayHeight=startElevation+jitterMeters*tanSun;float shadow=0.0;for (float i=0.0; i < hardMaxSteps; i++) {if (i >=u_max_steps || distanceMeters >=u_max_distance) break;bool advanced=false;for (int li=5; li >=0; li--) {float level=float(li);float stepMeters=levelStepMeters(level);if (distanceMeters < u_near_cascade_distance && level > 2.0) continue;if (distanceMeters < u_mid_cascade_distance && level > 4.0) continue;float nextDistance=min(distanceMeters+stepMeters,u_max_distance);float actualStep=nextDistance-distanceMeters;vec2 nextUV=currentUV+sampleUVStepPerMeter*actualStep;vec2 midUV=currentUV+sampleUVStepPerMeter*(actualStep*0.5);float nextRayHeight=currentRayHeight+actualStep*tanSun;float midRayHeight=currentRayHeight+actualStep*0.5*tanSun;if (nextUV.x < 0.0 || nextUV.x > 1.0 || nextUV.y < 0.0 || nextUV.y > 1.0) {distanceMeters=u_max_distance;advanced=true;break;}float maxElev=max(sampleMaxLevel(midUV,level),sampleMaxLevel(nextUV,level));float levelMeters=max(u_metersPerPixel.x,u_metersPerPixel.y)*exp2(level);float conservativeBias=max(1.0,levelMeters*0.025);if (maxElev+conservativeBias < min(midRayHeight,nextRayHeight)) {currentUV=nextUV;currentRayHeight=nextRayHeight;distanceMeters=nextDistance;advanced=true;break;}if (li==0) {vec2 q1UV=currentUV+sampleUVStepPerMeter*(actualStep*0.25);vec2 q2UV=midUV;vec2 q3UV=currentUV+sampleUVStepPerMeter*(actualStep*0.75);float q1RayHeight=currentRayHeight+actualStep*0.25*tanSun;float q2RayHeight=midRayHeight;float q3RayHeight=currentRayHeight+actualStep*0.75*tanSun;float q1Distance=distanceMeters+actualStep*0.25;float q2Distance=distanceMeters+actualStep*0.5;float q3Distance=distanceMeters+actualStep*0.75;float q1Elev=sampleBaseElevation(q1UV);float q2Elev=sampleBaseElevation(q2UV);float q3Elev=sampleBaseElevation(q3UV);float q4Elev=sampleBaseElevation(nextUV);bool hit=false;vec2 loUV=currentUV;vec2 hiUV=nextUV;float loRayHeight=currentRayHeight;float hiRayHeight=nextRayHeight;float loDistance=distanceMeters;float hiDistance=nextDistance;if (q1Elev > q1RayHeight) {hit=true;hiUV=q1UV;hiRayHeight=q1RayHeight;hiDistance=q1Distance;} else if (q2Elev > q2RayHeight) {hit=true;loUV=q1UV;loRayHeight=q1RayHeight;loDistance=q1Distance;hiUV=q2UV;hiRayHeight=q2RayHeight;hiDistance=q2Distance;} else if (q3Elev > q3RayHeight) {hit=true;loUV=q2UV;loRayHeight=q2RayHeight;loDistance=q2Distance;hiUV=q3UV;hiRayHeight=q3RayHeight;hiDistance=q3Distance;} else if (q4Elev > nextRayHeight) {hit=true;loUV=q3UV;loRayHeight=q3RayHeight;loDistance=q3Distance;}if (hit) {for (int j=0; j < 5; j++) {vec2 midUV=mix(loUV,hiUV,0.5);float midRayHeight=mix(loRayHeight,hiRayHeight,0.5);float midDistance=mix(loDistance,hiDistance,0.5);float midElev=sampleBaseElevation(midUV);if (midElev > midRayHeight) {hiUV=midUV;hiRayHeight=midRayHeight;hiDistance=midDistance;} else {loUV=midUV;loRayHeight=midRayHeight;loDistance=midDistance;}}shadow=1.0-smoothstep(u_max_distance*0.94,u_max_distance,hiDistance);distanceMeters=u_max_distance;advanced=true;break;}currentUV=nextUV;currentRayHeight=nextRayHeight;distanceMeters=nextDistance;advanced=true;break;}}if (!advanced) {distanceMeters=u_max_distance;}}fragColor=vec4(vec3(shadow),1.0);}';
+
+// This file is generated. Edit build/generate-shaders.ts, then run `npm run codegen`.
+var shadowBlurFrag = 'uniform sampler2D u_image;uniform vec2 u_direction;uniform float u_texture_size;uniform float u_blur_radius;in vec2 v_pos;void main() {if (dot(u_direction,u_direction) < 0.000001) {float radius=max(u_blur_radius,0.0);vec2 texel=vec2(radius/max(u_texture_size,1.0));vec3 center=texture(u_image,v_pos).rgb;vec3 left=texture(u_image,v_pos+vec2(-texel.x,0.0)).rgb;vec3 right=texture(u_image,v_pos+vec2(texel.x,0.0)).rgb;vec3 down=texture(u_image,v_pos+vec2(0.0,-texel.y)).rgb;vec3 up=texture(u_image,v_pos+vec2(0.0,texel.y)).rgb;vec3 dl=texture(u_image,v_pos+vec2(-texel.x,-texel.y)).rgb;vec3 dr=texture(u_image,v_pos+vec2(texel.x,-texel.y)).rgb;vec3 ul=texture(u_image,v_pos+vec2(-texel.x,texel.y)).rgb;vec3 ur=texture(u_image,v_pos+vec2(texel.x,texel.y)).rgb;vec3 localMin=min(center,min(min(left,right),min(down,up)));vec3 localMax=max(center,max(max(left,right),max(down,up)));localMin=min(localMin,min(min(dl,dr),min(ul,ur)));localMax=max(localMax,max(max(dl,dr),max(ul,ur)));float edge=smoothstep(0.035,0.36,max(max(localMax.r-localMin.r,localMax.g-localMin.g),localMax.b-localMin.b));vec3 filtered=(center*4.0+(left+right+down+up)*1.25+(dl+dr+ul+ur)*0.50\n)/11.0;fragColor=vec4(mix(center,filtered,edge*0.72),1.0);return;}float weights[5]=float[](0.2270270270,0.1945945946,0.1216216216,0.0540540541,0.0162162162);vec2 tex_offset=(u_direction*max(u_blur_radius,0.0))/max(u_texture_size,1.0);vec3 result=texture(u_image,v_pos).rgb*weights[0];for(int i=1; i < 5;++i) {result+=texture(u_image,v_pos+tex_offset*float(i)).rgb*weights[i];result+=texture(u_image,v_pos-tex_offset*float(i)).rgb*weights[i];}fragColor=vec4(result,1.0);}';
 
 // This file is generated. Edit build/generate-shaders.ts, then run `npm run codegen`.
 var shadowBlurVert = 'in vec2 a_pos;out vec2 v_pos;void main() {vec2 unit_pos=a_pos/8192.0;v_pos=unit_pos;gl_Position=vec4(unit_pos*2.0-1.0,0.0,1.0);}';
@@ -54959,10 +54974,10 @@ var terrainDepthFrag = 'in float v_depth;const highp vec4 bitSh=vec4(256.*256.*2
 var terrainCoordsFrag = 'precision mediump float;uniform sampler2D u_texture;uniform float u_terrain_coords_id;in vec2 v_texture_pos;void main() {vec4 rgba=texture(u_texture,v_texture_pos);fragColor=vec4(rgba.r,rgba.g,rgba.b,u_terrain_coords_id);}';
 
 // This file is generated. Edit build/generate-shaders.ts, then run `npm run codegen`.
-var terrainFrag = 'uniform sampler2D u_texture;uniform vec4 u_fog_color;uniform vec4 u_horizon_color;uniform float u_fog_ground_blend;uniform float u_fog_ground_blend_opacity;uniform float u_horizon_fog_blend;uniform bool u_is_globe_mode;uniform float u_contour_enabled;uniform float u_contour_interval;uniform float u_contour_multiplier;uniform vec4 u_contour_color;uniform float u_zoom;uniform float u_tile_zoom;uniform sampler2D u_shadow_atlas;uniform sampler2D u_horizon0;uniform sampler2D u_horizon1;uniform sampler2D u_horizon2;uniform sampler2D u_horizon3;uniform highp vec4 u_atlas_bounds;uniform float u_shadow_intensity;uniform float u_horizon_available;uniform float u_horizon_bins;uniform float u_horizon_edge_softness;uniform float u_horizon_edge_naturalness;uniform int u_debug_mode;uniform float u_cast_shadow_mult;uniform float u_self_shadow_mult;uniform float u_igor_relief_enabled;uniform float u_sun_altitude;uniform vec2 u_sun_direction;uniform highp sampler2D u_dem_ao;uniform highp vec4 u_dem_ao_unpack;uniform highp float u_dem_ao_dim;uniform highp float u_dem_ao_exag;uniform float u_dem_ao_meters_per_pixel;uniform sampler2D u_dem_derivative;uniform float u_dem_derivative_available;uniform float u_shadow_atlas_size;in vec2 v_texture_pos;in vec2 v_atlas_uv;in float v_fog_depth;in float v_elevation;in float v_dist_linear;in vec2 v_dem_coord;const float gamma=2.2;const float PI=3.141592653589793;vec4 gammaToLinear(vec4 color) {return pow(color,vec4(gamma));}vec4 linearToGamma(vec4 color) {return pow(color,vec4(1.0/gamma));}float unpackDemElev(vec4 encoded) {vec4 data=encoded*255.0;return (dot(floor(data.rgb+0.5),u_dem_ao_unpack.rgb)-u_dem_ao_unpack.a)*u_dem_ao_exag;}float sampleDemTexel(vec2 coord) {float textureDim=u_dem_ao_dim+2.0;vec2 c=clamp(coord,vec2(0.5),vec2(textureDim-0.5));return unpackDemElev(texture(u_dem_ao,c/textureDim));}vec2 sobelGradient(float a,float b,float c,float d,         float f,float g,float h,float i\n) {return vec2((c+f+f+i)-(a+d+d+g),(g+h+h+i)-(a+b+b+c));}vec2 sampleDemGradient(vec2 coord) {vec2 safeCoord=clamp(coord,vec2(1.0),vec2(u_dem_ao_dim));vec2 base=floor(safeCoord)+0.5;vec2 f=fract(safeCoord);float z00=sampleDemTexel(base+vec2(-1.0,-1.0));float z10=sampleDemTexel(base+vec2( 0.0,-1.0));float z20=sampleDemTexel(base+vec2( 1.0,-1.0));float z30=sampleDemTexel(base+vec2( 2.0,-1.0));float z01=sampleDemTexel(base+vec2(-1.0, 0.0));float z11=sampleDemTexel(base+vec2( 0.0, 0.0));float z21=sampleDemTexel(base+vec2( 1.0, 0.0));float z31=sampleDemTexel(base+vec2( 2.0, 0.0));float z02=sampleDemTexel(base+vec2(-1.0, 1.0));float z12=sampleDemTexel(base+vec2( 0.0, 1.0));float z22=sampleDemTexel(base+vec2( 1.0, 1.0));float z32=sampleDemTexel(base+vec2( 2.0, 1.0));float z03=sampleDemTexel(base+vec2(-1.0, 2.0));float z13=sampleDemTexel(base+vec2( 0.0, 2.0));float z23=sampleDemTexel(base+vec2( 1.0, 2.0));float z33=sampleDemTexel(base+vec2( 2.0, 2.0));vec2 g00=sobelGradient(z00,z10,z20,z01,z21,z02,z12,z22);vec2 g10=sobelGradient(z10,z20,z30,z11,z31,z12,z22,z32);vec2 g01=sobelGradient(z01,z11,z21,z02,z22,z03,z13,z23);vec2 g11=sobelGradient(z11,z21,z31,z12,z32,z13,z23,z33);vec2 gradient=mix(mix(g00,g10,f.x),mix(g01,g11,f.x),f.y);return gradient/(8.0*max(u_dem_ao_meters_per_pixel,1.0));}vec2 samplePreparedDemGradient(vec2 coord) {float invDim=1.0/max(u_dem_ao_dim,1.0);vec2 uv=clamp((coord-1.0)*invDim,vec2(0.5*invDim),vec2(1.0-0.5*invDim));vec2 encoded=texture(u_dem_derivative,uv).rg;return ((encoded-0.5)*8.0)*u_dem_ao_exag;}vec2 sampleReliefGradient(vec2 coord) {if (u_dem_derivative_available > 0.5) {return samplePreparedDemGradient(coord);}return sampleDemGradient(coord);}float skyAmbientAmount(float altitude) {return smoothstep(radians(-16.0),radians(6.0),altitude);}float hash12(vec2 p) {vec3 p3=fract(vec3(p.xyx)*0.1031);p3+=dot(p3,p3.yzx+33.33);return fract((p3.x+p3.y)*p3.z);}float valueNoise(vec2 p) {vec2 i=floor(p);vec2 f=fract(p);f=f*f*(3.0-2.0*f);float a=hash12(i);float b=hash12(i+vec2(1.0,0.0));float c=hash12(i+vec2(0.0,1.0));float d=hash12(i+vec2(1.0,1.0));return mix(mix(a,b,f.x),mix(c,d,f.x),f.y);}vec3 applySkyLightTint(vec3 color,float altitude,vec3 horizonColor,vec3 fogColor) {float skyAmbient=skyAmbientAmount(altitude);float lowLightBlend=1.0-smoothstep(radians(3.0),radians(17.0),altitude);float horizonWarmth=smoothstep(radians(-6.0),radians(2.0),altitude)*(1.0-smoothstep(radians(6.0),radians(16.0),altitude));float redWarmth=smoothstep(radians(-4.0),radians(0.8),altitude)*(1.0-smoothstep(radians(2.5),radians(9.0),altitude));vec3 skyHaze=clamp(mix(fogColor,horizonColor,0.55),vec3(0.0),vec3(1.0));vec3 nightColor=color*vec3(0.58,0.63,0.78)+vec3(0.026,0.034,0.056);float fullNight=1.0-smoothstep(radians(-10.0),radians(-2.0),altitude);nightColor=mix(nightColor,vec3(0.045,0.052,0.075),fullNight*0.38);vec3 twilightCool=color*vec3(0.80,0.84,0.96)+skyHaze*0.045;vec3 golden=color*vec3(1.02,0.84,0.62)+skyHaze*0.085;vec3 redGold=color*vec3(1.06,0.72,0.54)+skyHaze*0.100;vec3 twilightColor=mix(twilightCool,golden,horizonWarmth*0.72);twilightColor=mix(twilightColor,redGold,redWarmth*0.55);vec3 lowLightColor=mix(nightColor,twilightColor,skyAmbient);return mix(color,lowLightColor,lowLightBlend);}const float SHADOW_HIT_THRESHOLD=0.28;float horizonChannelValue(vec4 packed,float channel) {if (channel < 0.5) return packed.r;if (channel < 1.5) return packed.g;if (channel < 2.5) return packed.b;return packed.a;}float horizonBin(float bin,vec2 atlasUV) {float binCount=max(u_horizon_bins,1.0);float wrappedBin=mod(bin+binCount,binCount);if (wrappedBin < 4.0) {return horizonChannelValue(texture(u_horizon0,atlasUV),wrappedBin);}if (wrappedBin < 8.0) {return horizonChannelValue(texture(u_horizon1,atlasUV),wrappedBin-4.0);}if (wrappedBin < 12.0) {return horizonChannelValue(texture(u_horizon2,atlasUV),wrappedBin-8.0);}return horizonChannelValue(texture(u_horizon3,atlasUV),wrappedBin-12.0);}float sampleHorizonAngle(float azimuth,vec2 atlasUV) {float binCount=max(u_horizon_bins,1.0);float bin=mod(azimuth,PI*2.0)/((PI*2.0)/binCount);float bin0=floor(bin);float bin1=mod(bin0+1.0,binCount);float t=fract(bin);return mix(horizonBin(bin0,atlasUV),horizonBin(bin1,atlasUV),t)*(PI*0.5);}float horizonShadowMask(vec2 atlasUV) {if (u_horizon_available < 0.5) return 0.0;float sunAzimuth=mod(atan(u_sun_direction.x,-u_sun_direction.y)+PI*2.0,PI*2.0);float terrainHorizon=sampleHorizonAngle(sunAzimuth,clamp(atlasUV,vec2(0.0),vec2(1.0)));float lowSunSoftness=1.0-smoothstep(radians(10.0),radians(34.0),u_sun_altitude);float horizonEdge=mix(radians(0.55),radians(1.25),lowSunSoftness)*max(u_horizon_edge_softness,0.25);float horizonSignalAA=fwidth(terrainHorizon)*mix(1.15,1.75,lowSunSoftness);float horizonQuantAA=radians(0.18);horizonEdge=max(horizonEdge,max(horizonSignalAA,horizonQuantAA));float ditherAmount=clamp(u_horizon_edge_naturalness,0.0,1.2);float ditherNoise=valueNoise(atlasUV*1536.0+vec2(37.0,173.0))*0.65+valueNoise(atlasUV*3072.0+vec2(211.0,59.0))*0.35;float thresholdJitter=(ditherNoise-0.5)*horizonEdge*0.22*ditherAmount;float directVisibility=smoothstep(terrainHorizon-horizonEdge+thresholdJitter,terrainHorizon+horizonEdge+thresholdJitter,u_sun_altitude);return 1.0-directVisibility;}float shadowHitAt(vec2 atlasUV,float edgeAA,float thresholdJitter) {float rawMask=texture(u_shadow_atlas,clamp(atlasUV,vec2(0.0),vec2(1.0))).r;float aa=clamp(edgeAA*0.45,0.004,0.028);return smoothstep(0.02-aa+thresholdJitter,0.98+aa+thresholdJitter,rawMask);}float orientedShadowHit(vec2 atlasUV,vec2 edgeNormal,vec2 offset,float radius,float edgeAA,float thresholdJitter) {vec2 edgeTangent=vec2(-edgeNormal.y,edgeNormal.x);vec2 sampleOffset=(edgeNormal*offset.x+edgeTangent*offset.y)*(radius/max(u_shadow_atlas_size,1.0));return shadowHitAt(atlasUV+sampleOffset,edgeAA,thresholdJitter);}vec2 shadowAtlasEdgeNormal(vec2 atlasUV,float rawMask) {vec2 texel=vec2(1.0/max(u_shadow_atlas_size,1.0));float left=texture(u_shadow_atlas,clamp(atlasUV-vec2(texel.x,0.0),vec2(0.0),vec2(1.0))).r;float right=texture(u_shadow_atlas,clamp(atlasUV+vec2(texel.x,0.0),vec2(0.0),vec2(1.0))).r;float down=texture(u_shadow_atlas,clamp(atlasUV-vec2(0.0,texel.y),vec2(0.0),vec2(1.0))).r;float up=texture(u_shadow_atlas,clamp(atlasUV+vec2(0.0,texel.y),vec2(0.0),vec2(1.0))).r;vec2 atlasGradient=vec2(right-left,up-down);if (dot(atlasGradient,atlasGradient) > 0.000001) {return normalize(atlasGradient);}vec2 screenGradient=vec2(dFdx(rawMask),dFdy(rawMask));if (dot(screenGradient,screenGradient) > 0.000001) {return normalize(screenGradient);}return vec2(1.0,0.0);}float remapShadowMask(float rawMask,vec2 atlasUV) {float edgeGradient=fwidth(rawMask);float atlasFootprint=max(length(dFdx(atlasUV)*u_shadow_atlas_size),length(dFdy(atlasUV)*u_shadow_atlas_size));float edgeAA=clamp(max(edgeGradient*0.48,0.004+atlasFootprint*0.0028),0.004,0.038);float center=shadowHitAt(atlasUV,edgeAA,0.0);if (edgeGradient < 0.0015 && (center < 0.001 || center > 0.999)) {return center;}float lowSunSoftness=1.0-smoothstep(radians(10.0),radians(34.0),u_sun_altitude);vec2 edgeNormal=shadowAtlasEdgeNormal(atlasUV,rawMask);vec2 edgeTangent=vec2(-edgeNormal.y,edgeNormal.x);float radius=clamp(max(mix(1.15,2.35,lowSunSoftness),atlasFootprint*0.72),1.15,4.50);float transition=smoothstep(0.025,0.36,center)*(1.0-smoothstep(0.64,0.985,center));float gradientBand=smoothstep(0.001,0.018,edgeGradient);float edgeBand=clamp(max(transition,gradientBand),0.0,1.0);float atlasScale=max(u_shadow_atlas_size,1.0);float coarseNoise=valueNoise(atlasUV*atlasScale*0.19+vec2(17.0,91.0));float midNoise=valueNoise(atlasUV*atlasScale*0.73+vec2(131.0,47.0));float tangentNoise=valueNoise(atlasUV*atlasScale*0.41+vec2(59.0,179.0));float breakup=((coarseNoise*0.64+midNoise*0.36)-0.5)*2.0;float tangentBreakup=(tangentNoise-0.5)*2.0;vec2 breakupOffset=(edgeNormal*breakup*0.52+edgeTangent*tangentBreakup*0.18)*(edgeBand*radius/atlasScale);float thresholdJitter=breakup*edgeBand*0.025;vec2 filteredUV=atlasUV+breakupOffset;center=shadowHitAt(filteredUV,edgeAA,thresholdJitter);float pcf=center*3.20+orientedShadowHit(filteredUV,edgeNormal,vec2(-1.10, 0.00),radius,edgeAA,thresholdJitter)*1.15+orientedShadowHit(filteredUV,edgeNormal,vec2( 1.10, 0.00),radius,edgeAA,thresholdJitter)*1.15+orientedShadowHit(filteredUV,edgeNormal,vec2( 0.00,-0.82),radius,edgeAA,thresholdJitter)*0.74+orientedShadowHit(filteredUV,edgeNormal,vec2( 0.00, 0.82),radius,edgeAA,thresholdJitter)*0.74+orientedShadowHit(filteredUV,edgeNormal,vec2(-0.72, 0.62),radius,edgeAA,thresholdJitter)*0.72+orientedShadowHit(filteredUV,edgeNormal,vec2( 0.72,-0.62),radius,edgeAA,thresholdJitter)*0.72+orientedShadowHit(filteredUV,edgeNormal,vec2(-0.72,-0.62),radius,edgeAA,thresholdJitter)*0.52+orientedShadowHit(filteredUV,edgeNormal,vec2( 0.72, 0.62),radius,edgeAA,thresholdJitter)*0.52+orientedShadowHit(filteredUV,edgeNormal,vec2(-1.55, 0.25),radius,edgeAA,thresholdJitter)*0.34+orientedShadowHit(filteredUV,edgeNormal,vec2( 1.55,-0.25),radius,edgeAA,thresholdJitter)*0.34+orientedShadowHit(filteredUV,edgeNormal,vec2(-0.20, 1.45),radius,edgeAA,thresholdJitter)*0.26+orientedShadowHit(filteredUV,edgeNormal,vec2( 0.20,-1.45),radius,edgeAA,thresholdJitter)*0.26;float filtered=pcf/10.66;float crisp=smoothstep(0.18,0.82,filtered);float crispAmount=mix(0.08,0.03,lowSunSoftness);return clamp(mix(filtered,crisp,crispAmount),0.0,1.0);}float localIgorReliefShadow(vec2 gradient) {vec3 normal=normalize(vec3(-gradient.x,-gradient.y,1.0));vec3 lightDir=normalize(vec3(u_sun_direction,max(tan(max(u_sun_altitude,radians(1.5))),0.03)));float lambert=dot(normal,lightDir);float slopeStrength=atan(length(gradient)*2.0)*2.0/PI;float lowSunBoost=1.0-smoothstep(radians(18.0),radians(45.0),u_sun_altitude);float shadow=slopeStrength*(1.0-smoothstep(0.08,0.62,lambert))*mix(0.92,1.16,lowSunBoost);return clamp(shadow,0.0,1.0);}vec4 applyTerrainFog(vec4 color) {if (u_is_globe_mode || v_fog_depth <=u_fog_ground_blend) {return color;}vec4 colorLinear=gammaToLinear(color);float blendColor=smoothstep(0.0,1.0,max((v_fog_depth-u_horizon_fog_blend)/(1.0-u_horizon_fog_blend),0.0));vec4 fogHorizonColorLinear=mix(gammaToLinear(u_fog_color),gammaToLinear(u_horizon_color),blendColor);float factorFog=max(v_fog_depth-u_fog_ground_blend,0.0)/(1.0-u_fog_ground_blend);return linearToGamma(mix(colorLinear,fogHorizonColorLinear,pow(factorFog,2.0)*u_fog_ground_blend_opacity));}void main() {vec4 surface_color=texture(u_texture,vec2(v_texture_pos.x,1.0-v_texture_pos.y));fragColor=surface_color;if (u_contour_enabled > 0.5 && u_contour_interval > 0.1) {float val=v_elevation*u_contour_multiplier;float interval_minor=u_contour_interval;float interval_major=interval_minor*10.0;float zoom_floor=smoothstep(11.0,13.0,u_zoom);float distance_fade=1.0-smoothstep(500.0,3000.0,v_dist_linear);float global_fade=zoom_floor*distance_fade;if (global_fade > 0.01) {float dist_minor=mod(val,interval_minor);if (dist_minor > interval_minor*0.5) dist_minor=interval_minor-dist_minor;float dist_major=mod(val,interval_major);if (dist_major > interval_major*0.5) dist_major=interval_major-dist_major;float grad_mag=length(vec2(dFdx(val),dFdy(val)));float pixel_dist_minor=dist_minor/max(grad_mag,1e-6);float pixel_dist_major=dist_major/max(grad_mag,1e-6);float density_fade=clamp(1.0-(grad_mag/interval_minor)*1.5,0.0,1.0);float alpha_minor=(1.0-smoothstep(0.0,1.0,pixel_dist_minor))*density_fade;float alpha_major=1.0-smoothstep(0.0,1.0,pixel_dist_major);float final_alpha=max(alpha_minor*0.6,alpha_major*0.85)*global_fade;vec3 base_color=u_contour_color.a > 0.001 ? u_contour_color.rgb/u_contour_color.a : u_contour_color.rgb;vec3 color=mix(base_color,vec3(0.0),alpha_major*0.15);fragColor=mix(fragColor,vec4(color,1.0),final_alpha*u_contour_color.a);}}float skyAmbient=skyAmbientAmount(u_sun_altitude);float shadowStrength=clamp(u_shadow_intensity,0.0,1.0);float sunCastVisibility=smoothstep(radians(-0.15),radians(0.85),u_sun_altitude);float effectiveShadowStrength=shadowStrength*sunCastVisibility;float localReliefShadow=0.0;if (u_dem_ao_dim > 2.0 && (u_self_shadow_mult > 0.001 || u_igor_relief_enabled > 0.5)) {localReliefShadow=localIgorReliefShadow(sampleReliefGradient(clamp(v_dem_coord,vec2(1.0),vec2(u_dem_ao_dim))));}float reliefShadowStrength=mix(0.70,clamp(u_self_shadow_mult,0.0,3.0),0.55);if (u_igor_relief_enabled > 0.5) {float ambientReliefAO=localReliefShadow*(0.020+skyAmbient*0.030)*reliefShadowStrength;fragColor.rgb*=1.0-ambientReliefAO;}fragColor.rgb=applySkyLightTint(fragColor.rgb,u_sun_altitude,u_horizon_color.rgb,u_fog_color.rgb);vec2 atlasUV=v_atlas_uv;bool atlasCovered=atlasUV.x >=-0.001 && atlasUV.x <=1.001 && atlasUV.y >=-0.001 && atlasUV.y <=1.001;float shadowMask=0.0;float castPresence=0.0;if (atlasUV.x >=-0.001 && atlasUV.x <=1.001 && atlasUV.y >=-0.001 && atlasUV.y <=1.001) {float rawAtlasShadow=clamp(texture(u_shadow_atlas,clamp(atlasUV,vec2(0.0),vec2(1.0))).r,0.0,1.0);float raymarchedShadow=remapShadowMask(rawAtlasShadow,atlasUV);float horizonShadow=horizonShadowMask(atlasUV);shadowMask=mix(raymarchedShadow,horizonShadow,clamp(u_horizon_available,0.0,1.0));}vec3 shadowTint=vec3(0.075,0.085,0.120);float selfShadowSignal=clamp(localReliefShadow*u_self_shadow_mult,0.0,1.0);float selfShadowContact=smoothstep(0.14,0.82,selfShadowSignal);float selfShadowMask=clamp(mix(selfShadowSignal*0.58,selfShadowContact*0.68,0.30),0.0,1.0);float lowSunFarFallback=1.0-smoothstep(radians(7.0),radians(22.0),u_sun_altitude);float farTerrainSignal=clamp(localReliefShadow*u_self_shadow_mult*mix(0.28,0.58,lowSunFarFallback),0.0,1.0);float farTerrainShadow=smoothstep(0.025,0.68,farTerrainSignal)*(atlasCovered ? 0.0 : 1.0);float baseShadow=max(max(shadowMask,selfShadowMask),farTerrainShadow);float shadowAlpha=clamp(baseShadow*effectiveShadowStrength*u_cast_shadow_mult*0.62,0.0,0.74);fragColor.rgb=mix(fragColor.rgb,shadowTint,shadowAlpha);if (u_igor_relief_enabled > 0.5) {castPresence=clamp(max(shadowMask,farTerrainShadow)*effectiveShadowStrength,0.0,1.0);float reliefAO=localReliefShadow*castPresence*0.080*reliefShadowStrength;fragColor.rgb*=1.0-reliefAO;}fragColor=applyTerrainFog(fragColor);if (atlasCovered) {if (u_debug_mode > 0) {if (atlasUV.x >=0.0 && atlasUV.x <=1.0 && atlasUV.y >=0.0 && atlasUV.y <=1.0) {if (u_debug_mode==3) {vec2 grid=fract(atlasUV*16.0);float line=step(0.98,grid.x)+step(0.98,grid.y);fragColor.rgb=mix(fragColor.rgb,vec3(0.0,0.2,0.8),0.4);fragColor.rgb=mix(fragColor.rgb,vec3(1.0,1.0,0.0),line*0.5);fragColor.rgb=mix(fragColor.rgb,vec3(atlasUV,0.0),0.2);} else if (u_debug_mode==2) {fragColor.rgb=mix(fragColor.rgb,vec3(shadowMask,shadowMask*0.6,0.0),0.8);} else if (u_debug_mode==4) {fragColor.rgb=vec3(1.0);} else if (u_debug_mode==5) {fragColor.rgb=vec3(0.5);}}}}}';
+var terrainFrag = 'uniform sampler2D u_texture;uniform vec4 u_fog_color;uniform vec4 u_horizon_color;uniform float u_fog_ground_blend;uniform float u_fog_ground_blend_opacity;uniform float u_horizon_fog_blend;uniform bool u_is_globe_mode;uniform float u_contour_enabled;uniform float u_contour_interval;uniform float u_contour_multiplier;uniform vec4 u_contour_color;uniform float u_zoom;uniform float u_tile_zoom;uniform sampler2D u_shadow_atlas;uniform sampler2D u_shadow_near_atlas;uniform sampler2D u_horizon0;uniform sampler2D u_horizon1;uniform sampler2D u_horizon2;uniform sampler2D u_horizon3;uniform highp vec4 u_atlas_bounds;uniform highp vec4 u_near_atlas_bounds;uniform float u_shadow_intensity;uniform float u_shadow_near_available;uniform float u_shadow_near_fade;uniform float u_shadow_near_debug_tint;uniform float u_shadow_display_mode;uniform float u_shadow_component_mode;uniform float u_horizon_available;uniform float u_horizon_bins;uniform float u_horizon_edge_softness;uniform float u_horizon_edge_naturalness;uniform int u_debug_mode;uniform float u_cast_shadow_mult;uniform float u_self_shadow_mult;uniform float u_igor_relief_enabled;uniform float u_sun_altitude;uniform vec2 u_sun_direction;uniform highp sampler2D u_dem_ao;uniform highp vec4 u_dem_ao_unpack;uniform highp float u_dem_ao_dim;uniform highp float u_dem_ao_exag;uniform float u_dem_ao_meters_per_pixel;uniform sampler2D u_dem_derivative;uniform float u_dem_derivative_available;uniform float u_shadow_atlas_size;uniform float u_shadow_near_atlas_size;uniform float u_contact_shadow_enabled;uniform float u_contact_shadow_strength;uniform float u_contact_shadow_distance;uniform float u_contact_shadow_steps;uniform float u_shadow_white_base;in vec2 v_texture_pos;in vec2 v_atlas_uv;in vec2 v_near_atlas_uv;in float v_fog_depth;in float v_elevation;in float v_dist_linear;in vec2 v_dem_coord;const float gamma=2.2;const float PI=3.141592653589793;vec4 gammaToLinear(vec4 color) {return pow(color,vec4(gamma));}vec4 linearToGamma(vec4 color) {return pow(color,vec4(1.0/gamma));}float unpackDemElev(vec4 encoded) {vec4 data=encoded*255.0;return (dot(floor(data.rgb+0.5),u_dem_ao_unpack.rgb)-u_dem_ao_unpack.a)*u_dem_ao_exag;}float sampleDemTexel(vec2 coord) {float textureDim=u_dem_ao_dim+2.0;vec2 c=clamp(coord,vec2(0.5),vec2(textureDim-0.5));return unpackDemElev(texture(u_dem_ao,c/textureDim));}vec2 sobelGradient(float a,float b,float c,float d,         float f,float g,float h,float i\n) {return vec2((c+f+f+i)-(a+d+d+g),(g+h+h+i)-(a+b+b+c));}vec2 sampleDemGradient(vec2 coord) {vec2 safeCoord=clamp(coord,vec2(1.0),vec2(u_dem_ao_dim));vec2 base=floor(safeCoord)+0.5;vec2 f=fract(safeCoord);float z00=sampleDemTexel(base+vec2(-1.0,-1.0));float z10=sampleDemTexel(base+vec2( 0.0,-1.0));float z20=sampleDemTexel(base+vec2( 1.0,-1.0));float z30=sampleDemTexel(base+vec2( 2.0,-1.0));float z01=sampleDemTexel(base+vec2(-1.0, 0.0));float z11=sampleDemTexel(base+vec2( 0.0, 0.0));float z21=sampleDemTexel(base+vec2( 1.0, 0.0));float z31=sampleDemTexel(base+vec2( 2.0, 0.0));float z02=sampleDemTexel(base+vec2(-1.0, 1.0));float z12=sampleDemTexel(base+vec2( 0.0, 1.0));float z22=sampleDemTexel(base+vec2( 1.0, 1.0));float z32=sampleDemTexel(base+vec2( 2.0, 1.0));float z03=sampleDemTexel(base+vec2(-1.0, 2.0));float z13=sampleDemTexel(base+vec2( 0.0, 2.0));float z23=sampleDemTexel(base+vec2( 1.0, 2.0));float z33=sampleDemTexel(base+vec2( 2.0, 2.0));vec2 g00=sobelGradient(z00,z10,z20,z01,z21,z02,z12,z22);vec2 g10=sobelGradient(z10,z20,z30,z11,z31,z12,z22,z32);vec2 g01=sobelGradient(z01,z11,z21,z02,z22,z03,z13,z23);vec2 g11=sobelGradient(z11,z21,z31,z12,z32,z13,z23,z33);vec2 gradient=mix(mix(g00,g10,f.x),mix(g01,g11,f.x),f.y);return gradient/(8.0*max(u_dem_ao_meters_per_pixel,1.0));}vec2 samplePreparedDemGradient(vec2 coord) {float invDim=1.0/max(u_dem_ao_dim,1.0);vec2 uv=clamp((coord-1.0)*invDim,vec2(0.5*invDim),vec2(1.0-0.5*invDim));vec2 encoded=texture(u_dem_derivative,uv).rg;return ((encoded-0.5)*8.0)*u_dem_ao_exag;}vec2 sampleReliefGradient(vec2 coord) {if (u_dem_derivative_available > 0.5) {return samplePreparedDemGradient(coord);}return vec2(0.0);}float skyAmbientAmount(float altitude) {return smoothstep(radians(-16.0),radians(6.0),altitude);}float hash12(vec2 p) {vec3 p3=fract(vec3(p.xyx)*0.1031);p3+=dot(p3,p3.yzx+33.33);return fract((p3.x+p3.y)*p3.z);}float valueNoise(vec2 p) {vec2 i=floor(p);vec2 f=fract(p);f=f*f*(3.0-2.0*f);float a=hash12(i);float b=hash12(i+vec2(1.0,0.0));float c=hash12(i+vec2(0.0,1.0));float d=hash12(i+vec2(1.0,1.0));return mix(mix(a,b,f.x),mix(c,d,f.x),f.y);}vec3 applySkyLightTint(vec3 color,float altitude,vec3 horizonColor,vec3 fogColor) {float skyAmbient=skyAmbientAmount(altitude);float lowLightBlend=1.0-smoothstep(radians(3.0),radians(17.0),altitude);float horizonWarmth=smoothstep(radians(-6.0),radians(2.0),altitude)*(1.0-smoothstep(radians(6.0),radians(16.0),altitude));float redWarmth=smoothstep(radians(-4.0),radians(0.8),altitude)*(1.0-smoothstep(radians(2.5),radians(9.0),altitude));vec3 skyHaze=clamp(mix(fogColor,horizonColor,0.55),vec3(0.0),vec3(1.0));vec3 nightColor=color*vec3(0.58,0.63,0.78)+vec3(0.026,0.034,0.056);float fullNight=1.0-smoothstep(radians(-10.0),radians(-2.0),altitude);nightColor=mix(nightColor,vec3(0.045,0.052,0.075),fullNight*0.38);vec3 twilightCool=color*vec3(0.80,0.84,0.96)+skyHaze*0.045;vec3 golden=color*vec3(1.02,0.84,0.62)+skyHaze*0.085;vec3 redGold=color*vec3(1.06,0.72,0.54)+skyHaze*0.100;vec3 twilightColor=mix(twilightCool,golden,horizonWarmth*0.72);twilightColor=mix(twilightColor,redGold,redWarmth*0.55);vec3 lowLightColor=mix(nightColor,twilightColor,skyAmbient);return mix(color,lowLightColor,lowLightBlend);}const float SHADOW_HIT_THRESHOLD=0.28;float horizonChannelValue(vec4 packed,float channel) {if (channel < 0.5) return packed.r;if (channel < 1.5) return packed.g;if (channel < 2.5) return packed.b;return packed.a;}float horizonBin(float bin,vec2 atlasUV) {float binCount=max(u_horizon_bins,1.0);float wrappedBin=mod(bin+binCount,binCount);if (wrappedBin < 4.0) {return horizonChannelValue(texture(u_horizon0,atlasUV),wrappedBin);}if (wrappedBin < 8.0) {return horizonChannelValue(texture(u_horizon1,atlasUV),wrappedBin-4.0);}if (wrappedBin < 12.0) {return horizonChannelValue(texture(u_horizon2,atlasUV),wrappedBin-8.0);}return horizonChannelValue(texture(u_horizon3,atlasUV),wrappedBin-12.0);}float sampleHorizonAngle(float azimuth,vec2 atlasUV) {float binCount=max(u_horizon_bins,1.0);float bin=mod(azimuth,PI*2.0)/((PI*2.0)/binCount);float bin0=floor(bin);float bin1=mod(bin0+1.0,binCount);float t=fract(bin);return mix(horizonBin(bin0,atlasUV),horizonBin(bin1,atlasUV),t)*(PI*0.5);}float horizonShadowMask(vec2 atlasUV) {if (u_horizon_available < 0.5) return 0.0;float sunAzimuth=mod(atan(u_sun_direction.x,-u_sun_direction.y)+PI*2.0,PI*2.0);float terrainHorizon=sampleHorizonAngle(sunAzimuth,clamp(atlasUV,vec2(0.0),vec2(1.0)));float lowSunSoftness=1.0-smoothstep(radians(10.0),radians(34.0),u_sun_altitude);float horizonEdge=mix(radians(0.55),radians(1.25),lowSunSoftness)*max(u_horizon_edge_softness,0.25);float horizonSignalAA=fwidth(terrainHorizon)*mix(1.15,1.75,lowSunSoftness);float horizonQuantAA=radians(0.18);horizonEdge=max(horizonEdge,max(horizonSignalAA,horizonQuantAA));float ditherAmount=clamp(u_horizon_edge_naturalness,0.0,1.2);float ditherNoise=valueNoise(atlasUV*1536.0+vec2(37.0,173.0))*0.65+valueNoise(atlasUV*3072.0+vec2(211.0,59.0))*0.35;float thresholdJitter=(ditherNoise-0.5)*horizonEdge*0.22*ditherAmount;float directVisibility=smoothstep(terrainHorizon-horizonEdge+thresholdJitter,terrainHorizon+horizonEdge+thresholdJitter,u_sun_altitude);return 1.0-directVisibility;}float shadowHitAt(vec2 atlasUV,float edgeAA,float thresholdJitter) {float rawMask=texture(u_shadow_atlas,clamp(atlasUV,vec2(0.0),vec2(1.0))).r;float aa=clamp(edgeAA*0.45,0.004,0.028);return smoothstep(0.02-aa+thresholdJitter,0.98+aa+thresholdJitter,rawMask);}float orientedShadowHit(vec2 atlasUV,vec2 edgeNormal,vec2 offset,float radius,float edgeAA,float thresholdJitter) {vec2 edgeTangent=vec2(-edgeNormal.y,edgeNormal.x);vec2 sampleOffset=(edgeNormal*offset.x+edgeTangent*offset.y)*(radius/max(u_shadow_atlas_size,1.0));return shadowHitAt(atlasUV+sampleOffset,edgeAA,thresholdJitter);}vec2 shadowAtlasEdgeNormal(vec2 atlasUV,float rawMask) {vec2 texel=vec2(1.0/max(u_shadow_atlas_size,1.0));float left=texture(u_shadow_atlas,clamp(atlasUV-vec2(texel.x,0.0),vec2(0.0),vec2(1.0))).r;float right=texture(u_shadow_atlas,clamp(atlasUV+vec2(texel.x,0.0),vec2(0.0),vec2(1.0))).r;float down=texture(u_shadow_atlas,clamp(atlasUV-vec2(0.0,texel.y),vec2(0.0),vec2(1.0))).r;float up=texture(u_shadow_atlas,clamp(atlasUV+vec2(0.0,texel.y),vec2(0.0),vec2(1.0))).r;vec2 atlasGradient=vec2(right-left,up-down);if (dot(atlasGradient,atlasGradient) > 0.000001) {return normalize(atlasGradient);}vec2 screenGradient=vec2(dFdx(rawMask),dFdy(rawMask));if (dot(screenGradient,screenGradient) > 0.000001) {return normalize(screenGradient);}return vec2(1.0,0.0);}float remapShadowMask(float rawMask,vec2 atlasUV) {if (u_shadow_display_mode > 0.5) {float edgeGradient=fwidth(rawMask);float atlasFootprint=max(length(dFdx(atlasUV)*u_shadow_atlas_size),length(dFdy(atlasUV)*u_shadow_atlas_size));float aa=clamp(max(edgeGradient*0.36,0.0035+atlasFootprint*0.0018),0.0035,0.026);float base=smoothstep(0.10-aa,0.88+aa,rawMask);if (edgeGradient < 0.0015 && (base < 0.001 || base > 0.999)) {return base;}vec2 edgeNormal=shadowAtlasEdgeNormal(atlasUV,rawMask);float atlasScale=max(u_shadow_atlas_size,1.0);float lowSunSoftness=1.0-smoothstep(radians(10.0),radians(34.0),u_sun_altitude);float radius=clamp(mix(0.80,1.45,lowSunSoftness)+atlasFootprint*0.28,0.80,2.10);float edgeBand=smoothstep(0.03,0.42,base)*(1.0-smoothstep(0.58,0.98,base));float stableNoise=valueNoise(atlasUV*atlasScale*0.65+vec2(41.0,137.0))*0.65+valueNoise(atlasUV*atlasScale*1.37+vec2(211.0,17.0))*0.35;float jitter=(stableNoise-0.5)*edgeBand*0.018;vec2 texelNormal=edgeNormal/atlasScale;vec2 texelTangent=vec2(-texelNormal.y,texelNormal.x);float s0=smoothstep(0.10-aa+jitter,0.88+aa+jitter,rawMask);float s1=shadowHitAt(atlasUV+texelNormal*radius,aa,jitter*0.35);float s2=shadowHitAt(atlasUV-texelNormal*radius,aa,jitter*0.35);float s3=shadowHitAt(atlasUV+texelTangent*radius*0.62,aa,jitter*0.20);float s4=shadowHitAt(atlasUV-texelTangent*radius*0.62,aa,jitter*0.20);float filtered=(s0*2.60+s1*0.92+s2*0.92+s3*0.42+s4*0.42)/5.28;float crisp=smoothstep(0.16,0.84,filtered);return clamp(mix(filtered,crisp,0.10),0.0,1.0);}float edgeGradient=fwidth(rawMask);float atlasFootprint=max(length(dFdx(atlasUV)*u_shadow_atlas_size),length(dFdy(atlasUV)*u_shadow_atlas_size));float edgeAA=clamp(max(edgeGradient*0.48,0.004+atlasFootprint*0.0028),0.004,0.038);float center=shadowHitAt(atlasUV,edgeAA,0.0);if (edgeGradient < 0.0015 && (center < 0.001 || center > 0.999)) {return center;}float lowSunSoftness=1.0-smoothstep(radians(10.0),radians(34.0),u_sun_altitude);vec2 edgeNormal=shadowAtlasEdgeNormal(atlasUV,rawMask);vec2 edgeTangent=vec2(-edgeNormal.y,edgeNormal.x);float radius=clamp(max(mix(1.15,2.35,lowSunSoftness),atlasFootprint*0.72),1.15,4.50);float transition=smoothstep(0.025,0.36,center)*(1.0-smoothstep(0.64,0.985,center));float gradientBand=smoothstep(0.001,0.018,edgeGradient);float edgeBand=clamp(max(transition,gradientBand),0.0,1.0);float atlasScale=max(u_shadow_atlas_size,1.0);float coarseNoise=valueNoise(atlasUV*atlasScale*0.19+vec2(17.0,91.0));float midNoise=valueNoise(atlasUV*atlasScale*0.73+vec2(131.0,47.0));float tangentNoise=valueNoise(atlasUV*atlasScale*0.41+vec2(59.0,179.0));float breakup=((coarseNoise*0.64+midNoise*0.36)-0.5)*2.0;float tangentBreakup=(tangentNoise-0.5)*2.0;vec2 breakupOffset=(edgeNormal*breakup*0.52+edgeTangent*tangentBreakup*0.18)*(edgeBand*radius/atlasScale);float thresholdJitter=breakup*edgeBand*0.025;vec2 filteredUV=atlasUV+breakupOffset;center=shadowHitAt(filteredUV,edgeAA,thresholdJitter);float pcf=center*3.20+orientedShadowHit(filteredUV,edgeNormal,vec2(-1.10, 0.00),radius,edgeAA,thresholdJitter)*1.15+orientedShadowHit(filteredUV,edgeNormal,vec2( 1.10, 0.00),radius,edgeAA,thresholdJitter)*1.15+orientedShadowHit(filteredUV,edgeNormal,vec2( 0.00,-0.82),radius,edgeAA,thresholdJitter)*0.74+orientedShadowHit(filteredUV,edgeNormal,vec2( 0.00, 0.82),radius,edgeAA,thresholdJitter)*0.74+orientedShadowHit(filteredUV,edgeNormal,vec2(-0.72, 0.62),radius,edgeAA,thresholdJitter)*0.72+orientedShadowHit(filteredUV,edgeNormal,vec2( 0.72,-0.62),radius,edgeAA,thresholdJitter)*0.72+orientedShadowHit(filteredUV,edgeNormal,vec2(-0.72,-0.62),radius,edgeAA,thresholdJitter)*0.52+orientedShadowHit(filteredUV,edgeNormal,vec2( 0.72, 0.62),radius,edgeAA,thresholdJitter)*0.52+orientedShadowHit(filteredUV,edgeNormal,vec2(-1.55, 0.25),radius,edgeAA,thresholdJitter)*0.34+orientedShadowHit(filteredUV,edgeNormal,vec2( 1.55,-0.25),radius,edgeAA,thresholdJitter)*0.34+orientedShadowHit(filteredUV,edgeNormal,vec2(-0.20, 1.45),radius,edgeAA,thresholdJitter)*0.26+orientedShadowHit(filteredUV,edgeNormal,vec2( 0.20,-1.45),radius,edgeAA,thresholdJitter)*0.26;float filtered=pcf/10.66;float crisp=smoothstep(0.18,0.82,filtered);float crispAmount=mix(0.08,0.03,lowSunSoftness);return clamp(mix(filtered,crisp,crispAmount),0.0,1.0);}float nearShadowHitAt(vec2 atlasUV,float edgeAA) {float rawMask=texture(u_shadow_near_atlas,clamp(atlasUV,vec2(0.0),vec2(1.0))).r;float aa=clamp(edgeAA*0.45,0.004,0.028);return smoothstep(0.025-aa,0.975+aa,rawMask);}float remapNearShadowMask(float rawMask,vec2 atlasUV) {float edgeGradient=fwidth(rawMask);float atlasFootprint=max(length(dFdx(atlasUV)*u_shadow_near_atlas_size),length(dFdy(atlasUV)*u_shadow_near_atlas_size));float edgeAA=clamp(max(edgeGradient*0.52,0.004+atlasFootprint*0.0025),0.004,0.035);float center=nearShadowHitAt(atlasUV,edgeAA);if (edgeGradient < 0.0015 && (center < 0.001 || center > 0.999)) {return center;}vec2 texel=vec2(1.0/max(u_shadow_near_atlas_size,1.0));float pcf=center*2.70+nearShadowHitAt(atlasUV+vec2( texel.x,0.0),edgeAA)*0.95+nearShadowHitAt(atlasUV+vec2(-texel.x,0.0),edgeAA)*0.95+nearShadowHitAt(atlasUV+vec2(0.0, texel.y),edgeAA)*0.95+nearShadowHitAt(atlasUV+vec2(0.0,-texel.y),edgeAA)*0.95+nearShadowHitAt(atlasUV+vec2( texel.x, texel.y),edgeAA)*0.42+nearShadowHitAt(atlasUV+vec2(-texel.x, texel.y),edgeAA)*0.42+nearShadowHitAt(atlasUV+vec2( texel.x,-texel.y),edgeAA)*0.42+nearShadowHitAt(atlasUV+vec2(-texel.x,-texel.y),edgeAA)*0.42;float filtered=pcf/8.18;return clamp(mix(filtered,smoothstep(0.18,0.82,filtered),0.035),0.0,1.0);}float atlasEdgeRoom(vec2 atlasUV) {return min(min(atlasUV.x,1.0-atlasUV.x),min(atlasUV.y,1.0-atlasUV.y));}float rayRoomToAtlasEdge(vec2 atlasUV,vec2 rayDir) {float tx=rayDir.x > 0.0001 ? (1.0-atlasUV.x)/rayDir.x :\nrayDir.x <-0.0001 ? atlasUV.x/-rayDir.x : 1.0e6;float ty=rayDir.y > 0.0001 ? (1.0-atlasUV.y)/rayDir.y :\nrayDir.y <-0.0001 ? atlasUV.y/-rayDir.y : 1.0e6;return min(tx,ty);}float nearAtlasCoverage(vec2 nearAtlasUV) {vec2 nearSpan=max(u_near_atlas_bounds.zw-u_near_atlas_bounds.xy,vec2(1.0e-9));vec2 sunDirNearUV=vec2(u_sun_direction.x/nearSpan.x,-u_sun_direction.y/nearSpan.y);float sunDirLen=length(sunDirNearUV);sunDirNearUV=sunDirLen > 0.00001 ? sunDirNearUV/sunDirLen : vec2(1.0,0.0);float borderCoverage=smoothstep(0.012,0.060,atlasEdgeRoom(nearAtlasUV));float sunwardCoverage=smoothstep(0.045,0.170,rayRoomToAtlasEdge(nearAtlasUV,sunDirNearUV));return borderCoverage*sunwardCoverage;}float nearAtlasReplaceCoverage(vec2 nearAtlasUV) {vec2 nearSpan=max(u_near_atlas_bounds.zw-u_near_atlas_bounds.xy,vec2(1.0e-9));vec2 sunDirNearUV=vec2(u_sun_direction.x/nearSpan.x,-u_sun_direction.y/nearSpan.y);float sunDirLen=length(sunDirNearUV);sunDirNearUV=sunDirLen > 0.00001 ? sunDirNearUV/sunDirLen : vec2(1.0,0.0);float borderCoverage=smoothstep(0.075,0.155,atlasEdgeRoom(nearAtlasUV));float sunwardCoverage=smoothstep(0.180,0.360,rayRoomToAtlasEdge(nearAtlasUV,sunDirNearUV));return borderCoverage*sunwardCoverage;}float localIgorLambert(vec2 gradient) {vec3 normal=normalize(vec3(-gradient.x,-gradient.y,1.0));vec3 lightDir=normalize(vec3(u_sun_direction,max(tan(max(u_sun_altitude,radians(1.5))),0.03)));return dot(normal,lightDir);}float localIgorSlopeStrength(vec2 gradient) {return atan(length(gradient)*2.0)*2.0/PI;}float localIgorReliefShadowFrom(float lambert,float slopeStrength) {float lowSunBoost=1.0-smoothstep(radians(18.0),radians(45.0),u_sun_altitude);float shadow=slopeStrength*(1.0-smoothstep(0.08,0.62,lambert))*mix(0.92,1.16,lowSunBoost);return clamp(shadow,0.0,1.0);}float localIgorReliefShadow(vec2 gradient) {return localIgorReliefShadowFrom(localIgorLambert(gradient),localIgorSlopeStrength(gradient));}float localTerrainContactShadow(vec2 coord,float startElevation) {if (u_contact_shadow_enabled < 0.5 || u_sun_altitude <=radians(0.25) || u_dem_ao_dim <=2.0) {return 0.0;}vec2 rayDir=normalize(u_sun_direction);if (dot(rayDir,rayDir) < 0.5) {return 0.0;}float demGsd=max(u_dem_ao_meters_per_pixel,0.5);float maxDistance=max(u_contact_shadow_distance,demGsd*6.0);float steps=clamp(floor(u_contact_shadow_steps+0.5),4.0,14.0);float stepMeters=max(maxDistance/steps,demGsd*0.85);float tanSun=max(tan(u_sun_altitude),0.018);float lowSunBoost=1.0-smoothstep(radians(10.0),radians(32.0),u_sun_altitude);float hitBias=max(0.65,demGsd*mix(0.035,0.020,lowSunBoost));float contact=0.0;for (int i=1; i <=14; i++) {if (float(i) > steps) break;float distanceMeters=(float(i)-0.35)*stepMeters;if (distanceMeters > maxDistance) break;vec2 sampleCoord=coord+rayDir*(distanceMeters/demGsd);if (sampleCoord.x < 1.0 || sampleCoord.x > u_dem_ao_dim ||\nsampleCoord.y < 1.0 || sampleCoord.y > u_dem_ao_dim) {break;}float blockerElevation=sampleDemTexel(sampleCoord);float rayHeight=startElevation+distanceMeters*tanSun+hitBias;float excess=blockerElevation-rayHeight;float hit=smoothstep(0.20,max(1.15,demGsd*0.18),excess);float distanceFade=1.0-smoothstep(maxDistance*0.16,maxDistance,distanceMeters);contact=max(contact,hit*distanceFade);}return clamp(contact*u_contact_shadow_strength,0.0,1.0);}vec4 applyTerrainFog(vec4 color) {if (u_is_globe_mode || v_fog_depth <=u_fog_ground_blend) {return color;}vec4 colorLinear=gammaToLinear(color);float blendColor=smoothstep(0.0,1.0,max((v_fog_depth-u_horizon_fog_blend)/(1.0-u_horizon_fog_blend),0.0));vec4 fogHorizonColorLinear=mix(gammaToLinear(u_fog_color),gammaToLinear(u_horizon_color),blendColor);float factorFog=max(v_fog_depth-u_fog_ground_blend,0.0)/(1.0-u_fog_ground_blend);return linearToGamma(mix(colorLinear,fogHorizonColorLinear,pow(factorFog,2.0)*u_fog_ground_blend_opacity));}void main() {vec4 surface_color=texture(u_texture,vec2(v_texture_pos.x,1.0-v_texture_pos.y));surface_color=mix(surface_color,vec4(1.0),clamp(u_shadow_white_base,0.0,1.0));fragColor=surface_color;if (u_contour_enabled > 0.5 && u_contour_interval > 0.1) {float val=v_elevation*u_contour_multiplier;float interval_minor=u_contour_interval;float interval_major=interval_minor*10.0;float zoom_floor=smoothstep(11.0,13.0,u_zoom);float distance_fade=1.0-smoothstep(500.0,3000.0,v_dist_linear);float global_fade=zoom_floor*distance_fade;if (global_fade > 0.01) {float dist_minor=mod(val,interval_minor);if (dist_minor > interval_minor*0.5) dist_minor=interval_minor-dist_minor;float dist_major=mod(val,interval_major);if (dist_major > interval_major*0.5) dist_major=interval_major-dist_major;float grad_mag=length(vec2(dFdx(val),dFdy(val)));float pixel_dist_minor=dist_minor/max(grad_mag,1e-6);float pixel_dist_major=dist_major/max(grad_mag,1e-6);float density_fade=clamp(1.0-(grad_mag/interval_minor)*1.5,0.0,1.0);float alpha_minor=(1.0-smoothstep(0.0,1.0,pixel_dist_minor))*density_fade;float alpha_major=1.0-smoothstep(0.0,1.0,pixel_dist_major);float final_alpha=max(alpha_minor*0.6,alpha_major*0.85)*global_fade;vec3 base_color=u_contour_color.a > 0.001 ? u_contour_color.rgb/u_contour_color.a : u_contour_color.rgb;vec3 color=mix(base_color,vec3(0.0),alpha_major*0.15);fragColor=mix(fragColor,vec4(color,1.0),final_alpha*u_contour_color.a);}}float skyAmbient=skyAmbientAmount(u_sun_altitude);float shadowStrength=clamp(u_shadow_intensity,0.0,1.0);float sunCastVisibility=smoothstep(radians(-0.15),radians(0.85),u_sun_altitude);float localReliefShadow=0.0;vec2 localReliefGradient=vec2(0.0);float localReliefLambert=1.0;float localReliefSlope=0.0;float localElevation=0.0;float contactShadow=0.0;if (u_dem_ao_dim > 2.0 && (u_self_shadow_mult > 0.001 || u_igor_relief_enabled > 0.5)) {localElevation=sampleDemTexel(clamp(v_dem_coord,vec2(1.0),vec2(u_dem_ao_dim)));localReliefGradient=sampleReliefGradient(clamp(v_dem_coord,vec2(1.0),vec2(u_dem_ao_dim)));localReliefLambert=localIgorLambert(localReliefGradient);localReliefSlope=localIgorSlopeStrength(localReliefGradient);localReliefShadow=localIgorReliefShadowFrom(localReliefLambert,localReliefSlope);contactShadow=localTerrainContactShadow(clamp(v_dem_coord,vec2(1.0),vec2(u_dem_ao_dim)),localElevation);}float reliefShadowStrength=mix(0.70,clamp(u_self_shadow_mult,0.0,3.0),0.55);fragColor.rgb=applySkyLightTint(fragColor.rgb,u_sun_altitude,u_horizon_color.rgb,u_fog_color.rgb);vec2 atlasUV=v_atlas_uv;bool atlasCovered=atlasUV.x >=-0.001 && atlasUV.x <=1.001 && atlasUV.y >=-0.001 && atlasUV.y <=1.001;float shadowMask=0.0;float nearShadowMask=0.0;float nearContribution=0.0;float rawAtlasShadow=0.0;float rawNearShadow=0.0;float castPresence=0.0;bool useGlobalCastShadow=u_shadow_component_mode < 1.5;bool useNearCastShadow=u_shadow_component_mode < 0.5 || (u_shadow_component_mode > 1.5 && u_shadow_component_mode < 2.5);if (useGlobalCastShadow &&\natlasUV.x >=-0.001 && atlasUV.x <=1.001 && atlasUV.y >=-0.001 && atlasUV.y <=1.001) {rawAtlasShadow=clamp(texture(u_shadow_atlas,clamp(atlasUV,vec2(0.0),vec2(1.0))).r,0.0,1.0);float raymarchedShadow=remapShadowMask(rawAtlasShadow,atlasUV);float horizonShadow=horizonShadowMask(atlasUV);shadowMask=mix(raymarchedShadow,horizonShadow,clamp(u_horizon_available,0.0,1.0));}if (useNearCastShadow &&\nu_shadow_near_available > 0.5 &&\nv_near_atlas_uv.x >=-0.001 && v_near_atlas_uv.x <=1.001 &&\nv_near_atlas_uv.y >=-0.001 && v_near_atlas_uv.y <=1.001) {rawNearShadow=clamp(texture(u_shadow_near_atlas,clamp(v_near_atlas_uv,vec2(0.0),vec2(1.0))).r,0.0,1.0);nearShadowMask=remapNearShadowMask(rawNearShadow,v_near_atlas_uv);float previousShadowMask=shadowMask;float nearFade=smoothstep(0.0,1.0,clamp(u_shadow_near_fade,0.0,1.0));float nearCoverage=nearAtlasCoverage(v_near_atlas_uv)*nearFade;float additiveShadow=max(shadowMask,nearShadowMask*nearCoverage);float globalPartialEdge=smoothstep(0.035,0.30,shadowMask)*(1.0-smoothstep(0.76,0.97,shadowMask));float replaceCoverage=nearAtlasReplaceCoverage(v_near_atlas_uv);float nearAddsDetail=smoothstep(-0.02,0.10,nearShadowMask-shadowMask);float replaceWeight=replaceCoverage*globalPartialEdge*nearFade*nearAddsDetail;shadowMask=mix(additiveShadow,max(additiveShadow,nearShadowMask),replaceWeight);nearContribution=max(shadowMask-previousShadowMask,0.0);}if (u_shadow_near_debug_tint > 0.5 && nearShadowMask > 0.01) {float tintMask=clamp(max(nearContribution,nearShadowMask*0.35),0.0,1.0);fragColor.rgb=mix(fragColor.rgb,vec3(0.02,0.72,1.0),tintMask*0.45);}vec3 shadowTint=vec3(0.075,0.085,0.120);float lowSunFarFallback=1.0-smoothstep(radians(7.0),radians(22.0),u_sun_altitude);float farTerrainSignal=clamp(localReliefShadow*u_self_shadow_mult*mix(0.28,0.58,lowSunFarFallback),0.0,1.0);float farTerrainShadow=useGlobalCastShadow ? smoothstep(0.025,0.68,farTerrainSignal)*(atlasCovered ? 0.0 : 1.0) : 0.0;if (u_shadow_display_mode > 0.5) {float selfLight=smoothstep(0.0,1.0,clamp(localReliefLambert,0.0,1.0));float ao=1.0-smoothstep(0.10,0.70,localReliefSlope)*0.25;float ambientConfig=0.20;float sunConfig=1.0-ambientConfig;float castShadow=clamp(max(shadowMask,farTerrainShadow),0.0,1.0);float castLight=1.0-castShadow*sunCastVisibility;float totalLight=(ambientConfig*ao)+(sunConfig*selfLight*castLight);float copy7Shadow=1.0-clamp(totalLight,0.0,1.0);float shadowAlpha=clamp(copy7Shadow*shadowStrength*u_cast_shadow_mult*0.52,0.0,0.76);fragColor.rgb=mix(fragColor.rgb,shadowTint,shadowAlpha);float contactOnly=contactShadow*(1.0-smoothstep(0.08,0.78,castShadow))*sunCastVisibility;fragColor.rgb=mix(fragColor.rgb,shadowTint,contactOnly*shadowStrength*0.22);if (u_igor_relief_enabled > 0.5) {castPresence=clamp(castShadow*shadowStrength*sunCastVisibility,0.0,1.0);float reliefAO=localReliefShadow*castPresence*0.060*reliefShadowStrength;fragColor.rgb*=1.0-reliefAO;}} else {float selfLight=smoothstep(0.0,1.0,clamp(localReliefLambert,0.0,1.0));float ao=1.0-smoothstep(0.10,0.70,localReliefSlope)*0.25;float ambientConfig=0.20;float sunConfig=1.0-ambientConfig;float castShadow=clamp(max(shadowMask,farTerrainShadow),0.0,1.0);float castLight=1.0-castShadow*sunCastVisibility;float totalLight=(ambientConfig*ao)+(sunConfig*selfLight*castLight);float copy7Shadow=1.0-clamp(totalLight,0.0,1.0);float shadowAlpha=clamp(copy7Shadow*shadowStrength*u_cast_shadow_mult*0.52,0.0,0.76);fragColor.rgb=mix(fragColor.rgb,shadowTint,shadowAlpha);float contactOnly=contactShadow*(1.0-smoothstep(0.08,0.78,castShadow))*sunCastVisibility;fragColor.rgb=mix(fragColor.rgb,shadowTint,contactOnly*shadowStrength*0.22);if (u_igor_relief_enabled > 0.5) {castPresence=clamp(castShadow*shadowStrength*sunCastVisibility,0.0,1.0);float reliefAO=localReliefShadow*castPresence*0.060*reliefShadowStrength;fragColor.rgb*=1.0-reliefAO;}}fragColor=applyTerrainFog(fragColor);if (atlasCovered) {if (u_debug_mode > 0) {if (atlasUV.x >=0.0 && atlasUV.x <=1.0 && atlasUV.y >=0.0 && atlasUV.y <=1.0) {if (u_debug_mode==3) {vec2 grid=fract(atlasUV*16.0);float line=step(0.98,grid.x)+step(0.98,grid.y);fragColor.rgb=mix(fragColor.rgb,vec3(0.0,0.2,0.8),0.4);fragColor.rgb=mix(fragColor.rgb,vec3(1.0,1.0,0.0),line*0.5);fragColor.rgb=mix(fragColor.rgb,vec3(atlasUV,0.0),0.2);} else if (u_debug_mode==2) {fragColor.rgb=mix(fragColor.rgb,vec3(shadowMask,shadowMask*0.6,0.0),0.8);} else if (u_debug_mode==4) {fragColor.rgb=vec3(1.0);} else if (u_debug_mode==5) {fragColor.rgb=vec3(0.5);}}}}}';
 
 // This file is generated. Edit build/generate-shaders.ts, then run `npm run codegen`.
-var terrainVert = 'in vec3 a_pos3d;uniform mat4 u_fog_matrix;uniform float u_ele_delta;uniform vec3 u_tile_id;uniform vec4 u_atlas_bounds;out vec2 v_texture_pos;out vec2 v_atlas_uv;out float v_fog_depth;out float v_elevation;out float v_dist_linear;out vec2 v_dem_coord;void main() {float ele=get_elevation(a_pos3d.xy);v_elevation=ele;float ele_delta=a_pos3d.z==1.0 ? u_ele_delta : 0.0;v_texture_pos=a_pos3d.xy/8192.0;v_dem_coord=(u_terrain_matrix*vec4(a_pos3d.xy,0.0,1.0)).xy*u_terrain_dim+1.0;float world_scale=pow(2.0,u_tile_id.x);vec2 world_uv=(u_tile_id.yz+a_pos3d.xy/8192.0)/world_scale;v_atlas_uv=(world_uv-u_atlas_bounds.xy)/(u_atlas_bounds.zw-u_atlas_bounds.xy);v_atlas_uv.y=1.0-v_atlas_uv.y;gl_Position=projectTileFor3D(a_pos3d.xy,get_elevation(a_pos3d.xy)-ele_delta);vec4 pos=u_fog_matrix*vec4(a_pos3d.xy,ele,1.0);v_fog_depth=pos.z/pos.w*0.5+0.5;v_dist_linear=pos.w;}';
+var terrainVert = 'in vec3 a_pos3d;uniform mat4 u_fog_matrix;uniform float u_ele_delta;uniform vec3 u_tile_id;uniform vec4 u_atlas_bounds;uniform vec4 u_near_atlas_bounds;out vec2 v_texture_pos;out vec2 v_atlas_uv;out vec2 v_near_atlas_uv;out float v_fog_depth;out float v_elevation;out float v_dist_linear;out vec2 v_dem_coord;void main() {float ele=get_elevation(a_pos3d.xy);v_elevation=ele;float ele_delta=a_pos3d.z==1.0 ? u_ele_delta : 0.0;v_texture_pos=a_pos3d.xy/8192.0;v_dem_coord=(u_terrain_matrix*vec4(a_pos3d.xy,0.0,1.0)).xy*u_terrain_dim+1.0;float world_scale=pow(2.0,u_tile_id.x);vec2 world_uv=(u_tile_id.yz+a_pos3d.xy/8192.0)/world_scale;v_atlas_uv=(world_uv-u_atlas_bounds.xy)/(u_atlas_bounds.zw-u_atlas_bounds.xy);v_atlas_uv.y=1.0-v_atlas_uv.y;v_near_atlas_uv=(world_uv-u_near_atlas_bounds.xy)/(u_near_atlas_bounds.zw-u_near_atlas_bounds.xy);v_near_atlas_uv.y=1.0-v_near_atlas_uv.y;gl_Position=projectTileFor3D(a_pos3d.xy,get_elevation(a_pos3d.xy)-ele_delta);vec4 pos=u_fog_matrix*vec4(a_pos3d.xy,ele,1.0);v_fog_depth=pos.z/pos.w*0.5+0.5;v_dist_linear=pos.w;}';
 
 // This file is generated. Edit build/generate-shaders.ts, then run `npm run codegen`.
 var terrainVertDepth = 'in vec3 a_pos3d;uniform float u_ele_delta;out float v_depth;void main() {float ele=get_elevation(a_pos3d.xy);float ele_delta=a_pos3d.z==1.0 ? u_ele_delta : 0.0;gl_Position=projectTileFor3D(a_pos3d.xy,ele-ele_delta);v_depth=gl_Position.z/gl_Position.w;}';
@@ -55027,6 +55042,11 @@ const shaders = {
     shadow: prepare(shadowFrag, shadowVert),
     shadowPrepare: prepare(shadowPrepareFrag, shadowPrepareVert),
     shadowGlobal: prepare(shadowGlobalFrag, shadowGlobalVert),
+    shadowSweepInit: prepare(shadowSweepInitFrag, shadowGlobalVert),
+    shadowSweepStep: prepare(shadowSweepStepFrag, shadowGlobalVert),
+    shadowSweepFinal: prepare(shadowSweepFinalFrag, shadowGlobalVert),
+    shadowHizMip: prepare(shadowHizMipFrag, shadowGlobalVert),
+    shadowHizGlobal: prepare(shadowHizGlobalFrag, shadowGlobalVert),
     shadowBlur: prepare(shadowBlurFrag, shadowBlurVert),
     horizonPrepare: prepare(horizonPrepareFrag, shadowGlobalVert),
     daylightPrepare: prepare(daylightPrepareFrag, shadowGlobalVert),
@@ -61762,13 +61782,20 @@ const terrainUniforms = (context, locations) => ({
     'u_zoom': new symbol_layout.Uniform1f(context, locations.u_zoom),
     'u_tile_zoom': new symbol_layout.Uniform1f(context, locations.u_tile_zoom),
     'u_shadow_atlas': new symbol_layout.Uniform1i(context, locations.u_shadow_atlas),
+    'u_shadow_near_atlas': new symbol_layout.Uniform1i(context, locations.u_shadow_near_atlas),
     'u_horizon0': new symbol_layout.Uniform1i(context, locations.u_horizon0),
     'u_horizon1': new symbol_layout.Uniform1i(context, locations.u_horizon1),
     'u_horizon2': new symbol_layout.Uniform1i(context, locations.u_horizon2),
     'u_horizon3': new symbol_layout.Uniform1i(context, locations.u_horizon3),
     'u_atlas_bounds': new symbol_layout.Uniform4f(context, locations.u_atlas_bounds),
+    'u_near_atlas_bounds': new symbol_layout.Uniform4f(context, locations.u_near_atlas_bounds),
     'u_tile_id': new symbol_layout.Uniform3f(context, locations.u_tile_id),
     'u_shadow_intensity': new symbol_layout.Uniform1f(context, locations.u_shadow_intensity),
+    'u_shadow_near_available': new symbol_layout.Uniform1f(context, locations.u_shadow_near_available),
+    'u_shadow_near_fade': new symbol_layout.Uniform1f(context, locations.u_shadow_near_fade),
+    'u_shadow_near_debug_tint': new symbol_layout.Uniform1f(context, locations.u_shadow_near_debug_tint),
+    'u_shadow_display_mode': new symbol_layout.Uniform1f(context, locations.u_shadow_display_mode),
+    'u_shadow_component_mode': new symbol_layout.Uniform1f(context, locations.u_shadow_component_mode),
     'u_horizon_available': new symbol_layout.Uniform1f(context, locations.u_horizon_available),
     'u_horizon_bins': new symbol_layout.Uniform1f(context, locations.u_horizon_bins),
     'u_horizon_edge_softness': new symbol_layout.Uniform1f(context, locations.u_horizon_edge_softness),
@@ -61786,7 +61813,13 @@ const terrainUniforms = (context, locations) => ({
     'u_dem_derivative': new symbol_layout.Uniform1i(context, locations.u_dem_derivative),
     'u_dem_derivative_available': new symbol_layout.Uniform1f(context, locations.u_dem_derivative_available),
     'u_shadow_atlas_size': new symbol_layout.Uniform1f(context, locations.u_shadow_atlas_size),
+    'u_shadow_near_atlas_size': new symbol_layout.Uniform1f(context, locations.u_shadow_near_atlas_size),
     'u_self_shadow_mult': new symbol_layout.Uniform1f(context, locations.u_self_shadow_mult),
+    'u_contact_shadow_enabled': new symbol_layout.Uniform1f(context, locations.u_contact_shadow_enabled),
+    'u_contact_shadow_strength': new symbol_layout.Uniform1f(context, locations.u_contact_shadow_strength),
+    'u_contact_shadow_distance': new symbol_layout.Uniform1f(context, locations.u_contact_shadow_distance),
+    'u_contact_shadow_steps': new symbol_layout.Uniform1f(context, locations.u_contact_shadow_steps),
+    'u_shadow_white_base': new symbol_layout.Uniform1f(context, locations.u_shadow_white_base),
 });
 const terrainElevationUniforms = (context, locations) => ({
     'u_ele_delta': new symbol_layout.Uniform1f(context, locations.u_ele_delta)
@@ -61799,10 +61832,34 @@ const terrainCoordsUniforms = (context, locations) => ({
     'u_terrain_coords_id': new symbol_layout.Uniform1f(context, locations.u_terrain_coords_id),
     'u_ele_delta': new symbol_layout.Uniform1f(context, locations.u_ele_delta)
 });
+function imageryLayerEnabled(id) {
+    var _a, _b, _c;
+    if (typeof window === 'undefined')
+        return false;
+    const state = (_b = (_a = window.imageryState) === null || _a === void 0 ? void 0 : _a.get) === null || _b === void 0 ? void 0 : _b.call(_a, id);
+    return !!((state === null || state === void 0 ? void 0 : state.enabled) && ((_c = state.opacity) !== null && _c !== void 0 ? _c : 1) > 0);
+}
+function getActiveShadowLayer(painter, zoom = 0) {
+    var _a;
+    const candidates = [
+        ['shadow-v3', 'shadow-v3-coarse'],
+        ['shadow-v2', 'shadow-v2-coarse'],
+        ['shadow', 'shadow-coarse']
+    ];
+    for (const [stateId, layerId] of candidates) {
+        if (!imageryLayerEnabled(stateId))
+            continue;
+        const layer = (_a = painter === null || painter === void 0 ? void 0 : painter.style) === null || _a === void 0 ? void 0 : _a.getLayer(layerId);
+        if (layer && !layer.isHidden(zoom))
+            return layer;
+    }
+    return null;
+}
 const terrainUniformValues = (eleDelta, fogMatrix, sky, pitch, isGlobeMode, zoom = 0, painter, tile) => {
-    var _a, _b, _c, _d, _e, _f, _g, _h;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t;
+    const activeShadowLayer = getActiveShadowLayer(painter, zoom);
     // Contour defaults — always on unless explicitly disabled
-    let contourEnabled = 1.0;
+    let contourEnabled = activeShadowLayer ? 0.0 : 1.0;
     if (typeof window !== 'undefined' && window.imageryState) {
         const cs = window.imageryState.get('contours');
         if (cs && cs.enabled === false)
@@ -61835,6 +61892,15 @@ const terrainUniformValues = (eleDelta, fogMatrix, sky, pitch, isGlobeMode, zoom
             contourInterval = thresholds[bestZoom][0];
         }
     }
+    const activeShadowIsV2 = (activeShadowLayer === null || activeShadowLayer === void 0 ? void 0 : activeShadowLayer.id) === 'shadow-v2-coarse' || (activeShadowLayer === null || activeShadowLayer === void 0 ? void 0 : activeShadowLayer.id) === 'shadow-v3-coarse';
+    const activeShadowIsV3 = (activeShadowLayer === null || activeShadowLayer === void 0 ? void 0 : activeShadowLayer.id) === 'shadow-v3-coarse';
+    const contactBlockedByInteraction = !!((_a = painter === null || painter === void 0 ? void 0 : painter.options) === null || _a === void 0 ? void 0 : _a.moving) ||
+        !!((_b = painter === null || painter === void 0 ? void 0 : painter.options) === null || _b === void 0 ? void 0 : _b.rotating) ||
+        (typeof window !== 'undefined' && (window._isInteractingWithTime === true || window._shadowProgressivePhase === 'preview'));
+    const v3ContactEnabled = activeShadowIsV3 &&
+        !contactBlockedByInteraction &&
+        typeof window !== 'undefined' &&
+        window._shadowV3ContactShadows === true;
     return {
         'u_texture': 0,
         'u_ele_delta': eleDelta,
@@ -61852,19 +61918,61 @@ const terrainUniformValues = (eleDelta, fogMatrix, sky, pitch, isGlobeMode, zoom
         'u_zoom': zoom,
         'u_tile_zoom': 0,
         'u_shadow_atlas': 15, // Bind shadow atlas to unit 15
+        'u_shadow_near_atlas': 14,
         'u_horizon0': 8,
         'u_horizon1': 9,
         'u_horizon2': 10,
         'u_horizon3': 11,
-        'u_atlas_bounds': ((_c = (_b = (_a = painter === null || painter === void 0 ? void 0 : painter.style) === null || _a === void 0 ? void 0 : _a.map) === null || _b === void 0 ? void 0 : _b.terrain) === null || _c === void 0 ? void 0 : _c._elevationAtlasBounds) || [0, 0, 1, 1],
+        'u_atlas_bounds': ((_e = (_d = (_c = painter === null || painter === void 0 ? void 0 : painter.style) === null || _c === void 0 ? void 0 : _c.map) === null || _d === void 0 ? void 0 : _d.terrain) === null || _e === void 0 ? void 0 : _e._elevationAtlasBounds) || [0, 0, 1, 1],
+        'u_near_atlas_bounds': ((_h = (_g = (_f = painter === null || painter === void 0 ? void 0 : painter.style) === null || _f === void 0 ? void 0 : _f.map) === null || _g === void 0 ? void 0 : _g.terrain) === null || _h === void 0 ? void 0 : _h._shadowNearAtlasBounds) || [0, 0, 1, 1],
         'u_tile_id': tile ? [tile.tileID.canonical.z, tile.tileID.canonical.x, tile.tileID.canonical.y] : [0, 0, 0],
         'u_shadow_intensity': (() => {
-            var _a;
-            const sl = (_a = painter === null || painter === void 0 ? void 0 : painter.style) === null || _a === void 0 ? void 0 : _a.getLayer('shadow-coarse');
-            if (!sl || sl.isHidden(zoom))
+            if (!activeShadowLayer || activeShadowLayer.isHidden(zoom))
                 return 0.0;
-            const opacity = sl.getPaintProperty('shadow-opacity');
+            const opacity = activeShadowLayer.getPaintProperty('shadow-opacity');
             return typeof opacity === 'number' ? opacity : 1.0;
+        })(),
+        'u_shadow_near_available': (() => {
+            var _a, _b;
+            const terrain = (_b = (_a = painter === null || painter === void 0 ? void 0 : painter.style) === null || _a === void 0 ? void 0 : _a.map) === null || _b === void 0 ? void 0 : _b.terrain;
+            return (terrain === null || terrain === void 0 ? void 0 : terrain._shadowNearAtlasReady) && (terrain === null || terrain === void 0 ? void 0 : terrain._fboNearShadowTexture) ? 1.0 : 0.0;
+        })(),
+        'u_shadow_near_fade': (() => {
+            var _a;
+            const map = (_a = painter === null || painter === void 0 ? void 0 : painter.style) === null || _a === void 0 ? void 0 : _a.map;
+            const terrain = map === null || map === void 0 ? void 0 : map.terrain;
+            if (!(terrain === null || terrain === void 0 ? void 0 : terrain._shadowNearAtlasReady) || !(terrain === null || terrain === void 0 ? void 0 : terrain._fboNearShadowTexture))
+                return 0.0;
+            const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+            const start = Number.isFinite(terrain._shadowNearAtlasReadyAt) ? terrain._shadowNearAtlasReadyAt : now;
+            const duration = 360;
+            const fade = Math.max(0, Math.min(1, (now - start) / duration));
+            if (fade < 1 && !terrain._shadowNearFadeRepaintQueued) {
+                terrain._shadowNearFadeRepaintQueued = true;
+                const schedule = typeof window !== 'undefined' && window.requestAnimationFrame ?
+                    window.requestAnimationFrame.bind(window) :
+                    (callback) => setTimeout(() => callback(now), 16);
+                schedule(() => {
+                    var _a;
+                    terrain._shadowNearFadeRepaintQueued = false;
+                    (_a = map === null || map === void 0 ? void 0 : map.triggerRepaint) === null || _a === void 0 ? void 0 : _a.call(map);
+                });
+            }
+            return fade;
+        })(),
+        'u_shadow_near_debug_tint': (typeof window !== 'undefined' && window._shadowNearDebugTint === true) ? 1.0 : 0.0,
+        'u_shadow_display_mode': activeShadowIsV2 ? 1.0 : 0.0,
+        'u_shadow_component_mode': (() => {
+            if (!activeShadowIsV3 || typeof window === 'undefined')
+                return 0.0;
+            const mode = window._shadowV3ComponentMode;
+            if (mode === 'global')
+                return 1.0;
+            if (mode === 'near')
+                return 2.0;
+            if (mode === 'self')
+                return 3.0;
+            return 0.0;
         })(),
         'u_horizon_available': (() => {
             var _a, _b;
@@ -61879,28 +61987,33 @@ const terrainUniformValues = (eleDelta, fogMatrix, sky, pitch, isGlobeMode, zoom
         'u_debug_mode': (typeof window !== 'undefined' && window._shadowDebugMode) ? window._shadowDebugMode : 0,
         'u_cast_shadow_mult': (typeof window !== 'undefined' && window._castShadowMult !== undefined) ? window._castShadowMult : 1.8,
         'u_igor_relief_enabled': (() => {
-            var _a, _b;
+            var _a, _b, _c, _d, _e, _f;
             if (typeof window !== 'undefined') {
                 const imageryState = window.imageryState;
-                const shadowEnabled = ((_b = (_a = imageryState === null || imageryState === void 0 ? void 0 : imageryState.get) === null || _a === void 0 ? void 0 : _a.call(imageryState, 'shadow')) === null || _b === void 0 ? void 0 : _b.enabled) === true;
+                const shadowEnabled = ((_b = (_a = imageryState === null || imageryState === void 0 ? void 0 : imageryState.get) === null || _a === void 0 ? void 0 : _a.call(imageryState, 'shadow')) === null || _b === void 0 ? void 0 : _b.enabled) === true ||
+                    ((_d = (_c = imageryState === null || imageryState === void 0 ? void 0 : imageryState.get) === null || _c === void 0 ? void 0 : _c.call(imageryState, 'shadow-v2')) === null || _d === void 0 ? void 0 : _d.enabled) === true ||
+                    ((_f = (_e = imageryState === null || imageryState === void 0 ? void 0 : imageryState.get) === null || _e === void 0 ? void 0 : _e.call(imageryState, 'shadow-v3')) === null || _f === void 0 ? void 0 : _f.enabled) === true;
                 return shadowEnabled ? 1.0 : 0.0;
             }
             return 0.0;
         })(),
         'u_sun_altitude': (() => {
-            var _a;
             if (typeof window !== 'undefined' && window._actualSunAltitudeRad !== undefined) {
                 return window._actualSunAltitudeRad;
             }
-            const sl = (_a = painter === null || painter === void 0 ? void 0 : painter.style) === null || _a === void 0 ? void 0 : _a.getLayer('shadow-coarse');
-            return (sl === null || sl === void 0 ? void 0 : sl.getShadowProperties) ? sl.getShadowProperties().altitudeRadians : 0.5;
+            return (activeShadowLayer === null || activeShadowLayer === void 0 ? void 0 : activeShadowLayer.getShadowProperties) ? activeShadowLayer.getShadowProperties().altitudeRadians : 0.5;
         })(),
         'u_sun_direction': (() => {
-            var _a;
-            const sl = (_a = painter === null || painter === void 0 ? void 0 : painter.style) === null || _a === void 0 ? void 0 : _a.getLayer('shadow-coarse');
-            if (!(sl === null || sl === void 0 ? void 0 : sl.getShadowProperties))
+            if (activeShadowIsV2 && typeof window !== 'undefined') {
+                const sunDirection = window._shadowSunDirection;
+                if (Array.isArray(sunDirection) && sunDirection.length >= 2 &&
+                    Number.isFinite(sunDirection[0]) && Number.isFinite(sunDirection[1])) {
+                    return [sunDirection[0], sunDirection[1]];
+                }
+            }
+            if (!(activeShadowLayer === null || activeShadowLayer === void 0 ? void 0 : activeShadowLayer.getShadowProperties))
                 return [0.707, -0.707];
-            const dir = sl.getShadowProperties().directionRadians;
+            const dir = activeShadowLayer.getShadowProperties().directionRadians;
             return [Math.sin(dir), -Math.cos(dir)];
         })(),
         'u_dem_ao': 13, // Per-tile DEM texture at unit 13 for full-res AO
@@ -61910,8 +62023,14 @@ const terrainUniformValues = (eleDelta, fogMatrix, sky, pitch, isGlobeMode, zoom
         'u_dem_ao_meters_per_pixel': 40075016.7 / (512 * Math.pow(2, tile ? tile.tileID.canonical.z : zoom)),
         'u_dem_derivative': 12,
         'u_dem_derivative_available': 0,
-        'u_shadow_atlas_size': ((_h = (_g = (_f = (_e = (_d = painter === null || painter === void 0 ? void 0 : painter.style) === null || _d === void 0 ? void 0 : _d.map) === null || _e === void 0 ? void 0 : _e.terrain) === null || _f === void 0 ? void 0 : _f._fboShadowTexture) === null || _g === void 0 ? void 0 : _g.size) === null || _h === void 0 ? void 0 : _h[0]) || 2048.0,
+        'u_shadow_atlas_size': ((_o = (_m = (_l = (_k = (_j = painter === null || painter === void 0 ? void 0 : painter.style) === null || _j === void 0 ? void 0 : _j.map) === null || _k === void 0 ? void 0 : _k.terrain) === null || _l === void 0 ? void 0 : _l._fboShadowTexture) === null || _m === void 0 ? void 0 : _m.size) === null || _o === void 0 ? void 0 : _o[0]) || 2048.0,
+        'u_shadow_near_atlas_size': ((_t = (_s = (_r = (_q = (_p = painter === null || painter === void 0 ? void 0 : painter.style) === null || _p === void 0 ? void 0 : _p.map) === null || _q === void 0 ? void 0 : _q.terrain) === null || _r === void 0 ? void 0 : _r._fboNearShadowTexture) === null || _s === void 0 ? void 0 : _s.size) === null || _t === void 0 ? void 0 : _t[0]) || 1024.0,
         'u_self_shadow_mult': (typeof window !== 'undefined' && window._selfShadowMult !== undefined) ? window._selfShadowMult : 1.8,
+        'u_contact_shadow_enabled': v3ContactEnabled ? 1.0 : 0.0,
+        'u_contact_shadow_strength': (typeof window !== 'undefined' && Number.isFinite(window._shadowV3ContactStrength)) ? window._shadowV3ContactStrength : 0.72,
+        'u_contact_shadow_distance': (typeof window !== 'undefined' && Number.isFinite(window._shadowV3ContactDistance)) ? window._shadowV3ContactDistance : 520.0,
+        'u_contact_shadow_steps': (typeof window !== 'undefined' && Number.isFinite(window._shadowV3ContactSteps)) ? window._shadowV3ContactSteps : 10.0,
+        'u_shadow_white_base': activeShadowLayer ? 1.0 : 0.0,
     };
 };
 const terrainElevationUniformValues = (eleDelta) => ({
@@ -62869,6 +62988,23 @@ class Terrain {
         delete this._horizonAtlasReady;
         delete this._horizonAtlasKey;
     }
+    _destroyShadowHiZ() {
+        if (this._shadowHiZTextures) {
+            for (const texture of this._shadowHiZTextures) {
+                if (texture)
+                    texture.destroy();
+            }
+        }
+        if (this._shadowHiZFbos) {
+            for (const framebuffer of this._shadowHiZFbos) {
+                if (framebuffer)
+                    framebuffer.destroy();
+            }
+        }
+        delete this._shadowHiZTextures;
+        delete this._shadowHiZFbos;
+        delete this._shadowHiZBaseSize;
+    }
     destroy() {
         if (this._fbo)
             this._fbo.destroy();
@@ -62882,6 +63018,12 @@ class Terrain {
             this._fboShadowTexture.destroy();
         if (this._fboShadowBlurTexture)
             this._fboShadowBlurTexture.destroy();
+        if (this._fboNearElevationTexture)
+            this._fboNearElevationTexture.destroy();
+        if (this._fboNearShadowTexture)
+            this._fboNearShadowTexture.destroy();
+        if (this._fboNearShadowBlurTexture)
+            this._fboNearShadowBlurTexture.destroy();
         if (this._fboDaylightTexture)
             this._fboDaylightTexture.destroy();
         if (this._fboElevation)
@@ -62890,6 +63032,12 @@ class Terrain {
             this._fboShadow.destroy();
         if (this._fboShadowBlur)
             this._fboShadowBlur.destroy();
+        if (this._fboNearElevation)
+            this._fboNearElevation.destroy();
+        if (this._fboNearShadow)
+            this._fboNearShadow.destroy();
+        if (this._fboNearShadowBlur)
+            this._fboNearShadowBlur.destroy();
         if (this._fboDaylight)
             this._fboDaylight.destroy();
         if (this._emptyDemTexture)
@@ -62902,6 +63050,7 @@ class Terrain {
             this._meshCache[key].destroy();
         }
         this._destroyHorizonAtlases();
+        this._destroyShadowHiZ();
     }
     /**
      * Get the elevation-value from original dem-data for a given tile-coordinate.
@@ -63030,6 +63179,7 @@ class Terrain {
         };
     }
     getFramebuffer(texture) {
+        var _a, _b, _c, _d, _e, _f, _g;
         const painter = this.painter;
         const width = painter.width / devicePixelRatio;
         const height = painter.height / devicePixelRatio;
@@ -63043,14 +63193,27 @@ class Terrain {
                 this._fboShadowTexture.destroy();
             if (this._fboShadowBlurTexture)
                 this._fboShadowBlurTexture.destroy();
+            if (this._fboNearElevationTexture)
+                this._fboNearElevationTexture.destroy();
+            if (this._fboNearShadowTexture)
+                this._fboNearShadowTexture.destroy();
+            if (this._fboNearShadowBlurTexture)
+                this._fboNearShadowBlurTexture.destroy();
             if (this._fboDaylightTexture)
                 this._fboDaylightTexture.destroy();
+            this._destroyShadowHiZ();
             if (this._fboElevation)
                 this._fboElevation.destroy();
             if (this._fboShadow)
                 this._fboShadow.destroy();
             if (this._fboShadowBlur)
                 this._fboShadowBlur.destroy();
+            if (this._fboNearElevation)
+                this._fboNearElevation.destroy();
+            if (this._fboNearShadow)
+                this._fboNearShadow.destroy();
+            if (this._fboNearShadowBlur)
+                this._fboNearShadowBlur.destroy();
             if (this._fboDaylight)
                 this._fboDaylight.destroy();
             delete this._fbo;
@@ -63058,11 +63221,17 @@ class Terrain {
             delete this._fboElevationTexture;
             delete this._fboShadowTexture;
             delete this._fboShadowBlurTexture;
+            delete this._fboNearElevationTexture;
+            delete this._fboNearShadowTexture;
+            delete this._fboNearShadowBlurTexture;
             delete this._fboDaylightTexture;
             delete this._fboCoordsTexture;
             delete this._fboElevation;
             delete this._fboShadow;
             delete this._fboShadowBlur;
+            delete this._fboNearElevation;
+            delete this._fboNearShadow;
+            delete this._fboNearShadowBlur;
             delete this._fboDaylight;
             delete this._shadowAtlasReady;
             delete this._daylightAtlasReady;
@@ -63083,22 +63252,77 @@ class Terrain {
         }
         // Elevation and shadow atlases default to 2K. Edge cleanup happens in a
         // separate blur pass so we do not pay the memory cost of a larger mask.
-        const atlasSize = Terrain.ATLAS_SIZE;
+        const baseAtlasSize = Terrain.ATLAS_SIZE;
         const maxTextureSize = painter.context.gl.getParameter(painter.context.gl.MAX_TEXTURE_SIZE);
+        const shadowV3Active = typeof window !== 'undefined' &&
+            ((_c = (_b = (_a = window.imageryState) === null || _a === void 0 ? void 0 : _a.get) === null || _b === void 0 ? void 0 : _b.call(_a, 'shadow-v3')) === null || _c === void 0 ? void 0 : _c.enabled) === true &&
+            ((_g = (_f = (_e = (_d = window.imageryState) === null || _d === void 0 ? void 0 : _d.get) === null || _e === void 0 ? void 0 : _e.call(_d, 'shadow-v3')) === null || _f === void 0 ? void 0 : _f.opacity) !== null && _g !== void 0 ? _g : 1) > 0;
+        const requestedV3AtlasSize = typeof window !== 'undefined' && Number.isFinite(window._shadowV3AtlasSize) ?
+            Number(window._shadowV3AtlasSize) :
+            4096;
+        const elevationAtlasSize = shadowV3Active ?
+            Math.max(baseAtlasSize, Math.min(maxTextureSize, Math.round(requestedV3AtlasSize))) :
+            baseAtlasSize;
         const requestedShadowAtlasSize = typeof window !== 'undefined' && Number.isFinite(window._shadowAtlasSize) ?
             Number(window._shadowAtlasSize) :
             Terrain.SHADOW_ATLAS_SIZE;
-        const shadowAtlasSize = Math.max(atlasSize, Math.min(maxTextureSize, Math.round(requestedShadowAtlasSize)));
-        const requestedShadowMaskScale = typeof window !== 'undefined' && Number.isFinite(window._shadowMaskScale) ?
-            Number(window._shadowMaskScale) :
-            0.5;
+        const shadowAtlasSize = shadowV3Active ?
+            elevationAtlasSize :
+            Math.max(baseAtlasSize, Math.min(maxTextureSize, Math.round(requestedShadowAtlasSize)));
+        const useLogSweep = typeof window !== 'undefined' && window._shadowUseLogSweep === true;
+        const requestedShadowMaskScale = shadowV3Active ?
+            (typeof window !== 'undefined' && Number.isFinite(window._shadowV3MaskScale) ? Number(window._shadowV3MaskScale) : 0.5) :
+            useLogSweep ? 1.0 : typeof window !== 'undefined' && Number.isFinite(window._shadowMaskScale) ?
+                Number(window._shadowMaskScale) :
+                0.5;
         const shadowMaskScale = Math.max(0.25, Math.min(1.0, requestedShadowMaskScale));
         const shadowMaskSize = Math.max(512, Math.min(shadowAtlasSize, Math.round(shadowAtlasSize * shadowMaskScale)));
+        const requestedNearAtlasSize = typeof window !== 'undefined' && Number.isFinite(window._shadowNearAtlasSize) ?
+            Number(window._shadowNearAtlasSize) :
+            Terrain.NEAR_SHADOW_ATLAS_SIZE;
+        const requestedV3NearAtlasSize = typeof window !== 'undefined' && Number.isFinite(window._shadowV3NearAtlasSize) ?
+            Number(window._shadowV3NearAtlasSize) :
+            requestedV3AtlasSize;
+        const nearAtlasSize = shadowV3Active ?
+            Math.max(512, Math.min(maxTextureSize, Math.round(requestedV3NearAtlasSize))) :
+            Math.max(512, Math.min(maxTextureSize, Math.round(requestedNearAtlasSize)));
+        const requestedNearMaskScale = shadowV3Active ?
+            (typeof window !== 'undefined' && Number.isFinite(window._shadowV3NearMaskScale) ? Number(window._shadowV3NearMaskScale) : 0.5) :
+            useLogSweep ? 1.0 : typeof window !== 'undefined' && Number.isFinite(window._shadowNearMaskScale) ?
+                Number(window._shadowNearMaskScale) :
+                1.0;
+        const nearMaskScale = Math.max(0.5, Math.min(1.0, requestedNearMaskScale));
+        const nearMaskSize = Math.max(512, Math.min(nearAtlasSize, Math.round(nearAtlasSize * nearMaskScale)));
+        if (this._fboElevationTexture && this._fboElevationTexture.size[0] !== elevationAtlasSize) {
+            this._fboElevationTexture.destroy();
+            if (this._fboElevation)
+                this._fboElevation.destroy();
+            this._destroyShadowHiZ();
+            delete this._fboElevationTexture;
+            delete this._fboElevation;
+            delete this._shadowAtlasReady;
+            delete this._shadowAtlasReusedWhileMoving;
+            delete this._shadowAtlasNeedsRefreshAfterCameraMove;
+            delete this._daylightAtlasReady;
+            delete this._horizonAtlasReady;
+        }
         if (!this._fboElevationTexture) {
-            this._fboElevationTexture = new symbol_layout.Texture(painter.context, { width: atlasSize, height: atlasSize, data: null }, painter.context.gl.RGBA, { premultiply: false });
+            this._fboElevationTexture = new symbol_layout.Texture(painter.context, { width: elevationAtlasSize, height: elevationAtlasSize, data: null }, painter.context.gl.RGBA, { premultiply: false });
             // The elevation atlas stores a packed float in RGBA channels. Hardware linear
             // filtering corrupts the packed bytes, so shaders do their own bilinear decode.
             this._fboElevationTexture.bind(painter.context.gl.NEAREST, painter.context.gl.CLAMP_TO_EDGE);
+        }
+        if (this._fboNearElevationTexture && this._fboNearElevationTexture.size[0] !== nearAtlasSize) {
+            this._fboNearElevationTexture.destroy();
+            if (this._fboNearElevation)
+                this._fboNearElevation.destroy();
+            delete this._fboNearElevationTexture;
+            delete this._fboNearElevation;
+            delete this._shadowNearAtlasReady;
+        }
+        if (!this._fboNearElevationTexture) {
+            this._fboNearElevationTexture = new symbol_layout.Texture(painter.context, { width: nearAtlasSize, height: nearAtlasSize, data: null }, painter.context.gl.RGBA, { premultiply: false });
+            this._fboNearElevationTexture.bind(painter.context.gl.NEAREST, painter.context.gl.CLAMP_TO_EDGE);
         }
         if (this._fboShadowTexture && this._fboShadowTexture.size[0] !== shadowAtlasSize) {
             this._fboShadowTexture.destroy();
@@ -63120,6 +63344,24 @@ class Terrain {
             this._fboShadowTexture = new symbol_layout.Texture(painter.context, { width: shadowAtlasSize, height: shadowAtlasSize, data: null }, painter.context.gl.RGBA, { premultiply: false });
             this._fboShadowTexture.bind(painter.context.gl.LINEAR, painter.context.gl.CLAMP_TO_EDGE);
         }
+        if (this._fboNearShadowTexture && this._fboNearShadowTexture.size[0] !== nearAtlasSize) {
+            this._fboNearShadowTexture.destroy();
+            if (this._fboNearShadowBlurTexture)
+                this._fboNearShadowBlurTexture.destroy();
+            if (this._fboNearShadow)
+                this._fboNearShadow.destroy();
+            if (this._fboNearShadowBlur)
+                this._fboNearShadowBlur.destroy();
+            delete this._fboNearShadowTexture;
+            delete this._fboNearShadowBlurTexture;
+            delete this._fboNearShadow;
+            delete this._fboNearShadowBlur;
+            delete this._shadowNearAtlasReady;
+        }
+        if (!this._fboNearShadowTexture) {
+            this._fboNearShadowTexture = new symbol_layout.Texture(painter.context, { width: nearAtlasSize, height: nearAtlasSize, data: null }, painter.context.gl.RGBA, { premultiply: false });
+            this._fboNearShadowTexture.bind(painter.context.gl.LINEAR, painter.context.gl.CLAMP_TO_EDGE);
+        }
         if (this._fboShadowBlurTexture && this._fboShadowBlurTexture.size[0] !== shadowMaskSize) {
             this._fboShadowBlurTexture.destroy();
             if (this._fboShadowBlur)
@@ -63130,11 +63372,27 @@ class Terrain {
             delete this._shadowAtlasReusedWhileMoving;
             delete this._shadowAtlasNeedsRefreshAfterCameraMove;
         }
+        if (this._fboNearShadowBlurTexture && this._fboNearShadowBlurTexture.size[0] !== nearMaskSize) {
+            this._fboNearShadowBlurTexture.destroy();
+            if (this._fboNearShadowBlur)
+                this._fboNearShadowBlur.destroy();
+            delete this._fboNearShadowBlurTexture;
+            delete this._fboNearShadowBlur;
+            delete this._shadowNearAtlasReady;
+        }
+        if (this._fboDaylightTexture && this._fboDaylightTexture.size[0] !== baseAtlasSize) {
+            this._fboDaylightTexture.destroy();
+            if (this._fboDaylight)
+                this._fboDaylight.destroy();
+            delete this._fboDaylightTexture;
+            delete this._fboDaylight;
+            delete this._daylightAtlasReady;
+        }
         if (!this._fboDaylightTexture) {
-            this._fboDaylightTexture = new symbol_layout.Texture(painter.context, { width: atlasSize, height: atlasSize, data: null }, painter.context.gl.RGBA, { premultiply: false });
+            this._fboDaylightTexture = new symbol_layout.Texture(painter.context, { width: baseAtlasSize, height: baseAtlasSize, data: null }, painter.context.gl.RGBA, { premultiply: false });
             this._fboDaylightTexture.bind(painter.context.gl.LINEAR, painter.context.gl.CLAMP_TO_EDGE);
         }
-        const horizonAtlasSize = Math.max(512, Math.min(Terrain.ATLAS_SIZE, Math.round(this._horizonAtlasSize || Terrain.HORIZON_ATLAS_SIZE)));
+        const horizonAtlasSize = Math.max(512, Math.min(baseAtlasSize, Math.round(this._horizonAtlasSize || Terrain.HORIZON_ATLAS_SIZE)));
         if (this._fboHorizon0Texture && this._fboHorizon0Texture.size[0] !== horizonAtlasSize) {
             this._destroyHorizonAtlases();
         }
@@ -63161,11 +63419,19 @@ class Terrain {
         // Elevation and Shadow get their own dedicated FBOs to avoid feedback loops
         if (texture === 'elevation') {
             if (!this._fboElevation) {
-                this._fboElevation = painter.context.createFramebuffer(atlasSize, atlasSize, true, false);
-                this._fboElevation.depthAttachment.set(painter.context.createRenderbuffer(painter.context.gl.DEPTH_COMPONENT16, atlasSize, atlasSize));
+                this._fboElevation = painter.context.createFramebuffer(elevationAtlasSize, elevationAtlasSize, true, false);
+                this._fboElevation.depthAttachment.set(painter.context.createRenderbuffer(painter.context.gl.DEPTH_COMPONENT16, elevationAtlasSize, elevationAtlasSize));
             }
             this._fboElevation.colorAttachment.set(this._fboElevationTexture.texture);
             return this._fboElevation;
+        }
+        if (texture === 'near_elevation') {
+            if (!this._fboNearElevation) {
+                this._fboNearElevation = painter.context.createFramebuffer(nearAtlasSize, nearAtlasSize, true, false);
+                this._fboNearElevation.depthAttachment.set(painter.context.createRenderbuffer(painter.context.gl.DEPTH_COMPONENT16, nearAtlasSize, nearAtlasSize));
+            }
+            this._fboNearElevation.colorAttachment.set(this._fboNearElevationTexture.texture);
+            return this._fboNearElevation;
         }
         if (texture === 'shadow') {
             if (!this._fboShadow) {
@@ -63173,6 +63439,13 @@ class Terrain {
             }
             this._fboShadow.colorAttachment.set(this._fboShadowTexture.texture);
             return this._fboShadow;
+        }
+        if (texture === 'near_shadow') {
+            if (!this._fboNearShadow) {
+                this._fboNearShadow = painter.context.createFramebuffer(nearAtlasSize, nearAtlasSize, false, false);
+            }
+            this._fboNearShadow.colorAttachment.set(this._fboNearShadowTexture.texture);
+            return this._fboNearShadow;
         }
         if (texture === 'shadow_blur') {
             if (!this._fboShadowBlurTexture) {
@@ -63185,9 +63458,20 @@ class Terrain {
             this._fboShadowBlur.colorAttachment.set(this._fboShadowBlurTexture.texture);
             return this._fboShadowBlur;
         }
+        if (texture === 'near_shadow_blur') {
+            if (!this._fboNearShadowBlurTexture) {
+                this._fboNearShadowBlurTexture = new symbol_layout.Texture(painter.context, { width: nearMaskSize, height: nearMaskSize, data: null }, painter.context.gl.RGBA, { premultiply: false });
+                this._fboNearShadowBlurTexture.bind(painter.context.gl.LINEAR, painter.context.gl.CLAMP_TO_EDGE);
+            }
+            if (!this._fboNearShadowBlur) {
+                this._fboNearShadowBlur = painter.context.createFramebuffer(nearMaskSize, nearMaskSize, false, false);
+            }
+            this._fboNearShadowBlur.colorAttachment.set(this._fboNearShadowBlurTexture.texture);
+            return this._fboNearShadowBlur;
+        }
         if (texture === 'daylight') {
             if (!this._fboDaylight) {
-                this._fboDaylight = painter.context.createFramebuffer(atlasSize, atlasSize, false, false);
+                this._fboDaylight = painter.context.createFramebuffer(baseAtlasSize, baseAtlasSize, false, false);
             }
             this._fboDaylight.colorAttachment.set(this._fboDaylightTexture.texture);
             return this._fboDaylight;
@@ -63297,21 +63581,64 @@ class Terrain {
         return depthValue;
     }
     /**
-     * Reads the entire 2048x2048 Elevation Atlas FBO pixels for debugging purposes.
+     * Reads the full elevation atlas FBO pixels for explicit debug snapshots.
+     * This is intentionally not used during normal rendering because readPixels
+     * stalls the GPU, especially with the 4K Shadow V3 atlas.
+     *
      * @returns Uint8Array containing the raw RGBA pixels of the atlas
      * @internal
      */
     readElevationAtlasPixels() {
-        if (!this._fboElevation)
+        const result = this._readAtlasPixels(this._fboElevation, this._fboElevationTexture);
+        return (result === null || result === void 0 ? void 0 : result.pixels) || null;
+    }
+    /**
+     * Reads one of the shadow atlas FBOs for explicit debug snapshots.
+     *
+     * `shadow` is the final upsampled global mask, `raw` is the raymarch target
+     * before upsampling, and `near` / `near-raw` are the refinement cascade.
+     *
+     * @internal
+     */
+    readShadowAtlasPixels(kind = 'shadow') {
+        let framebuffer;
+        let texture;
+        let label = kind;
+        if (kind === 'raw') {
+            framebuffer = this._fboShadowBlur;
+            texture = this._fboShadowBlurTexture;
+            label = 'raw shadow';
+        }
+        else if (kind === 'near') {
+            framebuffer = this._fboNearShadow;
+            texture = this._fboNearShadowTexture;
+            label = 'near shadow';
+        }
+        else if (kind === 'near-raw') {
+            framebuffer = this._fboNearShadowBlur;
+            texture = this._fboNearShadowBlurTexture;
+            label = 'near raw shadow';
+        }
+        else {
+            framebuffer = this._fboShadow;
+            texture = this._fboShadowTexture;
+            label = 'shadow';
+        }
+        const result = this._readAtlasPixels(framebuffer, texture);
+        return result ? { kind: label, size: result.size, pixels: result.pixels } : null;
+    }
+    _readAtlasPixels(framebuffer, texture) {
+        var _a;
+        if (!framebuffer || !((_a = texture === null || texture === void 0 ? void 0 : texture.size) === null || _a === void 0 ? void 0 : _a[0]))
             return null;
         const context = this.painter.context;
         const gl = context.gl;
-        const size = Terrain.ATLAS_SIZE;
+        const size = texture.size[0];
         const pixels = new Uint8Array(size * size * 4);
-        context.bindFramebuffer.set(this._fboElevation.framebuffer);
+        context.bindFramebuffer.set(framebuffer.framebuffer);
         gl.readPixels(0, 0, size, size, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
         context.bindFramebuffer.set(null);
-        return pixels;
+        return { size, pixels };
     }
     /**
      * Reads cached sun-analysis atlas data for a single geographic point.
@@ -63495,6 +63822,7 @@ class Terrain {
 }
 Terrain.ATLAS_SIZE = 2048;
 Terrain.SHADOW_ATLAS_SIZE = 2048;
+Terrain.NEAR_SHADOW_ATLAS_SIZE = 2048;
 Terrain.HORIZON_ATLAS_SIZE = 1024;
 
 const shadowGlobalUniforms = (context, locations) => ({
@@ -63510,6 +63838,7 @@ const shadowGlobalUniforms = (context, locations) => ({
     'u_max_distance': new symbol_layout.Uniform1f(context, locations.u_max_distance),
     'u_near_cascade_distance': new symbol_layout.Uniform1f(context, locations.u_near_cascade_distance),
     'u_mid_cascade_distance': new symbol_layout.Uniform1f(context, locations.u_mid_cascade_distance),
+    'u_ridge_sample_strength': new symbol_layout.Uniform1f(context, locations.u_ridge_sample_strength),
 });
 const shadowUniforms = (context, locations) => ({
     'u_image': new symbol_layout.Uniform1i(context, locations.u_image),
@@ -63555,6 +63884,47 @@ const shadowBlurUniforms = (context, locations) => ({
     'u_direction': new symbol_layout.Uniform2f(context, locations.u_direction),
     'u_texture_size': new symbol_layout.Uniform1f(context, locations.u_texture_size),
     'u_blur_radius': new symbol_layout.Uniform1f(context, locations.u_blur_radius),
+});
+const shadowSweepInitUniforms = (context, locations) => ({
+    'u_image': new symbol_layout.Uniform1i(context, locations.u_image),
+    'u_dimension': new symbol_layout.Uniform2f(context, locations.u_dimension),
+});
+const shadowSweepStepUniforms = (context, locations) => ({
+    'u_state': new symbol_layout.Uniform1i(context, locations.u_state),
+    'u_sunDirection': new symbol_layout.Uniform2f(context, locations.u_sunDirection),
+    'u_sunAltitude': new symbol_layout.Uniform1f(context, locations.u_sunAltitude),
+    'u_metersPerPixel': new symbol_layout.Uniform2f(context, locations.u_metersPerPixel),
+    'u_dimension': new symbol_layout.Uniform2f(context, locations.u_dimension),
+    'u_atlas_bounds': new symbol_layout.Uniform4f(context, locations.u_atlas_bounds),
+    'u_jump_pixels': new symbol_layout.Uniform1f(context, locations.u_jump_pixels),
+});
+const shadowSweepFinalUniforms = (context, locations) => ({
+    'u_state': new symbol_layout.Uniform1i(context, locations.u_state),
+    'u_elevation': new symbol_layout.Uniform1i(context, locations.u_elevation),
+    'u_dimension': new symbol_layout.Uniform2f(context, locations.u_dimension),
+    'u_metersPerPixel': new symbol_layout.Uniform2f(context, locations.u_metersPerPixel),
+});
+const shadowHizMipUniforms = (context, locations) => ({
+    'u_image': new symbol_layout.Uniform1i(context, locations.u_image),
+    'u_src_dimension': new symbol_layout.Uniform2f(context, locations.u_src_dimension),
+});
+const shadowHizGlobalUniforms = (context, locations) => ({
+    'u_image': new symbol_layout.Uniform1i(context, locations.u_image),
+    'u_hiz1': new symbol_layout.Uniform1i(context, locations.u_hiz1),
+    'u_hiz2': new symbol_layout.Uniform1i(context, locations.u_hiz2),
+    'u_hiz3': new symbol_layout.Uniform1i(context, locations.u_hiz3),
+    'u_hiz4': new symbol_layout.Uniform1i(context, locations.u_hiz4),
+    'u_hiz5': new symbol_layout.Uniform1i(context, locations.u_hiz5),
+    'u_sunDirection': new symbol_layout.Uniform2f(context, locations.u_sunDirection),
+    'u_sunAltitude': new symbol_layout.Uniform1f(context, locations.u_sunAltitude),
+    'u_metersPerPixel': new symbol_layout.Uniform2f(context, locations.u_metersPerPixel),
+    'u_dimension': new symbol_layout.Uniform2f(context, locations.u_dimension),
+    'u_atlas_bounds': new symbol_layout.Uniform4f(context, locations.u_atlas_bounds),
+    'u_max_distance': new symbol_layout.Uniform1f(context, locations.u_max_distance),
+    'u_step_meters': new symbol_layout.Uniform1f(context, locations.u_step_meters),
+    'u_max_steps': new symbol_layout.Uniform1f(context, locations.u_max_steps),
+    'u_near_cascade_distance': new symbol_layout.Uniform1f(context, locations.u_near_cascade_distance),
+    'u_mid_cascade_distance': new symbol_layout.Uniform1f(context, locations.u_mid_cascade_distance),
 });
 const shadowUniformValues = (painter, tile, layer, neighborZoomInfos, grandparentZoomConfig, gpNeighborZoomInfos) => {
     var _a;
@@ -63677,9 +64047,9 @@ const shadowUniformValues = (painter, tile, layer, neighborZoomInfos, grandparen
         'u_shadow_mode': shadowMode,
     };
 };
-const shadowGlobalUniformValues = (painter, layer, metersPerPixelX, metersPerPixelY) => {
+const shadowGlobalUniformValues = (painter, layer, metersPerPixelX, metersPerPixelY, options = {}) => {
     const terrain = painter.style.map.terrain;
-    const atlasBounds = (terrain === null || terrain === void 0 ? void 0 : terrain._elevationAtlasBounds) || [0, 0, 1, 1];
+    const atlasBounds = options.atlasBounds || (terrain === null || terrain === void 0 ? void 0 : terrain._elevationAtlasBounds) || [0, 0, 1, 1];
     const shadowProps = layer.getShadowProperties();
     const dirRad = shadowProps.directionRadians;
     const altRad = shadowProps.altitudeRadians;
@@ -63695,15 +64065,22 @@ const shadowGlobalUniformValues = (painter, layer, metersPerPixelX, metersPerPix
     const isTimeSliding = typeof window !== 'undefined' && window._isInteractingWithTime;
     const progressivePhase = typeof window !== 'undefined' ? window._shadowProgressivePhase : '';
     const isProgressivePreview = progressivePhase === 'preview';
+    const isNearRefine = options.target === 'near' || progressivePhase === 'refine';
     const atlasGsd = Math.max(metersPerPixelX, metersPerPixelY);
     const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
-    const passMaxDistance = isProgressivePreview ? Math.min(maxDistance, numberFromProfile('previewMaxDistance', 4200.0)) : maxDistance;
+    const passMaxDistance = isProgressivePreview ?
+        Math.min(maxDistance, numberFromProfile('previewMaxDistance', 4200.0)) :
+        isNearRefine ? Math.min(maxDistance, numberFromProfile('refineMaxDistance', 4200.0)) :
+            maxDistance;
     const nearCascadeMeters = numberFromProfile('nearCascadeMeters', 1100.0);
     const midCascadeMeters = numberFromProfile('midCascadeMeters', 3500.0);
-    const qualityScale = isProgressivePreview ? 6.0 : isTimeSliding ? 5.0 : isMapMoving ? 3.0 : 1.0;
-    const maxPreviewStep = isProgressivePreview ? 128.0 : isTimeSliding ? 96.0 : isMapMoving ? 56.0 : 14.0;
-    const minPreviewSteps = isProgressivePreview ? 18.0 : isTimeSliding ? 24.0 : isMapMoving ? 48.0 : 128.0;
-    const maxPreviewSteps = isProgressivePreview ? 56.0 : isTimeSliding ? 80.0 : isMapMoving ? 160.0 : 384.0;
+    const ridgeSampleStrength = typeof window !== 'undefined' && Number.isFinite(window._shadowRidgeSampleStrength) ?
+        Number(window._shadowRidgeSampleStrength) :
+        0.62;
+    const qualityScale = isProgressivePreview ? 6.0 : isNearRefine ? 0.68 : isTimeSliding ? 5.0 : isMapMoving ? 3.0 : 0.78;
+    const maxPreviewStep = isProgressivePreview ? 128.0 : isNearRefine ? 8.0 : isTimeSliding ? 96.0 : isMapMoving ? 56.0 : 10.0;
+    const minPreviewSteps = isProgressivePreview ? 18.0 : isNearRefine ? 150.0 : isTimeSliding ? 24.0 : isMapMoving ? 48.0 : 160.0;
+    const maxPreviewSteps = isProgressivePreview ? 56.0 : isNearRefine ? 320.0 : isTimeSliding ? 80.0 : isMapMoving ? 160.0 : 384.0;
     let stepMeters = clamp(atlasGsd * qualityScale, isProgressivePreview ? 28.0 : isTimeSliding ? 18.0 : isMapMoving ? 10.0 : 4.0, maxPreviewStep);
     const nearDistance = Math.min(isProgressivePreview ? Math.min(900.0, nearCascadeMeters) : nearCascadeMeters, passMaxDistance);
     const midDistance = Math.min(isProgressivePreview ? Math.min(2800.0, midCascadeMeters) : midCascadeMeters, passMaxDistance);
@@ -63719,9 +64096,11 @@ const shadowGlobalUniformValues = (painter, layer, metersPerPixelX, metersPerPix
             maxDistance: passMaxDistance,
             cascades: [nearDistance, midDistance, passMaxDistance],
             reachProfile,
-            progressivePhase: isProgressivePreview ? 'preview' : progressivePhase === 'full' ? 'full' : 'stable',
+            progressivePhase: isProgressivePreview ? 'preview' : isNearRefine ? 'refine' : progressivePhase === 'full' ? 'full' : 'stable',
+            target: options.target || 'global',
             interacting: isMapMoving || isTimeSliding || isProgressivePreview,
-            timeSliding: isTimeSliding
+            timeSliding: isTimeSliding,
+            ridgeSampleStrength
         };
     }
     return {
@@ -63729,7 +64108,7 @@ const shadowGlobalUniformValues = (painter, layer, metersPerPixelX, metersPerPix
         'u_sunDirection': [dirX, dirY],
         'u_sunAltitude': altRad,
         'u_metersPerPixel': [metersPerPixelX, metersPerPixelY],
-        'u_dimension': [Terrain.ATLAS_SIZE, Terrain.ATLAS_SIZE],
+        'u_dimension': [options.elevationAtlasSize || Terrain.ATLAS_SIZE, options.elevationAtlasSize || Terrain.ATLAS_SIZE],
         'u_atlas_bounds': atlasBounds,
         'u_inv_proj_matrix': [0, 0], // Map to atlas using bounds instead
         'u_max_steps': maxSteps,
@@ -63737,6 +64116,7 @@ const shadowGlobalUniformValues = (painter, layer, metersPerPixelX, metersPerPix
         'u_max_distance': passMaxDistance,
         'u_near_cascade_distance': nearDistance,
         'u_mid_cascade_distance': midDistance,
+        'u_ridge_sample_strength': clamp(ridgeSampleStrength, 0.0, 1.0),
     };
 };
 
@@ -64290,6 +64670,11 @@ const programUniforms = {
     shadow: shadowUniforms,
     shadowPrepare: shadowPrepareUniforms,
     shadowGlobal: shadowGlobalUniforms,
+    shadowSweepInit: shadowSweepInitUniforms,
+    shadowSweepStep: shadowSweepStepUniforms,
+    shadowSweepFinal: shadowSweepFinalUniforms,
+    shadowHizMip: shadowHizMipUniforms,
+    shadowHizGlobal: shadowHizGlobalUniforms,
     shadowBlur: shadowBlurUniforms,
     horizonPrepare: horizonPrepareUniforms,
     daylightPrepare: daylightPrepareUniforms,
@@ -67658,32 +68043,157 @@ function renderShadowTiles(painter, tileManager, layer, coords, stencilModes, de
         program.draw(context, gl.TRIANGLES, depthMode, stencilModes[coord.overscaledZ], colorMode, CullFaceMode.backCCW, uniformValues, terrainData, projectionData, layer.id, mesh.vertexBuffer, mesh.indexBuffer, mesh.segments);
     }
 }
-/**
- * Draw Global Screen-Space Shadows (Zero Redundancy Z12 Pass)
- */
-function drawGlobalShadow(painter, layer) {
-    var _a, _b;
+function markShadowAtlasReady(terrain, isNearAtlas) {
+    if (isNearAtlas) {
+        terrain._shadowNearAtlasReady = true;
+        terrain._shadowNearAtlasReadyAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+        return;
+    }
+    terrain._shadowAtlasReady = true;
+    terrain._shadowAtlasReusedWhileMoving = false;
+}
+function isShadowV3Active() {
+    var _a, _b, _c, _d, _e, _f, _g;
+    return typeof window !== 'undefined' &&
+        ((_c = (_b = (_a = window.imageryState) === null || _a === void 0 ? void 0 : _a.get) === null || _b === void 0 ? void 0 : _b.call(_a, 'shadow-v3')) === null || _c === void 0 ? void 0 : _c.enabled) === true &&
+        ((_g = (_f = (_e = (_d = window.imageryState) === null || _d === void 0 ? void 0 : _d.get) === null || _e === void 0 ? void 0 : _e.call(_d, 'shadow-v3')) === null || _f === void 0 ? void 0 : _f.opacity) !== null && _g !== void 0 ? _g : 1) > 0;
+}
+function ensureShadowHiZResources(painter, terrain, baseSize) {
+    const context = painter.context;
+    const gl = context.gl;
+    const levels = 5;
+    const sizes = [];
+    for (let i = 0; i < levels; i++) {
+        sizes.push(Math.max(1, Math.floor(baseSize / Math.pow(2, i + 1))));
+    }
+    const currentBaseSize = terrain._shadowHiZBaseSize;
+    const currentTextures = terrain._shadowHiZTextures;
+    const currentFbos = terrain._shadowHiZFbos;
+    const resourcesValid = currentBaseSize === baseSize &&
+        (currentTextures === null || currentTextures === void 0 ? void 0 : currentTextures.length) === levels &&
+        (currentFbos === null || currentFbos === void 0 ? void 0 : currentFbos.length) === levels &&
+        currentTextures.every((texture, index) => { var _a; return ((_a = texture === null || texture === void 0 ? void 0 : texture.size) === null || _a === void 0 ? void 0 : _a[0]) === sizes[index]; });
+    if (!resourcesValid) {
+        if (typeof terrain._destroyShadowHiZ === 'function') {
+            terrain._destroyShadowHiZ();
+        }
+        terrain._shadowHiZTextures = [];
+        terrain._shadowHiZFbos = [];
+        terrain._shadowHiZBaseSize = baseSize;
+        for (const size of sizes) {
+            const texture = new symbol_layout.Texture(context, { width: size, height: size, data: null }, gl.RGBA, { premultiply: false });
+            texture.bind(gl.NEAREST, gl.CLAMP_TO_EDGE);
+            const fbo = context.createFramebuffer(size, size, false, false);
+            fbo.colorAttachment.set(texture.texture);
+            terrain._shadowHiZTextures.push(texture);
+            terrain._shadowHiZFbos.push(fbo);
+        }
+    }
+    if (!terrain._shadowHiZTextures || !terrain._shadowHiZFbos) {
+        return null;
+    }
+    return {
+        textures: terrain._shadowHiZTextures,
+        fbos: terrain._shadowHiZFbos,
+        sizes
+    };
+}
+function drawShadowHiZMips(painter, terrain, elevationTexture, depthMode, stencilMode, colorMode) {
+    const start = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    const context = painter.context;
+    const gl = context.gl;
+    const resources = ensureShadowHiZResources(painter, terrain, elevationTexture.size[0]);
+    if (!resources) {
+        return { levels: [], durationMs: 0 };
+    }
+    const program = painter.useProgram('shadowHizMip');
+    let readTexture = elevationTexture;
+    let readSize = elevationTexture.size[0];
+    for (let i = 0; i < resources.textures.length; i++) {
+        const writeSize = resources.sizes[i];
+        context.bindFramebuffer.set(resources.fbos[i].framebuffer);
+        context.viewport.set([0, 0, writeSize, writeSize]);
+        context.clear({ color: symbol_layout.Color.transparent });
+        context.activeTexture.set(gl.TEXTURE0);
+        readTexture.bind(gl.NEAREST, gl.CLAMP_TO_EDGE);
+        program.draw(context, gl.TRIANGLES, depthMode, stencilMode, colorMode, CullFaceMode.disabled, { 'u_image': 0, 'u_src_dimension': [readSize, readSize] }, null, null, 'shadow-hiz-mip', painter.rasterBoundsBuffer, painter.quadTriangleIndexBuffer, painter.rasterBoundsSegments);
+        readTexture = resources.textures[i];
+        readSize = writeSize;
+    }
+    return {
+        levels: resources.sizes,
+        durationMs: (typeof performance !== 'undefined' ? performance.now() : Date.now()) - start
+    };
+}
+function drawGlobalShadowHiZ(painter, layer, target, options) {
+    const drawStart = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    const context = painter.context;
+    const gl = context.gl;
+    const resources = ensureShadowHiZResources(painter, options.terrain, options.elevationTexture.size[0]);
+    if (!resources) {
+        return { hizLevels: [], mipMs: 0, drawMs: 0 };
+    }
+    const mipDebug = drawShadowHiZMips(painter, options.terrain, options.elevationTexture, options.depthMode, options.stencilMode, options.colorMode);
+    const rawShadowFbo = options.terrain.getFramebuffer(target === 'near' ? 'near_shadow_blur' : 'shadow_blur');
+    context.bindFramebuffer.set(rawShadowFbo.framebuffer);
+    context.viewport.set([0, 0, options.rawAtlasPixelSize, options.rawAtlasPixelSize]);
+    context.clear({ color: symbol_layout.Color.transparent });
+    context.activeTexture.set(gl.TEXTURE0);
+    options.elevationTexture.bind(gl.NEAREST, gl.CLAMP_TO_EDGE);
+    for (let i = 0; i < resources.textures.length; i++) {
+        context.activeTexture.set(gl.TEXTURE0 + i + 1);
+        resources.textures[i].bind(gl.NEAREST, gl.CLAMP_TO_EDGE);
+    }
+    const values = options.uniformValues;
+    const program = painter.useProgram('shadowHizGlobal');
+    program.draw(context, gl.TRIANGLES, options.depthMode, options.stencilMode, options.colorMode, CullFaceMode.disabled, {
+        'u_image': 0,
+        'u_hiz1': 1,
+        'u_hiz2': 2,
+        'u_hiz3': 3,
+        'u_hiz4': 4,
+        'u_hiz5': 5,
+        'u_sunDirection': values['u_sunDirection'],
+        'u_sunAltitude': values['u_sunAltitude'],
+        'u_metersPerPixel': values['u_metersPerPixel'],
+        'u_dimension': [options.elevationTexture.size[0], options.elevationTexture.size[1]],
+        'u_atlas_bounds': options.atlasBounds,
+        'u_max_distance': values['u_max_distance'],
+        'u_step_meters': values['u_step_meters'],
+        'u_max_steps': values['u_max_steps'],
+        'u_near_cascade_distance': values['u_near_cascade_distance'],
+        'u_mid_cascade_distance': values['u_mid_cascade_distance']
+    }, null, null, layer.id, painter.rasterBoundsBuffer, painter.quadTriangleIndexBuffer, painter.rasterBoundsSegments);
+    return {
+        hizLevels: mipDebug.levels,
+        mipMs: mipDebug.durationMs,
+        drawMs: (typeof performance !== 'undefined' ? performance.now() : Date.now()) - drawStart - mipDebug.durationMs
+    };
+}
+function drawGlobalShadow(painter, layer, target = 'global') {
+    var _a;
+    const isNearAtlas = target === 'near';
     const debugEnabled = typeof window !== 'undefined' && window._shadowTileDebugEnabled;
     const debugStart = debugEnabled ? performance.now() : 0;
     const context = painter.context;
     const gl = context.gl;
-    const transform = painter.transform;
     const terrain = painter.style.map.terrain;
-    if (!terrain || !terrain._fboElevationTexture || !terrain._fboShadowTexture) {
-        console.warn(`[ATLAS] drawGlobalShadow: missing FBO textures. Terrain: ${!!terrain}, ElevationTex: ${!!(terrain === null || terrain === void 0 ? void 0 : terrain._fboElevationTexture)}, ShadowTex: ${!!(terrain === null || terrain === void 0 ? void 0 : terrain._fboShadowTexture)}`);
+    const elevationTexture = isNearAtlas ? terrain === null || terrain === void 0 ? void 0 : terrain._fboNearElevationTexture : terrain === null || terrain === void 0 ? void 0 : terrain._fboElevationTexture;
+    const shadowTexture = isNearAtlas ? terrain === null || terrain === void 0 ? void 0 : terrain._fboNearShadowTexture : terrain === null || terrain === void 0 ? void 0 : terrain._fboShadowTexture;
+    if (!terrain || !elevationTexture || !shadowTexture) {
+        console.warn(`[ATLAS] drawGlobalShadow: missing FBO textures. target=${target}, Terrain: ${!!terrain}, ElevationTex: ${!!elevationTexture}, ShadowTex: ${!!shadowTexture}`);
         return;
     }
     const colorMode = painter.colorModeForRenderPass();
     const depthMode = DepthMode.disabled;
     const stencilMode = StencilMode.disabled;
     const useHorizonCurrentShadow = typeof window !== 'undefined' && window._shadowUseHorizonCurrent === true;
-    if (useHorizonCurrentShadow) {
+    if (!isNearAtlas && useHorizonCurrentShadow) {
         const horizonKey = prepareHorizonAtlasForCurrentView(painter, depthMode, stencilMode, colorMode);
         if (horizonKey && terrain._horizonAtlasReady) {
             context.bindFramebuffer.set(null);
             context.viewport.set([0, 0, painter.width, painter.height]);
-            terrain._shadowAtlasReady = true;
-            terrain._shadowAtlasReusedWhileMoving = false;
+            markShadowAtlasReady(terrain, false);
             if (debugEnabled) {
                 window._shadowPassDebug = {
                     skipped: true,
@@ -67696,26 +68206,32 @@ function drawGlobalShadow(painter, layer) {
             return;
         }
     }
-    const program = painter.useProgram('shadowGlobal');
     // 1. Calculate Atlas-space scales
-    const atlasBounds = terrain._elevationAtlasBounds; // [minX, minY, maxX, maxY] in 0..1 world
+    const atlasBounds = isNearAtlas ?
+        terrain._shadowNearAtlasBounds :
+        terrain._elevationAtlasBounds; // [minX, minY, maxX, maxY] in 0..1 world
     if (!atlasBounds) {
-        console.warn('[ATLAS] drawGlobalShadow: no _elevationAtlasBounds set');
+        console.warn(`[ATLAS] drawGlobalShadow: no ${isNearAtlas ? '_shadowNearAtlasBounds' : '_elevationAtlasBounds'} set`);
         return;
     }
     const worldCircumference = 40075016.7;
     const atlasWorldWidth = atlasBounds[2] - atlasBounds[0];
     const atlasWorldHeight = atlasBounds[3] - atlasBounds[1];
-    const elevationAtlasPixelSize = terrain._fboElevationTexture.size[0];
-    const atlasPixelSize = terrain._fboShadowTexture.size[0]; // Square shadow mask atlas
-    const rawShadowFbo = terrain.getFramebuffer('shadow_blur');
-    const rawAtlasPixelSize = ((_b = (_a = terrain._fboShadowBlurTexture) === null || _a === void 0 ? void 0 : _a.size) === null || _b === void 0 ? void 0 : _b[0]) || atlasPixelSize;
+    const elevationAtlasPixelSize = elevationTexture.size[0];
+    const atlasPixelSize = shadowTexture.size[0]; // Square shadow mask atlas
+    const rawShadowFbo = terrain.getFramebuffer(isNearAtlas ? 'near_shadow_blur' : 'shadow_blur');
+    const shadowBlurTexture = isNearAtlas ? terrain._fboNearShadowBlurTexture : terrain._fboShadowBlurTexture;
+    const rawAtlasPixelSize = ((_a = shadowBlurTexture === null || shadowBlurTexture === void 0 ? void 0 : shadowBlurTexture.size) === null || _a === void 0 ? void 0 : _a[0]) || atlasPixelSize;
     // Per-axis meters per raw-shadow pixel. The final atlas stays 2K, but
     // the raw mask can be lower-res and bilinearly upsampled to remove
     // terrain-tile stair steps without reducing long-distance shadow reach.
     const metersPerPixelX = (atlasWorldWidth * worldCircumference) / rawAtlasPixelSize;
     const metersPerPixelY = (atlasWorldHeight * worldCircumference) / rawAtlasPixelSize;
-    const uniformValues = shadowGlobalUniformValues(painter, layer, metersPerPixelX, metersPerPixelY);
+    const uniformValues = shadowGlobalUniformValues(painter, layer, metersPerPixelX, metersPerPixelY, {
+        atlasBounds,
+        elevationAtlasSize: elevationAtlasPixelSize,
+        target
+    });
     // 2. Render the raw mask into a lower-res FBO, then upsample into the
     // final 2K shadow atlas with LINEAR filtering.
     context.bindFramebuffer.set(rawShadowFbo.framebuffer);
@@ -67723,17 +68239,17 @@ function drawGlobalShadow(painter, layer) {
     context.clear({ color: symbol_layout.Color.transparent }); // Clear to no shadow (0)
     const opacity = layer.paint.get('shadow-opacity');
     if (typeof opacity === 'number' && opacity <= 0.003 && globalThis._shadowDebugMode !== 2) {
-        context.bindFramebuffer.set(terrain.getFramebuffer('shadow').framebuffer);
+        context.bindFramebuffer.set(terrain.getFramebuffer(isNearAtlas ? 'near_shadow' : 'shadow').framebuffer);
         context.viewport.set([0, 0, atlasPixelSize, atlasPixelSize]);
         context.clear({ color: symbol_layout.Color.transparent });
         context.bindFramebuffer.set(null);
         context.viewport.set([0, 0, painter.width, painter.height]);
-        terrain._shadowAtlasReady = true;
-        terrain._shadowAtlasReusedWhileMoving = false;
+        markShadowAtlasReady(terrain, isNearAtlas);
         if (debugEnabled) {
-            window._shadowPassDebug = {
+            window[isNearAtlas ? '_shadowNearPassDebug' : '_shadowPassDebug'] = {
                 skipped: true,
                 reason: 'shadow opacity <= 0',
+                target,
                 durationMs: performance.now() - debugStart,
                 atlasPixelSize,
                 timestamp: performance.now()
@@ -67743,28 +68259,107 @@ function drawGlobalShadow(painter, layer) {
     }
     // Bind Elevation Atlas to Unit 0
     context.activeTexture.set(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, terrain._fboElevationTexture.texture);
+    gl.bindTexture(gl.TEXTURE_2D, elevationTexture.texture);
+    const progressivePhase = typeof window !== 'undefined' ? window._shadowProgressivePhase : '';
+    const isProgressivePreview = progressivePhase === 'preview';
+    const useLogSweep = typeof window !== 'undefined' && window._shadowUseLogSweep === true;
+    const useHiZ = isShadowV3Active() && typeof window !== 'undefined' && window._shadowV3UseHiZ === true;
+    if (useHiZ) {
+        const hizDebug = drawGlobalShadowHiZ(painter, layer, target, {
+            terrain,
+            elevationTexture,
+            atlasBounds,
+            rawAtlasPixelSize,
+            uniformValues,
+            depthMode,
+            stencilMode,
+            colorMode
+        });
+        const upsampleStart = debugEnabled ? performance.now() : 0;
+        drawGlobalShadowUpsample(painter, target);
+        const upsampleMs = debugEnabled ? performance.now() - upsampleStart : 0;
+        context.bindFramebuffer.set(null);
+        context.viewport.set([0, 0, painter.width, painter.height]);
+        markShadowAtlasReady(terrain, isNearAtlas);
+        if (debugEnabled) {
+            window[isNearAtlas ? '_shadowNearPassDebug' : '_shadowPassDebug'] = {
+                target,
+                algorithm: 'hiz-max-mip',
+                durationMs: performance.now() - debugStart,
+                hizMipMs: hizDebug.mipMs,
+                hizDrawMs: hizDebug.drawMs,
+                hizLevels: hizDebug.hizLevels,
+                upsampleMs,
+                maxSteps: uniformValues['u_max_steps'],
+                stepMeters: uniformValues['u_step_meters'],
+                maxDistance: uniformValues['u_max_distance'],
+                atlasPixelSize,
+                rawAtlasPixelSize,
+                rawToFinalScale: atlasPixelSize / Math.max(rawAtlasPixelSize, 1),
+                elevationAtlasPixelSize,
+                metersPerPixelX,
+                metersPerPixelY,
+                progressivePhase: isProgressivePreview ? 'preview' : progressivePhase === 'full' ? 'full' : 'stable',
+                timestamp: performance.now()
+            };
+        }
+        return;
+    }
+    if (useLogSweep) {
+        const sweepStart = debugEnabled ? performance.now() : 0;
+        const sweepDebug = drawGlobalShadowSweep(painter, target, {
+            atlasBounds,
+            metersPerPixelX,
+            metersPerPixelY,
+            maxDistance: Number(uniformValues['u_max_distance']) || 5000,
+            sunDirection: uniformValues['u_sunDirection'],
+            sunAltitude: Number(uniformValues['u_sunAltitude']) || 0
+        });
+        const sweepMs = debugEnabled ? performance.now() - sweepStart : 0;
+        context.bindFramebuffer.set(null);
+        context.viewport.set([0, 0, painter.width, painter.height]);
+        markShadowAtlasReady(terrain, isNearAtlas);
+        if (debugEnabled) {
+            window[isNearAtlas ? '_shadowNearPassDebug' : '_shadowPassDebug'] = {
+                target,
+                algorithm: 'log-sweep',
+                durationMs: performance.now() - debugStart,
+                sweepMs,
+                passes: sweepDebug.passes,
+                maxSweepPixels: sweepDebug.maxSweepPixels,
+                maxDistance: uniformValues['u_max_distance'],
+                atlasPixelSize,
+                rawAtlasPixelSize: atlasPixelSize,
+                rawToFinalScale: 1,
+                elevationAtlasPixelSize,
+                metersPerPixelX,
+                metersPerPixelY,
+                progressivePhase: isProgressivePreview ? 'preview' : progressivePhase === 'full' ? 'full' : 'stable',
+                timestamp: performance.now()
+            };
+        }
+        return;
+    }
     if (!globalThis._shadowLogThrottle)
         globalThis._shadowLogThrottle = 0;
     if (globalThis._shadowLogThrottle++ % 60 === 0 || !(painter._wasInteracting)) {
         // console.log(`[SHADOW] drawGlobalShadow triggered. maxSteps=${uniformValues['u_max_steps']}, stepMeters=${uniformValues['u_step_meters']}`);
     }
+    const program = painter.useProgram('shadowGlobal');
     // Use painter's built-in quad buffers
     program.draw(context, gl.TRIANGLES, depthMode, stencilMode, colorMode, CullFaceMode.disabled, uniformValues, null, null, layer.id, painter.rasterBoundsBuffer, painter.quadTriangleIndexBuffer, painter.rasterBoundsSegments);
     // Bilinear upsample is the edge cleanup: it keeps the final atlas at 2K
     // for terrain sampling, but avoids exposing raw 1:1 mask stair steps.
-    const progressivePhase = typeof window !== 'undefined' ? window._shadowProgressivePhase : '';
-    const isProgressivePreview = progressivePhase === 'preview';
     const upsampleStart = debugEnabled ? performance.now() : 0;
-    drawGlobalShadowUpsample(painter);
+    drawGlobalShadowUpsample(painter, target);
     const upsampleMs = debugEnabled ? performance.now() - upsampleStart : 0;
     // Unbind FBO to prevent feedback loop when terrain shader samples the shadow texture
     context.bindFramebuffer.set(null);
     context.viewport.set([0, 0, painter.width, painter.height]);
-    terrain._shadowAtlasReady = true;
-    terrain._shadowAtlasReusedWhileMoving = false;
+    markShadowAtlasReady(terrain, isNearAtlas);
     if (debugEnabled) {
-        window._shadowPassDebug = {
+        window[isNearAtlas ? '_shadowNearPassDebug' : '_shadowPassDebug'] = {
+            target,
             durationMs: performance.now() - debugStart,
             blurMs: upsampleMs,
             upsampleMs,
@@ -67782,21 +68377,134 @@ function drawGlobalShadow(painter, layer) {
         };
     }
 }
-function drawGlobalShadowUpsample(painter) {
+function drawGlobalShadowSweep(painter, target, options) {
     const context = painter.context;
     const gl = context.gl;
     const terrainInstance = painter.style.map.terrain;
-    if (!terrainInstance || !terrainInstance._fboShadowTexture || !terrainInstance._fboShadowBlurTexture)
+    const isNearAtlas = target === 'near';
+    const elevationTexture = isNearAtlas ? terrainInstance === null || terrainInstance === void 0 ? void 0 : terrainInstance._fboNearElevationTexture : terrainInstance === null || terrainInstance === void 0 ? void 0 : terrainInstance._fboElevationTexture;
+    const shadowTexture = isNearAtlas ? terrainInstance === null || terrainInstance === void 0 ? void 0 : terrainInstance._fboNearShadowTexture : terrainInstance === null || terrainInstance === void 0 ? void 0 : terrainInstance._fboShadowTexture;
+    const stateTexture = isNearAtlas ? terrainInstance === null || terrainInstance === void 0 ? void 0 : terrainInstance._fboNearShadowBlurTexture : terrainInstance === null || terrainInstance === void 0 ? void 0 : terrainInstance._fboShadowBlurTexture;
+    if (!terrainInstance || !elevationTexture || !shadowTexture || !stateTexture) {
+        return { passes: 0, maxSweepPixels: 0 };
+    }
+    const size = shadowTexture.size[0];
+    const stateSize = stateTexture.size[0];
+    const drawSize = Math.min(size, stateSize);
+    const colorMode = ColorMode.unblended;
+    const depthMode = DepthMode.disabled;
+    const stencilMode = StencilMode.disabled;
+    const cullMode = CullFaceMode.disabled;
+    // Prefix-sweep state is packed RGBA height data, so all intermediate reads
+    // must use nearest filtering. The final visibility mask is restored to
+    // linear filtering for terrain sampling below.
+    context.activeTexture.set(gl.TEXTURE0);
+    elevationTexture.bind(gl.NEAREST, gl.CLAMP_TO_EDGE);
+    stateTexture.bind(gl.NEAREST, gl.CLAMP_TO_EDGE);
+    shadowTexture.bind(gl.NEAREST, gl.CLAMP_TO_EDGE);
+    const stateFboName = isNearAtlas ? 'near_shadow_blur' : 'shadow_blur';
+    const shadowFboName = isNearAtlas ? 'near_shadow' : 'shadow';
+    const stateFbo = terrainInstance.getFramebuffer(stateFboName);
+    const shadowFbo = terrainInstance.getFramebuffer(shadowFboName);
+    const initProgram = painter.useProgram('shadowSweepInit');
+    context.bindFramebuffer.set(stateFbo.framebuffer);
+    context.viewport.set([0, 0, drawSize, drawSize]);
+    context.clear({ color: symbol_layout.Color.transparent });
+    context.activeTexture.set(gl.TEXTURE0);
+    elevationTexture.bind(gl.NEAREST, gl.CLAMP_TO_EDGE);
+    initProgram.draw(context, gl.TRIANGLES, depthMode, stencilMode, colorMode, cullMode, { 'u_image': 0, 'u_dimension': [elevationTexture.size[0], elevationTexture.size[1]] }, null, null, 'shadow-sweep-init', painter.rasterBoundsBuffer, painter.quadTriangleIndexBuffer, painter.rasterBoundsSegments);
+    const minPixelMeters = Math.max(1, Math.min(options.metersPerPixelX, options.metersPerPixelY));
+    const maxSweepPixels = Math.max(1, Math.min(drawSize, Math.ceil(options.maxDistance / minPixelMeters)));
+    const maxPasses = Math.ceil(Math.log2(drawSize)) + 1;
+    let passes = Math.max(2, Math.min(maxPasses, Math.ceil(Math.log2(maxSweepPixels + 1))));
+    if (passes % 2 !== 0) {
+        passes = Math.min(maxPasses, passes + 1);
+    }
+    if (passes % 2 !== 0 && passes > 2) {
+        passes--;
+    }
+    const stepProgram = painter.useProgram('shadowSweepStep');
+    let readTexture = stateTexture;
+    let writeFbo = shadowFbo;
+    let writeTexture = shadowTexture;
+    for (let i = 0; i < passes; i++) {
+        context.bindFramebuffer.set(writeFbo.framebuffer);
+        context.viewport.set([0, 0, drawSize, drawSize]);
+        context.clear({ color: symbol_layout.Color.transparent });
+        context.activeTexture.set(gl.TEXTURE0);
+        readTexture.bind(gl.NEAREST, gl.CLAMP_TO_EDGE);
+        stepProgram.draw(context, gl.TRIANGLES, depthMode, stencilMode, colorMode, cullMode, {
+            'u_state': 0,
+            'u_sunDirection': options.sunDirection,
+            'u_sunAltitude': options.sunAltitude,
+            'u_metersPerPixel': [options.metersPerPixelX, options.metersPerPixelY],
+            'u_dimension': [drawSize, drawSize],
+            'u_atlas_bounds': options.atlasBounds,
+            'u_jump_pixels': Math.pow(2, i)
+        }, null, null, 'shadow-sweep-step', painter.rasterBoundsBuffer, painter.quadTriangleIndexBuffer, painter.rasterBoundsSegments);
+        if (writeTexture === shadowTexture) {
+            readTexture = shadowTexture;
+            writeTexture = stateTexture;
+            writeFbo = stateFbo;
+        }
+        else {
+            readTexture = stateTexture;
+            writeTexture = shadowTexture;
+            writeFbo = shadowFbo;
+        }
+    }
+    // The pass count is kept even, so the final packed score should live in
+    // stateTexture. If a browser-specific change ever breaks that invariant,
+    // fall back to the last read texture and avoid feedback by writing to the
+    // alternate state first would be the next step.
+    const finalScoreTexture = readTexture;
+    const finalProgram = painter.useProgram('shadowSweepFinal');
+    context.bindFramebuffer.set(shadowFbo.framebuffer);
+    context.viewport.set([0, 0, size, size]);
+    context.clear({ color: symbol_layout.Color.transparent });
+    context.activeTexture.set(gl.TEXTURE0);
+    finalScoreTexture.bind(gl.NEAREST, gl.CLAMP_TO_EDGE);
+    context.activeTexture.set(gl.TEXTURE1);
+    elevationTexture.bind(gl.NEAREST, gl.CLAMP_TO_EDGE);
+    finalProgram.draw(context, gl.TRIANGLES, depthMode, stencilMode, colorMode, cullMode, {
+        'u_state': 0,
+        'u_elevation': 1,
+        'u_dimension': [elevationTexture.size[0], elevationTexture.size[1]],
+        'u_metersPerPixel': [options.metersPerPixelX, options.metersPerPixelY]
+    }, null, null, 'shadow-sweep-final', painter.rasterBoundsBuffer, painter.quadTriangleIndexBuffer, painter.rasterBoundsSegments);
+    context.activeTexture.set(gl.TEXTURE0);
+    shadowTexture.bind(gl.LINEAR, gl.CLAMP_TO_EDGE);
+    stateTexture.bind(gl.LINEAR, gl.CLAMP_TO_EDGE);
+    return { passes, maxSweepPixels };
+}
+function drawGlobalShadowUpsample(painter, target = 'global') {
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p;
+    const context = painter.context;
+    const gl = context.gl;
+    const terrainInstance = painter.style.map.terrain;
+    const isNearAtlas = target === 'near';
+    const shadowTexture = isNearAtlas ? terrainInstance === null || terrainInstance === void 0 ? void 0 : terrainInstance._fboNearShadowTexture : terrainInstance === null || terrainInstance === void 0 ? void 0 : terrainInstance._fboShadowTexture;
+    const shadowBlurTexture = isNearAtlas ? terrainInstance === null || terrainInstance === void 0 ? void 0 : terrainInstance._fboNearShadowBlurTexture : terrainInstance === null || terrainInstance === void 0 ? void 0 : terrainInstance._fboShadowBlurTexture;
+    if (!terrainInstance || !shadowTexture || !shadowBlurTexture)
         return;
-    const finalSize = terrainInstance._fboShadowTexture.size[0];
-    const rawSize = terrainInstance._fboShadowBlurTexture.size[0];
+    const finalSize = shadowTexture.size[0];
+    const rawSize = shadowBlurTexture.size[0];
     const program = painter.useProgram('shadowBlur');
-    context.bindFramebuffer.set(terrainInstance.getFramebuffer('shadow').framebuffer);
+    const edgeCleanup = typeof window === 'undefined' || window._shadowEdgeCleanup !== false;
+    const shadowV2Active = typeof window !== 'undefined' &&
+        ((((_c = (_b = (_a = window.imageryState) === null || _a === void 0 ? void 0 : _a.get) === null || _b === void 0 ? void 0 : _b.call(_a, 'shadow-v2')) === null || _c === void 0 ? void 0 : _c.enabled) === true &&
+            ((_g = (_f = (_e = (_d = window.imageryState) === null || _d === void 0 ? void 0 : _d.get) === null || _e === void 0 ? void 0 : _e.call(_d, 'shadow-v2')) === null || _f === void 0 ? void 0 : _f.opacity) !== null && _g !== void 0 ? _g : 1) > 0) ||
+            (((_k = (_j = (_h = window.imageryState) === null || _h === void 0 ? void 0 : _h.get) === null || _j === void 0 ? void 0 : _j.call(_h, 'shadow-v3')) === null || _k === void 0 ? void 0 : _k.enabled) === true &&
+                ((_p = (_o = (_m = (_l = window.imageryState) === null || _l === void 0 ? void 0 : _l.get) === null || _m === void 0 ? void 0 : _m.call(_l, 'shadow-v3')) === null || _o === void 0 ? void 0 : _o.opacity) !== null && _p !== void 0 ? _p : 1) > 0));
+    const cleanupRadius = edgeCleanup ?
+        (shadowV2Active ? (isNearAtlas ? 0.28 : 0.42) : (isNearAtlas ? 0.55 : 0.85)) :
+        0.0;
+    context.bindFramebuffer.set(terrainInstance.getFramebuffer(isNearAtlas ? 'near_shadow' : 'shadow').framebuffer);
     context.viewport.set([0, 0, finalSize, finalSize]);
     context.clear({ color: symbol_layout.Color.transparent });
     context.activeTexture.set(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, terrainInstance._fboShadowBlurTexture.texture);
-    program.draw(context, gl.TRIANGLES, DepthMode.disabled, StencilMode.disabled, ColorMode.unblended, CullFaceMode.disabled, { 'u_image': 0, 'u_direction': [0.0, 0.0], 'u_texture_size': rawSize, 'u_blur_radius': 0.0 }, null, null, 'shadow-upsample', painter.rasterBoundsBuffer, painter.quadTriangleIndexBuffer, painter.rasterBoundsSegments);
+    gl.bindTexture(gl.TEXTURE_2D, shadowBlurTexture.texture);
+    program.draw(context, gl.TRIANGLES, DepthMode.disabled, StencilMode.disabled, ColorMode.unblended, CullFaceMode.disabled, { 'u_image': 0, 'u_direction': [0.0, 0.0], 'u_texture_size': rawSize, 'u_blur_radius': cleanupRadius }, null, null, 'shadow-upsample', painter.rasterBoundsBuffer, painter.quadTriangleIndexBuffer, painter.rasterBoundsSegments);
 }
 /**
  * Executes a 2-pass Gaussian blur (Horizontal + Vertical) on the Shadow Atlas.
@@ -68529,15 +69237,31 @@ function numberFromProfile(profile, key, fallback) {
     const value = profile === null || profile === void 0 ? void 0 : profile[key];
     return Number.isFinite(value) ? Number(value) : fallback;
 }
-function getShadowAtlasLodOptions(previewAtlas) {
+function lerpNumber(a, b, t) {
+    return a * (1 - t) + b * t;
+}
+function getShadowAtlasLodOptions(previewAtlas, detailedV2) {
     const profile = typeof window !== 'undefined' ? window._shadowReachProfile : null;
+    const longReach = clamp(numberFromProfile(profile, 'longReach', 0), 0, 1);
     if (previewAtlas) {
+        const previewScale = detailedV2 ? 0.78 : 1.0;
         return {
-            maxTiles: Math.round(numberFromProfile(profile, 'previewMaxTiles', 28)),
-            maxCoreTiles: Math.round(numberFromProfile(profile, 'previewMaxCoreTiles', 10)),
-            zoomBias: numberFromProfile(profile, 'previewZoomBias', -1.35),
-            midReachMeters: numberFromProfile(profile, 'previewMidReachMeters', 1400),
-            farReachMeters: numberFromProfile(profile, 'previewFarReachMeters', 3400)
+            maxTiles: Math.round(detailedV2 ? clamp(numberFromProfile(profile, 'previewMaxTiles', 28) * 0.86, 26, 42) : numberFromProfile(profile, 'previewMaxTiles', 28)),
+            maxCoreTiles: Math.round(detailedV2 ? clamp(numberFromProfile(profile, 'previewMaxCoreTiles', 10) * 1.18, 12, 18) : numberFromProfile(profile, 'previewMaxCoreTiles', 10)),
+            zoomBias: numberFromProfile(profile, 'previewZoomBias', -1.35) + (detailedV2 ? 0.48 : 0),
+            midReachMeters: Math.round(numberFromProfile(profile, 'previewMidReachMeters', 1400) * previewScale),
+            farReachMeters: Math.round(numberFromProfile(profile, 'previewFarReachMeters', 3400) * previewScale)
+        };
+    }
+    if (detailedV2) {
+        const midReach = numberFromProfile(profile, 'midReachMeters', MID_SHADOW_REACH_METERS) * lerpNumber(0.58, 0.82, longReach);
+        const farReach = numberFromProfile(profile, 'farReachMeters', SHADOW_REACH_METERS) * lerpNumber(0.52, 0.86, longReach);
+        return {
+            maxTiles: Math.round(clamp(numberFromProfile(profile, 'maxTiles', 72) * 0.70, 48, 86)),
+            maxCoreTiles: Math.round(clamp(numberFromProfile(profile, 'maxCoreTiles', 42) * 0.88, 30, 52)),
+            zoomBias: numberFromProfile(profile, 'zoomBias', 0) + lerpNumber(0.38, 0.22, longReach),
+            midReachMeters: Math.max(900, Math.round(midReach)),
+            farReachMeters: Math.max(2200, Math.round(farReach))
         };
     }
     return {
@@ -68546,6 +69270,73 @@ function getShadowAtlasLodOptions(previewAtlas) {
         zoomBias: numberFromProfile(profile, 'zoomBias', 0),
         midReachMeters: numberFromProfile(profile, 'midReachMeters', MID_SHADOW_REACH_METERS),
         farReachMeters: numberFromProfile(profile, 'farReachMeters', SHADOW_REACH_METERS)
+    };
+}
+function getShadowNearAtlasLodOptions(detailedV2) {
+    const profile = typeof window !== 'undefined' ? window._shadowReachProfile : null;
+    const longReach = clamp(numberFromProfile(profile, 'longReach', 0), 0, 1);
+    if (detailedV2) {
+        return {
+            maxTiles: Math.round(numberFromProfile(profile, 'refineMaxTiles', 58)),
+            maxCoreTiles: Math.round(numberFromProfile(profile, 'refineMaxCoreTiles', 42)),
+            zoomBias: numberFromProfile(profile, 'refineZoomBias', 0.95) + 0.35,
+            midReachMeters: Math.round(numberFromProfile(profile, 'refineMidReachMeters', 1100) * lerpNumber(0.78, 0.95, longReach)),
+            farReachMeters: Math.round(numberFromProfile(profile, 'refineFarReachMeters', 3600) * lerpNumber(0.70, 0.95, longReach))
+        };
+    }
+    return {
+        maxTiles: Math.round(numberFromProfile(profile, 'refineMaxTiles', 52)),
+        maxCoreTiles: Math.round(numberFromProfile(profile, 'refineMaxCoreTiles', 30)),
+        zoomBias: numberFromProfile(profile, 'refineZoomBias', 0.85),
+        midReachMeters: numberFromProfile(profile, 'refineMidReachMeters', 900),
+        farReachMeters: numberFromProfile(profile, 'refineFarReachMeters', 2800)
+    };
+}
+function getShadowNearAtlasVisibleBounds(painter, terrain, renderableTiles) {
+    const base = getShadowAtlasVisibleBounds(painter, terrain, renderableTiles);
+    if (!base)
+        return null;
+    const tr = painter.transform;
+    const width = tr.width;
+    const height = tr.height;
+    const sampleBounds = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
+    const pitched = tr.pitch > 18;
+    const xs = pitched ? [0.18, 0.38, 0.62, 0.82] : [0.22, 0.50, 0.78];
+    const ys = pitched ? [0.46, 0.62, 0.78, 0.94] : [0.30, 0.50, 0.70];
+    for (const yf of ys) {
+        for (const xf of xs) {
+            const coord = tr.screenPointToMercatorCoordinate(new symbol_layout.Point(clamp(width * xf, 0, Math.max(width - 1, 0)), clamp(height * yf, 0, Math.max(height - 1, 0))));
+            if (coord && Number.isFinite(coord.x) && Number.isFinite(coord.y)) {
+                includeBounds(sampleBounds, { minX: coord.x, minY: coord.y, maxX: coord.x, maxY: coord.y });
+            }
+        }
+    }
+    let focusBounds = sampleBounds;
+    if (!finiteBounds(focusBounds)) {
+        const sourceBounds = base.bounds;
+        const centerX = (sourceBounds.minX + sourceBounds.maxX) * 0.5;
+        const centerY = (sourceBounds.minY + sourceBounds.maxY) * 0.5;
+        const halfWidth = (sourceBounds.maxX - sourceBounds.minX) * 0.32;
+        const halfHeight = (sourceBounds.maxY - sourceBounds.minY) * 0.32;
+        focusBounds = {
+            minX: centerX - halfWidth,
+            minY: centerY - halfHeight,
+            maxX: centerX + halfWidth,
+            maxY: centerY + halfHeight
+        };
+    }
+    const focusWidth = focusBounds.maxX - focusBounds.minX;
+    const focusHeight = focusBounds.maxY - focusBounds.minY;
+    const minMargin = 700 / WORLD_CIRCUMFERENCE$1;
+    const margin = Math.max(Math.max(focusWidth, focusHeight) * 0.16, minMargin);
+    const clampedBounds = intersectBounds(expandBounds(focusBounds, margin), base.fullBounds) ||
+        intersectBounds(expandBounds(focusBounds, margin), base.bounds);
+    return {
+        bounds: clampedBounds || base.bounds,
+        fullBounds: base.fullBounds,
+        screenClamped: true,
+        screenTop: pitched ? 0.46 : 0.30,
+        pitch: base.pitch
     };
 }
 /**
@@ -68605,8 +69396,9 @@ function drawCoords(painter, terrain) {
     }
     context.viewport.set([0, 0, painter.width, painter.height]);
 }
-function drawElevation(painter, terrain) {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k;
+function drawElevationAtlas(painter, terrain, target) {
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _0, _1, _2, _3, _4, _5, _6;
+    const isNearAtlas = target === 'near';
     const debugEnabled = typeof window !== 'undefined' && window._shadowTileDebugEnabled;
     const debugStart = debugEnabled ? performance.now() : 0;
     const context = painter.context;
@@ -68617,7 +69409,17 @@ function drawElevation(painter, terrain) {
     // Draw order should decide mixed-zoom precedence, otherwise coarse parents can
     // depth-test over detailed child tiles and create square shadow patches.
     const depthMode = DepthMode.disabled;
-    const shadowLayer = painter.style.getLayer('shadow-coarse');
+    const shadowV3Active = typeof window !== 'undefined' &&
+        ((_c = (_b = (_a = window.imageryState) === null || _a === void 0 ? void 0 : _a.get) === null || _b === void 0 ? void 0 : _b.call(_a, 'shadow-v3')) === null || _c === void 0 ? void 0 : _c.enabled) === true &&
+        ((_g = (_f = (_e = (_d = window.imageryState) === null || _d === void 0 ? void 0 : _d.get) === null || _e === void 0 ? void 0 : _e.call(_d, 'shadow-v3')) === null || _f === void 0 ? void 0 : _f.opacity) !== null && _g !== void 0 ? _g : 1) > 0;
+    const shadowV2Active = typeof window !== 'undefined' &&
+        ((_k = (_j = (_h = window.imageryState) === null || _h === void 0 ? void 0 : _h.get) === null || _j === void 0 ? void 0 : _j.call(_h, 'shadow-v2')) === null || _k === void 0 ? void 0 : _k.enabled) === true &&
+        ((_p = (_o = (_m = (_l = window.imageryState) === null || _l === void 0 ? void 0 : _l.get) === null || _m === void 0 ? void 0 : _m.call(_l, 'shadow-v2')) === null || _o === void 0 ? void 0 : _o.opacity) !== null && _p !== void 0 ? _p : 1) > 0;
+    const daylightV2Active = typeof window !== 'undefined' &&
+        ((_s = (_r = (_q = window.imageryState) === null || _q === void 0 ? void 0 : _q.get) === null || _r === void 0 ? void 0 : _r.call(_q, 'daylight-v2')) === null || _s === void 0 ? void 0 : _s.enabled) === true &&
+        ((_w = (_v = (_u = (_t = window.imageryState) === null || _t === void 0 ? void 0 : _t.get) === null || _u === void 0 ? void 0 : _u.call(_t, 'daylight-v2')) === null || _v === void 0 ? void 0 : _v.opacity) !== null && _w !== void 0 ? _w : 1) > 0;
+    const detailedV2 = shadowV3Active || shadowV2Active || daylightV2Active;
+    const shadowLayer = painter.style.getLayer(shadowV3Active ? 'shadow-v3-coarse' : shadowV2Active ? 'shadow-v2-coarse' : 'shadow-coarse');
     const sunDir = shadowLayer ? shadowLayer.getShadowProperties() : { directionRadians: 0 };
     const dxRes = Math.sin(sunDir.directionRadians);
     const dyRes = -Math.cos(sunDir.directionRadians);
@@ -68626,7 +69428,9 @@ function drawElevation(painter, terrain) {
     // into a tiny part of the atlas. Clamp the core footprint to the lower
     // screen region and let LOD bands handle sun-facing casters.
     const renderableTiles = terrain.tileManager.getRenderableTiles();
-    const atlasVisible = getShadowAtlasVisibleBounds(painter, terrain, renderableTiles);
+    const atlasVisible = isNearAtlas ?
+        getShadowNearAtlasVisibleBounds(painter, terrain, renderableTiles) :
+        getShadowAtlasVisibleBounds(painter, terrain, renderableTiles);
     const visibleZooms = {};
     for (const tile of renderableTiles) {
         if (debugEnabled) {
@@ -68645,14 +69449,14 @@ function drawElevation(painter, terrain) {
     // 3. Quantize the atlas to deterministic LOD bands. The visible core stays
     // detailed, while farther sun-facing caster regions fall back to parent cells.
     const source = terrain.tileManager.getSource();
-    const sourceMinZoom = (_b = (_a = source.minzoom) !== null && _a !== void 0 ? _a : terrain.tileManager.minzoom) !== null && _b !== void 0 ? _b : 0;
-    const sourceMaxZoom = (_d = (_c = source.maxzoom) !== null && _c !== void 0 ? _c : terrain.tileManager.maxzoom) !== null && _d !== void 0 ? _d : 22;
+    const sourceMinZoom = (_y = (_x = source.minzoom) !== null && _x !== void 0 ? _x : terrain.tileManager.minzoom) !== null && _y !== void 0 ? _y : 0;
+    const sourceMaxZoom = (_0 = (_z = source.maxzoom) !== null && _z !== void 0 ? _z : terrain.tileManager.maxzoom) !== null && _0 !== void 0 ? _0 : 22;
     const terrainDeltaZoom = terrain.tileManager.getEffectiveDeltaZoom();
     const targetMinZoom = sourceMinZoom + terrainDeltaZoom;
     const targetMaxZoom = sourceMaxZoom + terrainDeltaZoom;
     const progressivePhase = typeof window !== 'undefined' ? window._shadowProgressivePhase : '';
-    const previewAtlas = progressivePhase === 'preview';
-    const atlasLodOptions = getShadowAtlasLodOptions(previewAtlas);
+    const previewAtlas = !isNearAtlas && progressivePhase === 'preview';
+    const atlasLodOptions = isNearAtlas ? getShadowNearAtlasLodOptions(detailedV2) : getShadowAtlasLodOptions(previewAtlas, detailedV2);
     const atlasCells = collectLodTileIDs({ minX, minY, maxX, maxY }, dxRes, dyRes, tr.zoom, targetMinZoom, targetMaxZoom, atlasLodOptions);
     const captureTileIDs = atlasCells.tileIDs;
     if (captureTileIDs.length === 0) {
@@ -68669,19 +69473,30 @@ function drawElevation(painter, terrain) {
     // console.log(`[ATLAS] drawElevation: lod=${atlasCells.lodZooms.join('/')}, cells=${captureTileIDs.length}, bounds=[${minX.toFixed(6)}, ${minY.toFixed(6)}, ${maxX.toFixed(6)}, ${maxY.toFixed(6)}]`);
     // 4. Setup Orthographic Projection for the Elevation Atlas
     const program = painter.useProgram('terrainElevation');
-    const atlasSize = Terrain.ATLAS_SIZE;
-    context.bindFramebuffer.set(terrain.getFramebuffer('elevation').framebuffer);
+    const atlasFramebuffer = terrain.getFramebuffer(isNearAtlas ? 'near_elevation' : 'elevation');
+    const atlasSize = isNearAtlas ? terrain._fboNearElevationTexture.size[0] : terrain._fboElevationTexture.size[0];
+    context.bindFramebuffer.set(atlasFramebuffer.framebuffer);
     context.viewport.set([0, 0, atlasSize, atlasSize]);
     context.clear({ color: symbol_layout.Color.transparent, depth: 1 });
     // Store Atlas Bounds in terrain object for the shadow raymarcher to use
-    terrain._elevationAtlasBounds = [minX, minY, maxX, maxY];
-    terrain._elevationAtlasVisibleBounds = [visibleBounds.minX, visibleBounds.minY, visibleBounds.maxX, visibleBounds.maxY];
-    terrain._elevationAtlasFullVisibleBounds = [atlasVisible.fullBounds.minX, atlasVisible.fullBounds.minY, atlasVisible.fullBounds.maxX, atlasVisible.fullBounds.maxY];
-    terrain._elevationAtlasScreenClamped = atlasVisible.screenClamped;
-    terrain._elevationAtlasScreenTop = atlasVisible.screenTop;
-    terrain._elevationAtlasProgressivePhase = previewAtlas ? 'preview' : progressivePhase === 'full' ? 'full' : 'stable';
-    terrain._daylightAtlasReady = false;
-    terrain._horizonAtlasReady = false;
+    if (isNearAtlas) {
+        terrain._shadowNearAtlasBounds = [minX, minY, maxX, maxY];
+        terrain._shadowNearAtlasVisibleBounds = [visibleBounds.minX, visibleBounds.minY, visibleBounds.maxX, visibleBounds.maxY];
+        terrain._shadowNearAtlasReady = false;
+        delete terrain._shadowNearAtlasReadyAt;
+    }
+    else {
+        terrain._elevationAtlasBounds = [minX, minY, maxX, maxY];
+        terrain._elevationAtlasVisibleBounds = [visibleBounds.minX, visibleBounds.minY, visibleBounds.maxX, visibleBounds.maxY];
+        terrain._elevationAtlasFullVisibleBounds = [atlasVisible.fullBounds.minX, atlasVisible.fullBounds.minY, atlasVisible.fullBounds.maxX, atlasVisible.fullBounds.maxY];
+        terrain._elevationAtlasScreenClamped = atlasVisible.screenClamped;
+        terrain._elevationAtlasScreenTop = atlasVisible.screenTop;
+        terrain._elevationAtlasProgressivePhase = previewAtlas ? 'preview' : progressivePhase === 'full' ? 'full' : 'stable';
+        terrain._shadowNearAtlasReady = false;
+        delete terrain._shadowNearAtlasReadyAt;
+        terrain._daylightAtlasReady = false;
+        terrain._horizonAtlasReady = false;
+    }
     const orthoMatrix = symbol_layout.create();
     symbol_layout.ortho(orthoMatrix, minX, maxX, maxY, minY, -10000, 10000); // Reversed Y for Mercator
     let parentFallbackCount = 0;
@@ -68696,7 +69511,7 @@ function drawElevation(painter, terrain) {
         const terrainData = terrain.getTerrainData(tileID);
         const sourceTile = terrainData.tile;
         if (debugEnabled) {
-            incrementCount(sourceZooms, (_f = (_e = sourceTile === null || sourceTile === void 0 ? void 0 : sourceTile.tileID) === null || _e === void 0 ? void 0 : _e.canonical) === null || _f === void 0 ? void 0 : _f.z);
+            incrementCount(sourceZooms, (_2 = (_1 = sourceTile === null || sourceTile === void 0 ? void 0 : sourceTile.tileID) === null || _1 === void 0 ? void 0 : _1.canonical) === null || _2 === void 0 ? void 0 : _2.z);
         }
         if (!(sourceTile === null || sourceTile === void 0 ? void 0 : sourceTile.dem)) {
             flatFallbackCount++;
@@ -68729,17 +69544,18 @@ function drawElevation(painter, terrain) {
             wrap: tileID.wrap,
             key: tileID.key
         }));
-        window._elevationAtlasDebug = {
+        window[isNearAtlas ? '_nearElevationAtlasDebug' : '_elevationAtlasDebug'] = {
             bounds: [minX, minY, maxX, maxY], // WebMercator [0..1]
+            target,
             size: atlasSize,
             tiles: capturedIds,
             lodZooms: atlasCells.lodZooms,
-            maxTiles: (_g = atlasLodOptions.maxTiles) !== null && _g !== void 0 ? _g : MAX_ELEVATION_ATLAS_TILES,
-            maxCoreTiles: (_h = atlasLodOptions.maxCoreTiles) !== null && _h !== void 0 ? _h : MAX_CORE_ATLAS_TILES,
-            midReachMeters: (_j = atlasLodOptions.midReachMeters) !== null && _j !== void 0 ? _j : MID_SHADOW_REACH_METERS,
-            farReachMeters: (_k = atlasLodOptions.farReachMeters) !== null && _k !== void 0 ? _k : SHADOW_REACH_METERS,
+            maxTiles: (_3 = atlasLodOptions.maxTiles) !== null && _3 !== void 0 ? _3 : MAX_ELEVATION_ATLAS_TILES,
+            maxCoreTiles: (_4 = atlasLodOptions.maxCoreTiles) !== null && _4 !== void 0 ? _4 : MAX_CORE_ATLAS_TILES,
+            midReachMeters: (_5 = atlasLodOptions.midReachMeters) !== null && _5 !== void 0 ? _5 : MID_SHADOW_REACH_METERS,
+            farReachMeters: (_6 = atlasLodOptions.farReachMeters) !== null && _6 !== void 0 ? _6 : SHADOW_REACH_METERS,
             reachProfile: typeof window !== 'undefined' ? window._shadowReachProfile : null,
-            progressivePhase: previewAtlas ? 'preview' : progressivePhase === 'full' ? 'full' : 'stable',
+            progressivePhase: isNearAtlas ? 'refine' : previewAtlas ? 'preview' : progressivePhase === 'full' ? 'full' : 'stable',
             parentFallbackCount,
             flatFallbackCount,
             screenClamped: atlasVisible.screenClamped,
@@ -68761,6 +69577,12 @@ function drawElevation(painter, terrain) {
     }
     context.bindFramebuffer.set(null);
     context.viewport.set([0, 0, painter.width, painter.height]);
+}
+function drawElevation(painter, terrain) {
+    drawElevationAtlas(painter, terrain, 'global');
+}
+function drawNearElevation(painter, terrain) {
+    drawElevationAtlas(painter, terrain, 'near');
 }
 function prepareTerrainDerivativeTexture(painter, sourceTile) {
     var _a;
@@ -68899,6 +69721,15 @@ function drawTerrain(painter, terrain, tiles, renderOptions) {
         if (terrain._fboShadowTexture) {
             gl.bindTexture(gl.TEXTURE_2D, terrain._fboShadowTexture.texture);
         }
+        // Bind close-range refinement shadow to Unit 14. It is optional and
+        // sampled only when _shadowNearAtlasReady is true.
+        context.activeTexture.set(gl.TEXTURE14);
+        if (terrain._fboNearShadowTexture) {
+            gl.bindTexture(gl.TEXTURE_2D, terrain._fboNearShadowTexture.texture);
+        }
+        else if (terrain._fboShadowTexture) {
+            gl.bindTexture(gl.TEXTURE_2D, terrain._fboShadowTexture.texture);
+        }
         // Horizon atlases: current-time terrain shadow can update from uniforms only.
         context.activeTexture.set(gl.TEXTURE8);
         if (terrain._fboHorizon0Texture) {
@@ -68939,6 +69770,9 @@ function drawTerrain(painter, terrain, tiles, renderOptions) {
             const sourceZoom = (_h = (_g = (_f = (_e = td.tile) === null || _e === void 0 ? void 0 : _e.tileID) === null || _f === void 0 ? void 0 : _f.canonical) === null || _g === void 0 ? void 0 : _g.z) !== null && _h !== void 0 ? _h : tile.tileID.canonical.z;
             const demDim = td['u_terrain_dim'] || 512;
             uniformValues['u_dem_ao_meters_per_pixel'] = WORLD_CIRCUMFERENCE$1 / (demDim * Math.pow(2, sourceZoom));
+        }
+        else {
+            uniformValues['u_contact_shadow_enabled'] = 0.0;
         }
         // Debug log for first tile
         if (tile === tiles[0]) {
@@ -69029,20 +69863,26 @@ function getSunDirection(light) {
     return Math.atan2(-_lp.x, -_lp.y);
 }
 function getMercatorSkySun(painter, light, transform) {
-    var _a, _b, _c;
-    const shadowLayer = painter.style.getLayer('shadow-coarse');
-    const shadowProps = (_a = shadowLayer === null || shadowLayer === void 0 ? void 0 : shadowLayer.getShadowProperties) === null || _a === void 0 ? void 0 : _a.call(shadowLayer);
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s;
+    const shadowV3Active = typeof window !== 'undefined' &&
+        ((_c = (_b = (_a = window.imageryState) === null || _a === void 0 ? void 0 : _a.get) === null || _b === void 0 ? void 0 : _b.call(_a, 'shadow-v3')) === null || _c === void 0 ? void 0 : _c.enabled) === true &&
+        ((_g = (_f = (_e = (_d = window.imageryState) === null || _d === void 0 ? void 0 : _d.get) === null || _e === void 0 ? void 0 : _e.call(_d, 'shadow-v3')) === null || _f === void 0 ? void 0 : _f.opacity) !== null && _g !== void 0 ? _g : 1) > 0;
+    const shadowV2Active = typeof window !== 'undefined' &&
+        ((_k = (_j = (_h = window.imageryState) === null || _h === void 0 ? void 0 : _h.get) === null || _j === void 0 ? void 0 : _j.call(_h, 'shadow-v2')) === null || _k === void 0 ? void 0 : _k.enabled) === true &&
+        ((_p = (_o = (_m = (_l = window.imageryState) === null || _l === void 0 ? void 0 : _l.get) === null || _m === void 0 ? void 0 : _m.call(_l, 'shadow-v2')) === null || _o === void 0 ? void 0 : _o.opacity) !== null && _p !== void 0 ? _p : 1) > 0;
+    const shadowLayer = painter.style.getLayer(shadowV3Active ? 'shadow-v3-coarse' : shadowV2Active ? 'shadow-v2-coarse' : 'shadow-coarse');
+    const shadowProps = (_q = shadowLayer === null || shadowLayer === void 0 ? void 0 : shadowLayer.getShadowProperties) === null || _q === void 0 ? void 0 : _q.call(shadowLayer);
     const solarState = typeof window !== 'undefined' ? window._xploreSolarState : null;
     const sunDirection = typeof (solarState === null || solarState === void 0 ? void 0 : solarState.azimuthRad) === 'number' ?
         solarState.azimuthRad :
         typeof window !== 'undefined' && typeof window._skySunAzimuthRad === 'number' ?
             window._skySunAzimuthRad :
-            (_b = shadowProps === null || shadowProps === void 0 ? void 0 : shadowProps.directionRadians) !== null && _b !== void 0 ? _b : getSunDirection(light);
+            (_r = shadowProps === null || shadowProps === void 0 ? void 0 : shadowProps.directionRadians) !== null && _r !== void 0 ? _r : getSunDirection(light);
     const sunAltitude = typeof (solarState === null || solarState === void 0 ? void 0 : solarState.altitudeRad) === 'number' ?
         solarState.altitudeRad :
         typeof window !== 'undefined' && typeof window._skySunAltitudeRad === 'number' ?
             window._skySunAltitudeRad :
-            (_c = shadowProps === null || shadowProps === void 0 ? void 0 : shadowProps.altitudeRadians) !== null && _c !== void 0 ? _c : getSunAltitude(light);
+            (_s = shadowProps === null || shadowProps === void 0 ? void 0 : shadowProps.altitudeRadians) !== null && _s !== void 0 ? _s : getSunAltitude(light);
     const clampedAltitude = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, sunAltitude));
     const cosAltitude = Math.cos(clampedAltitude);
     const sunPos = [
@@ -69541,7 +70381,7 @@ class Painter {
      * stays on screen without blocking pan/rotate/zoom.
      */
     maybeDrawDepthAndCoords(requireExact) {
-        var _a, _b;
+        var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r;
         if (!((_b = (_a = this.style) === null || _a === void 0 ? void 0 : _a.map) === null || _b === void 0 ? void 0 : _b.terrain)) {
             return;
         }
@@ -69554,7 +70394,8 @@ class Painter {
         const isTimeSliding = typeof window !== 'undefined' && window._isInteractingWithTime;
         const isCameraRefreshHeld = typeof window !== 'undefined' && window._shadowCameraRefreshHold;
         const progressivePhase = typeof window !== 'undefined' ? window._shadowProgressivePhase : '';
-        const isProgressiveRefresh = progressivePhase === 'preview' || progressivePhase === 'full';
+        const isNearRefine = progressivePhase === 'refine';
+        const isProgressiveRefresh = progressivePhase === 'preview' || progressivePhase === 'full' || isNearRefine;
         const isInteracting = isMapMoving || isTimeSliding || isCameraRefreshHeld;
         const wasInteracting = !!this._wasInteracting;
         this._wasInteracting = isInteracting;
@@ -69580,7 +70421,13 @@ class Painter {
         if (wasInteracting && !isInteracting) {
             doUpdate = true;
         }
-        const shadowLayer = this.style.getLayer('shadow-coarse');
+        const shadowV3Active = typeof window !== 'undefined' &&
+            ((_e = (_d = (_c = window.imageryState) === null || _c === void 0 ? void 0 : _c.get) === null || _d === void 0 ? void 0 : _d.call(_c, 'shadow-v3')) === null || _e === void 0 ? void 0 : _e.enabled) === true &&
+            ((_j = (_h = (_g = (_f = window.imageryState) === null || _f === void 0 ? void 0 : _f.get) === null || _g === void 0 ? void 0 : _g.call(_f, 'shadow-v3')) === null || _h === void 0 ? void 0 : _h.opacity) !== null && _j !== void 0 ? _j : 1) > 0;
+        const shadowV2Active = typeof window !== 'undefined' &&
+            ((_m = (_l = (_k = window.imageryState) === null || _k === void 0 ? void 0 : _k.get) === null || _l === void 0 ? void 0 : _l.call(_k, 'shadow-v2')) === null || _m === void 0 ? void 0 : _m.enabled) === true &&
+            ((_r = (_q = (_p = (_o = window.imageryState) === null || _o === void 0 ? void 0 : _o.get) === null || _p === void 0 ? void 0 : _p.call(_o, 'shadow-v2')) === null || _q === void 0 ? void 0 : _q.opacity) !== null && _r !== void 0 ? _r : 1) > 0;
+        const shadowLayer = this.style.getLayer(shadowV3Active ? 'shadow-v3-coarse' : shadowV2Active ? 'shadow-v2-coarse' : 'shadow-coarse');
         let shadowPropsChanged = false;
         let shadowProps = null;
         if (shadowLayer) {
@@ -69611,6 +70458,18 @@ class Painter {
             terrain._shadowAtlasNeedsRefreshAfterCameraMove = true;
             return;
         }
+        const canDrawNearOnly = !shadowPropsChanged && !tilesChanged && !terrain._shadowAtlasNeedsRefreshAfterCameraMove;
+        if (isNearRefine && canDrawNearOnly && shadowLayer && !shadowLayer.isHidden(this.transform.zoom) &&
+            terrain._shadowAtlasReady && terrain._elevationAtlasBounds) {
+            delete terrain._shadowAtlasNeedsRefreshAfterCameraMove;
+            drawNearElevation(this, terrain);
+            drawGlobalShadow(this, shadowLayer, 'near');
+            if (typeof window !== 'undefined') {
+                window._shadowProgressiveLastPhase = 'refine';
+                window._shadowProgressivePhase = 'stable';
+            }
+            return;
+        }
         const cachedAtlasBounds = terrain._elevationAtlasBounds;
         const cachedAtlasPhase = terrain._elevationAtlasProgressivePhase;
         const atlasVisible = shadowLayer && cachedAtlasBounds ? getShadowAtlasVisibleBounds(this, terrain) : null;
@@ -69621,6 +70480,7 @@ class Painter {
         const fullMustRefinePreview = progressivePhase === 'full' && cachedAtlasPhase === 'preview';
         const canReuseCoveredAtlas = !isTimeSliding &&
             !shadowPropsChanged &&
+            !isNearRefine &&
             !fullMustRefinePreview &&
             !!terrain._shadowAtlasReady &&
             Array.isArray(cachedAtlasBounds) &&
@@ -69648,12 +70508,18 @@ class Painter {
             return;
         }
         delete terrain._shadowAtlasNeedsRefreshAfterCameraMove;
+        let completedProgressivePhase = progressivePhase;
         drawElevation(this, terrain);
         if (shadowLayer && !shadowLayer.isHidden(this.transform.zoom)) {
             drawGlobalShadow(this, shadowLayer);
+            if (isNearRefine && terrain._shadowAtlasReady && terrain._elevationAtlasBounds) {
+                drawNearElevation(this, terrain);
+                drawGlobalShadow(this, shadowLayer, 'near');
+                completedProgressivePhase = 'refine-after-global';
+            }
         }
         if (typeof window !== 'undefined' && isProgressiveRefresh) {
-            window._shadowProgressiveLastPhase = progressivePhase;
+            window._shadowProgressiveLastPhase = completedProgressivePhase;
             window._shadowProgressivePhase = progressivePhase === 'preview' ? 'preview-complete' : 'stable';
         }
     }
@@ -76197,6 +77063,20 @@ let Map$1 = class Map extends Camera {
         if (!this.terrain)
             return null;
         return this.terrain.readElevationAtlasPixels();
+    }
+    /**
+     * Reads one of the cached shadow atlas FBOs for manual debug snapshots.
+     *
+     * This stalls the GPU and should only be called from explicit debug UI
+     * actions, not every frame.
+     *
+     * @param kind - `shadow`, `raw`, `near`, or `near-raw`
+     * @returns atlas pixels plus atlas size, or null when the FBO is not ready
+     */
+    readShadowAtlasPixels(kind = 'shadow') {
+        if (!this.terrain)
+            return null;
+        return this.terrain.readShadowAtlasPixels(kind);
     }
     /**
      * Reads cached sun-analysis atlas values for a location.
