@@ -530,8 +530,23 @@ type ShadowAtlasTarget = 'global' | 'near';
 
 function markShadowAtlasReady(terrain: any, isNearAtlas: boolean) {
     if (isNearAtlas) {
+        const wasReady = terrain._shadowNearAtlasReady === true && !!terrain._fboNearShadowTexture;
+        const wasTimeStale = terrain._shadowNearAtlasStale === true &&
+            terrain._shadowNearAtlasStaleReason === 'time';
+        if (Array.isArray(terrain._shadowNearAtlasPendingBounds)) {
+            terrain._shadowNearAtlasBounds = terrain._shadowNearAtlasPendingBounds;
+            delete terrain._shadowNearAtlasPendingBounds;
+        }
+        if (Array.isArray(terrain._shadowNearAtlasPendingVisibleBounds)) {
+            terrain._shadowNearAtlasVisibleBounds = terrain._shadowNearAtlasPendingVisibleBounds;
+            delete terrain._shadowNearAtlasPendingVisibleBounds;
+        }
         terrain._shadowNearAtlasReady = true;
-        terrain._shadowNearAtlasReadyAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+        terrain._shadowNearAtlasStale = false;
+        delete terrain._shadowNearAtlasStaleReason;
+        if (!wasReady || wasTimeStale || !Number.isFinite(terrain._shadowNearAtlasReadyAt)) {
+            terrain._shadowNearAtlasReadyAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+        }
         return;
     }
 
@@ -748,7 +763,7 @@ export function drawGlobalShadow(
 
     // 1. Calculate Atlas-space scales
     const atlasBounds = isNearAtlas ?
-        (terrain as any)._shadowNearAtlasBounds :
+        ((terrain as any)._shadowNearAtlasPendingBounds || (terrain as any)._shadowNearAtlasBounds) :
         (terrain as any)._elevationAtlasBounds; // [minX, minY, maxX, maxY] in 0..1 world
     if (!atlasBounds) {
         console.warn(`[ATLAS] drawGlobalShadow: no ${isNearAtlas ? '_shadowNearAtlasBounds' : '_elevationAtlasBounds'} set`);
@@ -810,7 +825,6 @@ export function drawGlobalShadow(
 
     const progressivePhase = typeof window !== 'undefined' ? (window as any)._shadowProgressivePhase : '';
     const isProgressivePreview = progressivePhase === 'preview';
-    const useLogSweep = typeof window !== 'undefined' && (window as any)._shadowUseLogSweep === true;
     const useHiZ = isShadowV3Active() && typeof window !== 'undefined' && (window as any)._shadowV3UseHiZ === true;
     if (useHiZ) {
         const hizDebug = drawGlobalShadowHiZ(painter, layer, target, {
@@ -849,50 +863,13 @@ export function drawGlobalShadow(
                 elevationAtlasPixelSize,
                 metersPerPixelX,
                 metersPerPixelY,
+                skipNearCore: uniformValues['u_skip_near_core'] === 1,
                 progressivePhase: isProgressivePreview ? 'preview' : progressivePhase === 'full' ? 'full' : 'stable',
                 timestamp: performance.now()
             };
         }
         return;
     }
-    if (useLogSweep) {
-        const sweepStart = debugEnabled ? performance.now() : 0;
-        const sweepDebug = drawGlobalShadowSweep(painter, target, {
-            atlasBounds,
-            metersPerPixelX,
-            metersPerPixelY,
-            maxDistance: Number(uniformValues['u_max_distance']) || 5000,
-            sunDirection: uniformValues['u_sunDirection'] as [number, number],
-            sunAltitude: Number(uniformValues['u_sunAltitude']) || 0
-        });
-        const sweepMs = debugEnabled ? performance.now() - sweepStart : 0;
-
-        context.bindFramebuffer.set(null);
-        context.viewport.set([0, 0, painter.width, painter.height]);
-        markShadowAtlasReady(terrain, isNearAtlas);
-
-        if (debugEnabled) {
-            (window as any)[isNearAtlas ? '_shadowNearPassDebug' : '_shadowPassDebug'] = {
-                target,
-                algorithm: 'log-sweep',
-                durationMs: performance.now() - debugStart,
-                sweepMs,
-                passes: sweepDebug.passes,
-                maxSweepPixels: sweepDebug.maxSweepPixels,
-                maxDistance: uniformValues['u_max_distance'],
-                atlasPixelSize,
-                rawAtlasPixelSize: atlasPixelSize,
-                rawToFinalScale: 1,
-                elevationAtlasPixelSize,
-                metersPerPixelX,
-                metersPerPixelY,
-                progressivePhase: isProgressivePreview ? 'preview' : progressivePhase === 'full' ? 'full' : 'stable',
-                timestamp: performance.now()
-            };
-        }
-        return;
-    }
-
     if (!(globalThis as any)._shadowLogThrottle) (globalThis as any)._shadowLogThrottle = 0;
     if ((globalThis as any)._shadowLogThrottle++ % 60 === 0 || !((painter as any)._wasInteracting)) {
         // console.log(`[SHADOW] drawGlobalShadow triggered. maxSteps=${uniformValues['u_max_steps']}, stepMeters=${uniformValues['u_step_meters']}`);
@@ -931,6 +908,7 @@ export function drawGlobalShadow(
             elevationAtlasPixelSize,
             metersPerPixelX,
             metersPerPixelY,
+            skipNearCore: uniformValues['u_skip_near_core'] === 1,
             progressivePhase: isProgressivePreview ? 'preview' : progressivePhase === 'full' ? 'full' : 'stable',
             timestamp: performance.now()
         };
@@ -1078,13 +1056,8 @@ function drawGlobalShadowUpsample(painter: Painter, target: ShadowAtlasTarget = 
     const rawSize = shadowBlurTexture.size[0];
     const program = painter.useProgram('shadowBlur');
     const edgeCleanup = typeof window === 'undefined' || (window as any)._shadowEdgeCleanup !== false;
-    const shadowV2Active = typeof window !== 'undefined' &&
-        (((window as any).imageryState?.get?.('shadow-v2')?.enabled === true &&
-        ((window as any).imageryState?.get?.('shadow-v2')?.opacity ?? 1) > 0) ||
-        ((window as any).imageryState?.get?.('shadow-v3')?.enabled === true &&
-        ((window as any).imageryState?.get?.('shadow-v3')?.opacity ?? 1) > 0));
     const cleanupRadius = edgeCleanup ?
-        (shadowV2Active ? (isNearAtlas ? 0.28 : 0.42) : (isNearAtlas ? 0.55 : 0.85)) :
+        (isNearAtlas ? 0.28 : 0.42) :
         0.0;
 
     context.bindFramebuffer.set(terrainInstance.getFramebuffer(isNearAtlas ? 'near_shadow' : 'shadow').framebuffer);

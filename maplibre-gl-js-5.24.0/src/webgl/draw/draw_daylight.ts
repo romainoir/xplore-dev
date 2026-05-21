@@ -5,6 +5,7 @@ import { daylightPrepareUniformValues, daylightUniformValues } from '../program/
 import { horizonPrepareUniformValues } from '../program/horizon_program';
 import { Texture } from '../texture';
 import { Color } from '@maplibre/maplibre-gl-style-spec';
+import { RGBAImage } from '../../util/image';
 
 // Using SunCalc to generate solar positions
 import SunCalc from 'suncalc';
@@ -46,6 +47,28 @@ type HorizonQualitySettings = {
     edgeSoftness: number;
     edgeNaturalness: number;
 };
+
+function shouldHoldDaylightRefresh(painter: Painter): boolean {
+    if (typeof window === 'undefined') return !!painter.options.moving;
+    return !!painter.options.moving ||
+        (((window as any)._shadowCameraRefreshHold === true || (window as any)._shadowCameraMoving === true) &&
+            (window as any)._isInteractingWithTime !== true);
+}
+
+function getNeutralDaylightDerivativeTexture(painter: Painter): WebGLTexture | null {
+    const terrain = painter.style.map.terrain as any;
+    if (!terrain) return null;
+
+    if (!terrain._daylightNeutralDerivativeTexture) {
+        const context = painter.context;
+        const gl = context.gl;
+        const neutral = new RGBAImage({ width: 1, height: 1 }, new Uint8Array([128, 128, 0, 255]));
+        terrain._daylightNeutralDerivativeTexture = new Texture(context, neutral, gl.RGBA, { premultiply: false });
+        terrain._daylightNeutralDerivativeTexture.bind(gl.LINEAR, gl.CLAMP_TO_EDGE);
+    }
+
+    return terrain._daylightNeutralDerivativeTexture.texture;
+}
 
 const HORIZON_QUALITY_PRESETS: Record<string, HorizonQualitySettings> = {
     fast: {
@@ -442,6 +465,7 @@ function prepareDaylightDuration(
     context.viewport.set([0, 0, painter.width, painter.height]);
     terrain._daylightAtlasReady = true;
     terrain._daylightAtlasKey = daylightKey;
+    terrain._daylightAtlasBounds = terrain._elevationAtlasBounds ? [...terrain._elevationAtlasBounds] : null;
 
     if (debugEnabled) {
         (window as any)._daylightPrepareDebug = {
@@ -473,10 +497,26 @@ export function drawDaylight(
     if (painter.renderPass !== 'offscreen' && painter.renderPass !== 'translucent') return;
 
     if (painter.renderPass === 'offscreen') {
+        const terrain = painter.style.map.terrain as any;
+        const holdRefresh = shouldHoldDaylightRefresh(painter);
+        if (holdRefresh) {
+            if (typeof window !== 'undefined' && (window as any)._shadowTileDebugEnabled) {
+                (window as any)._daylightPrepareDebug = {
+                    layer: layer.id,
+                    skipped: true,
+                    reason: 'cached daylight during camera move',
+                    hasCachedDaylight: !!(terrain?._fboDaylightTexture && terrain?._daylightAtlasBounds),
+                    daylightKey: terrain._daylightAtlasKey,
+                    daylightAtlasSize: terrain?._fboDaylightTexture?.size?.[0],
+                    timestamp: performance.now()
+                };
+            }
+            return;
+        }
+
         const center = painter.transform.center;
         const date = getDaylightDate();
         const { lut, weight, sunriseWindowLUT, sunsetWindowLUT } = buildSolarLUT(date, center.lat, center.lng);
-        const terrain = painter.style.map.terrain as any;
         const atlasBounds = terrain?._elevationAtlasBounds as [number, number, number, number] | undefined;
         if (!atlasBounds) {
             const settings = getHorizonQualitySettings();
@@ -540,15 +580,22 @@ export function drawDaylight(
     const center = painter.transform.center;
     const date = getDaylightDate();
     const terrain = painter.style.map.terrain as any;
-    const atlasBounds = (terrain?._elevationAtlasBounds || [0, 0, 1, 1]) as [number, number, number, number];
+    const currentAtlasBounds = (terrain?._elevationAtlasBounds || [0, 0, 1, 1]) as [number, number, number, number];
     const horizonKey = terrain?._horizonAtlasKey || 'missing-horizon';
-    const daylightKey = getDaylightCacheKey(date, center.lat, center.lng, atlasBounds, horizonKey);
+    const daylightKey = getDaylightCacheKey(date, center.lat, center.lng, currentAtlasBounds, horizonKey);
     const colorRampTexture = getColorRampTexture(context, layer);
     if (!colorRampTexture) return;
 
-    const daylightReady = !!(terrain && terrain._fboDaylightTexture && terrain._daylightAtlasReady && terrain._daylightAtlasKey === daylightKey);
+    const daylightReadyExact = !!(terrain && terrain._fboDaylightTexture && terrain._daylightAtlasReady && terrain._daylightAtlasKey === daylightKey);
+    const cachedWhileMoving = shouldHoldDaylightRefresh(painter) &&
+        !!(terrain && terrain._fboDaylightTexture && terrain._daylightAtlasBounds);
+    const daylightReady = daylightReadyExact || cachedWhileMoving;
+    const sampleAtlasBounds = (daylightReadyExact ? currentAtlasBounds : terrain?._daylightAtlasBounds || currentAtlasBounds) as [number, number, number, number];
+    const neutralDerivativeTexture = getNeutralDaylightDerivativeTexture(painter);
     let drawnTiles = 0;
     let skippedTiles = 0;
+    let reliefReady = 0;
+    let reliefMissing = 0;
 
     for (const coord of coords) {
         const tile = tileManager.getTile(coord);
@@ -564,6 +611,8 @@ export function drawDaylight(
 
         const mesh = projection.getMeshFromTileID(context, coord.canonical, useBorder, true, 'raster');
         const terrainData = painter.style.map.terrain?.getTerrainData(coord);
+        const sourceTile = (terrainData as any)?.tile;
+        const derivativeTexture = sourceTile?.fbo?.colorAttachment.get() || null;
 
         const program = painter.useProgram('daylight');
 
@@ -576,11 +625,21 @@ export function drawDaylight(
         context.activeTexture.set(gl.TEXTURE1);
         colorRampTexture.bind(gl.LINEAR, gl.CLAMP_TO_EDGE);
 
+        context.activeTexture.set(gl.TEXTURE12);
+        gl.bindTexture(gl.TEXTURE_2D, derivativeTexture || neutralDerivativeTexture);
+
         const uniformValues = daylightUniformValues(
             layer,
             [coord.canonical.z, coord.canonical.x, coord.canonical.y],
-            atlasBounds
+            sampleAtlasBounds
         );
+        const td = terrainData as any;
+        uniformValues['u_dem_derivative'] = 12;
+        uniformValues['u_dem_derivative_available'] = derivativeTexture ? 1.0 : 0.0;
+        uniformValues['u_dem_derivative_dim'] = td?.['u_terrain_dim'] || 514;
+        uniformValues['u_dem_derivative_exag'] = td?.['u_terrain_exaggeration'] || 1.0;
+        if (derivativeTexture) reliefReady++;
+        else reliefMissing++;
 
         const projectionData = painter.transform.getProjectionData({
             overscaledTileID: coord,
@@ -601,6 +660,10 @@ export function drawDaylight(
             drawnTiles,
             skippedTiles,
             atlasReady: daylightReady,
+            atlasReadyExact: daylightReadyExact,
+            cachedWhileMoving,
+            reliefReady,
+            reliefMissing,
             daylightAtlasSize: terrain?._fboDaylightTexture?.size?.[0],
             horizonAtlasSize: terrain?._fboHorizon0Texture?.size?.[0],
             horizonKey,

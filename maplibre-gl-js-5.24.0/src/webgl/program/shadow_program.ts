@@ -20,6 +20,7 @@ export type ShadowGlobalUniformsType = {
     'u_metersPerPixel': Uniform2f;
     'u_dimension': Uniform2f;
     'u_atlas_bounds': Uniform4f;
+    'u_near_atlas_bounds': Uniform4f;
     'u_inv_proj_matrix': Uniform2f; // Dummy or specific inverse projection if needed
     'u_max_steps': Uniform1f;
     'u_step_meters': Uniform1f;
@@ -27,6 +28,7 @@ export type ShadowGlobalUniformsType = {
     'u_near_cascade_distance': Uniform1f;
     'u_mid_cascade_distance': Uniform1f;
     'u_ridge_sample_strength': Uniform1f;
+    'u_skip_near_core': Uniform1f;
 };
 
 export type ShadowUniformsType = {
@@ -133,6 +135,7 @@ const shadowGlobalUniforms = (context: Context, locations: UniformLocations): Sh
     'u_metersPerPixel': new Uniform2f(context, locations.u_metersPerPixel),
     'u_dimension': new Uniform2f(context, locations.u_dimension),
     'u_atlas_bounds': new Uniform4f(context, locations.u_atlas_bounds),
+    'u_near_atlas_bounds': new Uniform4f(context, locations.u_near_atlas_bounds),
     'u_inv_proj_matrix': new Uniform2f(context, locations.u_inv_proj_matrix),
     'u_max_steps': new Uniform1f(context, locations.u_max_steps),
     'u_step_meters': new Uniform1f(context, locations.u_step_meters),
@@ -140,6 +143,7 @@ const shadowGlobalUniforms = (context: Context, locations: UniformLocations): Sh
     'u_near_cascade_distance': new Uniform1f(context, locations.u_near_cascade_distance),
     'u_mid_cascade_distance': new Uniform1f(context, locations.u_mid_cascade_distance),
     'u_ridge_sample_strength': new Uniform1f(context, locations.u_ridge_sample_strength),
+    'u_skip_near_core': new Uniform1f(context, locations.u_skip_near_core),
 });
 
 const shadowUniforms = (context: Context, locations: UniformLocations): ShadowUniformsType => ({
@@ -390,6 +394,9 @@ const shadowGlobalUniformValues = (
 ): UniformValues<ShadowGlobalUniformsType> => {
     const terrain = painter.style.map.terrain;
     const atlasBounds = options.atlasBounds || (terrain as any)?._elevationAtlasBounds || [0, 0, 1, 1];
+    const nearAtlasBounds = options.target === 'near' ?
+        ((terrain as any)?._shadowNearAtlasPendingBounds || (terrain as any)?._shadowNearAtlasBounds || [0, 0, 0, 0]) :
+        ((terrain as any)?._shadowNearAtlasBounds || [0, 0, 0, 0]);
 
     const shadowProps = layer.getShadowProperties();
     const dirRad = shadowProps.directionRadians;
@@ -408,6 +415,15 @@ const shadowGlobalUniformValues = (
     const progressivePhase = typeof window !== 'undefined' ? (window as any)._shadowProgressivePhase : '';
     const isProgressivePreview = progressivePhase === 'preview';
     const isNearRefine = options.target === 'near' || progressivePhase === 'refine';
+    const shadowV3Active = typeof window !== 'undefined' &&
+        (window as any).imageryState?.get?.('shadow-v3')?.enabled === true &&
+        ((window as any).imageryState?.get?.('shadow-v3')?.opacity ?? 1) > 0;
+    const canSkipNearCore = options.target !== 'near' &&
+        shadowV3Active &&
+        !!(terrain as any)?._shadowNearAtlasReady &&
+        !(terrain as any)?._shadowNearAtlasStale &&
+        typeof window !== 'undefined' &&
+        (window as any)._shadowV3SkipGlobalNearCore !== false;
 
     const atlasGsd = Math.max(metersPerPixelX, metersPerPixelY);
     const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
@@ -447,7 +463,8 @@ const shadowGlobalUniformValues = (
             target: options.target || 'global',
             interacting: isMapMoving || isTimeSliding || isProgressivePreview,
             timeSliding: isTimeSliding,
-            ridgeSampleStrength
+            ridgeSampleStrength,
+            skipNearCore: canSkipNearCore
         };
     }
 
@@ -458,6 +475,7 @@ const shadowGlobalUniformValues = (
         'u_metersPerPixel': [metersPerPixelX, metersPerPixelY],
         'u_dimension': [options.elevationAtlasSize || Terrain.ATLAS_SIZE, options.elevationAtlasSize || Terrain.ATLAS_SIZE],
         'u_atlas_bounds': atlasBounds,
+        'u_near_atlas_bounds': nearAtlasBounds,
         'u_inv_proj_matrix': [0, 0], // Map to atlas using bounds instead
         'u_max_steps': maxSteps,
         'u_step_meters': stepMeters,
@@ -465,6 +483,7 @@ const shadowGlobalUniformValues = (
         'u_near_cascade_distance': nearDistance,
         'u_mid_cascade_distance': midDistance,
         'u_ridge_sample_strength': clamp(ridgeSampleStrength, 0.0, 1.0),
+        'u_skip_near_core': canSkipNearCore ? 1.0 : 0.0,
     };
 };
 

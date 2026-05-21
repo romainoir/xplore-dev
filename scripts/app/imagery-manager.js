@@ -31,11 +31,8 @@ function createTilePreviewUrl(template, coords = WMTS_PREVIEW_COORDS) {
 
 // ─── IMAGERY_OPTIONS ───
 export const IMAGERY_OPTIONS = Object.freeze([
-    { id: 'shadow', label: 'Shadows', type: 'shadow-layer', linkedLayerIds: ['shadow-coarse'], previewImage: './data/icons_Xmap/shadow.png', defaultOpacity: 1.0, defaultVisible: false },
-    { id: 'shadow-v2', label: 'Shadows V2', type: 'shadow-layer', linkedLayerIds: ['shadow-v2-coarse'], previewImage: './data/icons_Xmap/shadow.png', defaultOpacity: 1.0, defaultVisible: false },
-    { id: 'shadow-v3', label: 'Shadows V3', type: 'shadow-layer', linkedLayerIds: ['shadow-v3-coarse'], previewImage: './data/icons_Xmap/shadow.png', defaultOpacity: 1.0, defaultVisible: false },
-    { id: 'daylight', label: 'Sunlight Hours', type: 'native-layer', layerId: 'daylight-native', previewImage: './data/icons_Xmap/daylight.png', defaultOpacity: 0.78, defaultVisible: false },
-    { id: 'daylight-v2', label: 'Sunlight Hours V2', type: 'native-layer', layerId: 'daylight-v2-native', previewImage: './data/icons_Xmap/daylight.png', defaultOpacity: 0.94, defaultVisible: false },
+    { id: 'shadow-v3', label: 'Shadows', type: 'shadow-layer', linkedLayerIds: ['shadow-v3-coarse'], previewImage: './data/icons_Xmap/shadow.png', defaultOpacity: 1.0, defaultVisible: false },
+    { id: 'daylight', label: 'Sunlight Hours', type: 'native-layer', layerId: 'daylight-native', previewImage: './data/icons_Xmap/daylight.png', defaultOpacity: 0.94, defaultVisible: false },
     { id: 'sunrise-window', label: 'First Sun', type: 'native-layer', layerId: 'sunrise-window-native', previewImage: './data/icons_Xmap/daylight.png', defaultOpacity: 0.86, defaultVisible: false },
     { id: 'sunset-window', label: 'Last Sun', type: 'native-layer', layerId: 'sunset-window-native', previewImage: './data/icons_Xmap/daylight.png', defaultOpacity: 0.86, defaultVisible: false },
     {
@@ -81,7 +78,7 @@ export const IMAGERY_OPTIONS = Object.freeze([
 
 // ─── LAYER_GROUPS ───
 export const LAYER_GROUPS = Object.freeze([
-    { id: 'sun-analysis', label: 'Sun Analysis', exclusive: true, members: ['shadow', 'shadow-v2', 'shadow-v3', 'daylight', 'daylight-v2', 'sunrise-window', 'sunset-window'] },
+    { id: 'sun-analysis', label: 'Sun Analysis', exclusive: true, members: ['shadow-v3', 'daylight', 'sunrise-window', 'sunset-window'] },
     { id: 'vector', label: 'Vector', exclusive: false, members: ['contours', 'osm-features'] },
     { id: 'wikimedia-photos', label: 'Wikimedia Photos', exclusive: true, members: ['wikimedia-photos'] },
     { id: 'heatmap', label: 'Heatmap', exclusive: true, members: ['strava-heatmap-all', 'strava-winter', 'strava-backcountry-ski', 'strava-cycling', 'strava-run', 'ign-traces-hivernales'] },
@@ -106,8 +103,8 @@ export const ROUTE_LAYER_ORDER_TOP_TO_BOTTOM = Object.freeze([
 
 export const IMAGERY_OPTIONS_BY_ID = new Map(IMAGERY_OPTIONS.map(o => [o.id, o]));
 export const SUN_DURATION_ADDON_IDS = Object.freeze(['sunrise-window', 'sunset-window']);
-const SUN_DURATION_MODE_IDS = Object.freeze(['daylight', 'daylight-v2', ...SUN_DURATION_ADDON_IDS]);
-const SHADOW_MODE_IDS = Object.freeze(['shadow', 'shadow-v2', 'shadow-v3']);
+const SUN_DURATION_MODE_IDS = Object.freeze(['daylight', ...SUN_DURATION_ADDON_IDS]);
+const SHADOW_MODE_IDS = Object.freeze(['shadow-v3']);
 const SUN_ANALYSIS_IDS = Object.freeze([...SHADOW_MODE_IDS, ...SUN_DURATION_MODE_IDS]);
 
 export function clampOpacity(value) {
@@ -180,7 +177,7 @@ export function createImageryManager(map, deps = {}) {
         color: 'rgba(139, 90, 43, 0.2)',   // brown, 20% opacity
     };
 
-    const SHADOW_TOOLBOX_IDS = ['shadow', 'shadow-v2', 'shadow-v3', 'daylight', 'daylight-v2', ...SUN_DURATION_ADDON_IDS];
+    const SHADOW_TOOLBOX_IDS = ['shadow-v3', 'daylight', ...SUN_DURATION_ADDON_IDS];
     const TERRAIN_TOOLBOX_IDS = ['aspect', 'slope', 'avalanche'];
     const SNOW_TOOLBOX_IDS = ['snow', 'snow-depth'];
 
@@ -326,7 +323,7 @@ export function createImageryManager(map, deps = {}) {
         }
 
         // 2. Terrain analysis & snow layers — above basemaps
-        const terrainNativeLayers = ['normalmap', 'snow-native', 'snow-depth', 'aspect-native', 'slope-native', 'avalanche-native', 'shadow-coarse', 'shadow-v2-coarse', 'shadow-v3-coarse', 'daylight-native', 'daylight-v2-native', 'sunrise-window-native', 'sunset-window-native'];
+        const terrainNativeLayers = ['normalmap', 'snow-native', 'snow-depth', 'aspect-native', 'slope-native', 'avalanche-native', 'shadow-v3-coarse', 'daylight-native', 'sunrise-window-native', 'sunset-window-native'];
         if (topLabelId) {
             terrainNativeLayers.forEach(layerId => { if (map.getLayer(layerId)) map.moveLayer(layerId, topLabelId); });
         }

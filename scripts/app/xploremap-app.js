@@ -12,7 +12,7 @@ import { createImageryManager, IMAGERY_OPTIONS, LAYER_GROUP_BY_MEMBER_ID, SUN_DU
 import { applyOverlays, applyHillshadeAppearance, injectOverlaysIntoStyle } from './overlay-manager.js';
 import { createRoutingOrchestrator } from './routing-orchestrator.js';
 import { createShadowController } from './shadow-controller.js';
-import { initShadowV3DebugOverlay } from './shadow-v3-debug-overlay.js?v=20260520-shadow-v3-component-1';
+import { initShadowV3DebugOverlay } from './shadow-v3-debug-overlay.js?v=20260521-daylight-normal-z-relief';
 import {
   initTerrainAnalysisConfig,
   setupTerrainHoverInfo,
@@ -732,7 +732,7 @@ async function init() {
     if (toolboxes.terrain.box) toolboxes.terrain.box.textContent = '';
     if (toolboxes.snow.box) toolboxes.snow.box.textContent = '';
 
-    const SHADOW_MODE_IDS = ['shadow', 'shadow-v2', 'shadow-v3'];
+    const SHADOW_MODE_IDS = ['shadow-v3'];
     const disableShadowModes = () => {
       SHADOW_MODE_IDS.forEach((id) => {
         const state = imagery.imageryState.get(id);

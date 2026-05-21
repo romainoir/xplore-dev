@@ -55,6 +55,8 @@ export type TerrainUniformsType = {
     'u_shadow_near_debug_tint': Uniform1f;
     'u_shadow_display_mode': Uniform1f;
     'u_shadow_component_mode': Uniform1f;
+    'u_shadow_near_replace_mode': Uniform1f;
+    'u_shadow_global_softness': Uniform1f;
     'u_horizon_available': Uniform1f;
     'u_horizon_bins': Uniform1f;
     'u_horizon_edge_softness': Uniform1f;
@@ -135,6 +137,8 @@ const terrainUniforms = (context: Context, locations: UniformLocations): Terrain
     'u_shadow_near_debug_tint': new Uniform1f(context, locations.u_shadow_near_debug_tint),
     'u_shadow_display_mode': new Uniform1f(context, locations.u_shadow_display_mode),
     'u_shadow_component_mode': new Uniform1f(context, locations.u_shadow_component_mode),
+    'u_shadow_near_replace_mode': new Uniform1f(context, locations.u_shadow_near_replace_mode),
+    'u_shadow_global_softness': new Uniform1f(context, locations.u_shadow_global_softness),
     'u_horizon_available': new Uniform1f(context, locations.u_horizon_available),
     'u_horizon_bins': new Uniform1f(context, locations.u_horizon_bins),
     'u_horizon_edge_softness': new Uniform1f(context, locations.u_horizon_edge_softness),
@@ -183,9 +187,7 @@ function imageryLayerEnabled(id: string): boolean {
 
 function getActiveShadowLayer(painter?: Painter | null, zoom: number = 0): any | null {
     const candidates: Array<[string, string]> = [
-        ['shadow-v3', 'shadow-v3-coarse'],
-        ['shadow-v2', 'shadow-v2-coarse'],
-        ['shadow', 'shadow-coarse']
+        ['shadow-v3', 'shadow-v3-coarse']
     ];
 
     for (const [stateId, layerId] of candidates) {
@@ -242,7 +244,6 @@ const terrainUniformValues = (
         }
     }
 
-    const activeShadowIsV2 = activeShadowLayer?.id === 'shadow-v2-coarse' || activeShadowLayer?.id === 'shadow-v3-coarse';
     const activeShadowIsV3 = activeShadowLayer?.id === 'shadow-v3-coarse';
     const contactBlockedByInteraction = !!painter?.options?.moving ||
         !!painter?.options?.rotating ||
@@ -284,15 +285,21 @@ const terrainUniformValues = (
         })(),
         'u_shadow_near_available': (() => {
             const terrain = painter?.style?.map?.terrain as any;
-            return terrain?._shadowNearAtlasReady && terrain?._fboNearShadowTexture ? 1.0 : 0.0;
+            const hidingStaleTimeNear = terrain?._shadowNearAtlasStale === true &&
+                terrain?._shadowNearAtlasStaleReason === 'time';
+            return terrain?._shadowNearAtlasReady && terrain?._fboNearShadowTexture && !hidingStaleTimeNear ? 1.0 : 0.0;
         })(),
         'u_shadow_near_fade': (() => {
             const map = painter?.style?.map as any;
             const terrain = map?.terrain as any;
-            if (!terrain?._shadowNearAtlasReady || !terrain?._fboNearShadowTexture) return 0.0;
+            const hidingStaleTimeNear = terrain?._shadowNearAtlasStale === true &&
+                terrain?._shadowNearAtlasStaleReason === 'time';
+            if (!terrain?._shadowNearAtlasReady || !terrain?._fboNearShadowTexture || hidingStaleTimeNear) return 0.0;
             const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
             const start = Number.isFinite(terrain._shadowNearAtlasReadyAt) ? terrain._shadowNearAtlasReadyAt : now;
-            const duration = 360;
+            const duration = typeof window !== 'undefined' && Number.isFinite((window as any)._shadowV3NearFadeMs) ?
+                Math.max(120, (window as any)._shadowV3NearFadeMs) :
+                1200;
             const fade = Math.max(0, Math.min(1, (now - start) / duration));
             if (fade < 1 && !terrain._shadowNearFadeRepaintQueued) {
                 terrain._shadowNearFadeRepaintQueued = true;
@@ -307,7 +314,7 @@ const terrainUniformValues = (
             return fade;
         })(),
         'u_shadow_near_debug_tint': (typeof window !== 'undefined' && (window as any)._shadowNearDebugTint === true) ? 1.0 : 0.0,
-        'u_shadow_display_mode': activeShadowIsV2 ? 1.0 : 0.0,
+        'u_shadow_display_mode': activeShadowLayer ? 1.0 : 0.0,
         'u_shadow_component_mode': (() => {
             if (!activeShadowIsV3 || typeof window === 'undefined') return 0.0;
             const mode = (window as any)._shadowV3ComponentMode;
@@ -316,6 +323,13 @@ const terrainUniformValues = (
             if (mode === 'self') return 3.0;
             return 0.0;
         })(),
+        'u_shadow_near_replace_mode': activeShadowIsV3 &&
+            (typeof window === 'undefined' || (window as any)._shadowV3NearReplace !== false) ? 1.0 : 0.0,
+        'u_shadow_global_softness': activeShadowIsV3 &&
+            typeof window !== 'undefined' &&
+            Number.isFinite((window as any)._shadowV3GlobalSoftness) ?
+            Math.max(1.0, Math.min(3.0, (window as any)._shadowV3GlobalSoftness)) :
+            activeShadowIsV3 ? 1.55 : 1.0,
         'u_horizon_available': (() => {
             if (typeof window === 'undefined' || (window as any)._shadowUseHorizonCurrent !== true) return 0.0;
             const terrain = painter?.style?.map?.terrain as any;
@@ -329,9 +343,7 @@ const terrainUniformValues = (
         'u_igor_relief_enabled': (() => {
             if (typeof window !== 'undefined') {
                 const imageryState = (window as any).imageryState;
-                const shadowEnabled = imageryState?.get?.('shadow')?.enabled === true ||
-                    imageryState?.get?.('shadow-v2')?.enabled === true ||
-                    imageryState?.get?.('shadow-v3')?.enabled === true;
+                const shadowEnabled = imageryState?.get?.('shadow-v3')?.enabled === true;
                 return shadowEnabled ? 1.0 : 0.0;
             }
             return 0.0;
@@ -343,7 +355,7 @@ const terrainUniformValues = (
             return activeShadowLayer?.getShadowProperties ? activeShadowLayer.getShadowProperties().altitudeRadians : 0.5;
         })(),
         'u_sun_direction': (() => {
-            if (activeShadowIsV2 && typeof window !== 'undefined') {
+            if (activeShadowIsV3 && typeof window !== 'undefined') {
                 const sunDirection = (window as any)._shadowSunDirection;
                 if (Array.isArray(sunDirection) && sunDirection.length >= 2 &&
                     Number.isFinite(sunDirection[0]) && Number.isFinite(sunDirection[1])) {

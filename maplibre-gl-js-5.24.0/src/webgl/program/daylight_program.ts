@@ -14,6 +14,11 @@ export type DaylightUniformsType = {
     'u_color_ramp': Uniform1i;
     'u_opacity': Uniform1f;
     'u_daylight_mode': Uniform1f;
+    'u_dem_derivative': Uniform1i;
+    'u_dem_derivative_available': Uniform1f;
+    'u_dem_derivative_dim': Uniform1f;
+    'u_dem_derivative_exag': Uniform1f;
+    'u_daylight_relief_strength': Uniform1f;
     'u_tile_id': Uniform3f;
     'u_atlas_bounds': Uniform4f;
 };
@@ -57,6 +62,11 @@ const daylightUniforms = (context: Context, locations: UniformLocations): Daylig
     'u_color_ramp': new Uniform1i(context, locations.u_color_ramp),
     'u_opacity': new Uniform1f(context, locations.u_opacity),
     'u_daylight_mode': new Uniform1f(context, locations.u_daylight_mode),
+    'u_dem_derivative': new Uniform1i(context, locations.u_dem_derivative),
+    'u_dem_derivative_available': new Uniform1f(context, locations.u_dem_derivative_available),
+    'u_dem_derivative_dim': new Uniform1f(context, locations.u_dem_derivative_dim),
+    'u_dem_derivative_exag': new Uniform1f(context, locations.u_dem_derivative_exag),
+    'u_daylight_relief_strength': new Uniform1f(context, locations.u_daylight_relief_strength),
     'u_tile_id': new Uniform3f(context, locations.u_tile_id),
     'u_atlas_bounds': new Uniform4f(context, locations.u_atlas_bounds),
 });
@@ -110,6 +120,18 @@ const daylightUniformValues = (
         'u_color_ramp': 1,
         'u_opacity': opacity,
         'u_daylight_mode': daylightMode,
+        'u_dem_derivative': 12,
+        'u_dem_derivative_available': 0,
+        'u_dem_derivative_dim': 514,
+        'u_dem_derivative_exag': 1.0,
+        'u_daylight_relief_strength': (() => {
+            if (typeof window !== 'undefined') {
+                if ((window as any)._daylightReliefEnabled === false) return 0.0;
+                const value = (window as any)._daylightReliefStrength;
+                if (Number.isFinite(value)) return Math.max(0, Math.min(1, value));
+            }
+            return daylightMode > 0 ? 0.22 : 0.30;
+        })(),
         'u_tile_id': tileID,
         'u_atlas_bounds': atlasBounds,
     };

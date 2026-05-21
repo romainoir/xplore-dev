@@ -113,10 +113,15 @@ export class Terrain {
     _fboNearShadowTexture: Texture;
     _fboNearShadowBlurTexture: Texture;
     _fboDaylightTexture: Texture;
+    _fboNearDaylightTexture: Texture;
     _fboHorizon0Texture: Texture;
     _fboHorizon1Texture: Texture;
     _fboHorizon2Texture: Texture;
     _fboHorizon3Texture: Texture;
+    _fboNearHorizon0Texture: Texture;
+    _fboNearHorizon1Texture: Texture;
+    _fboNearHorizon2Texture: Texture;
+    _fboNearHorizon3Texture: Texture;
     _shadowHiZTextures: Array<Texture>;
     _shadowHiZFbos: Array<Framebuffer>;
     _horizonAtlasSize: number;
@@ -188,6 +193,29 @@ export class Terrain {
         delete (this as any)._horizonAtlasKey;
     }
 
+    _destroyNearHorizonAtlases() {
+        if (this._fboNearHorizon0Texture) this._fboNearHorizon0Texture.destroy();
+        if (this._fboNearHorizon1Texture) this._fboNearHorizon1Texture.destroy();
+        if (this._fboNearHorizon2Texture) this._fboNearHorizon2Texture.destroy();
+        if (this._fboNearHorizon3Texture) this._fboNearHorizon3Texture.destroy();
+        if (this._fboNearHorizon0) this._fboNearHorizon0.destroy();
+        if (this._fboNearHorizon1) this._fboNearHorizon1.destroy();
+        if (this._fboNearHorizon2) this._fboNearHorizon2.destroy();
+        if (this._fboNearHorizon3) this._fboNearHorizon3.destroy();
+        delete this._fboNearHorizon0Texture;
+        delete this._fboNearHorizon1Texture;
+        delete this._fboNearHorizon2Texture;
+        delete this._fboNearHorizon3Texture;
+        delete this._fboNearHorizon0;
+        delete this._fboNearHorizon1;
+        delete this._fboNearHorizon2;
+        delete this._fboNearHorizon3;
+        delete (this as any)._nearDaylightAtlasReady;
+        delete (this as any)._nearDaylightAtlasKey;
+        delete (this as any)._nearHorizonAtlasReady;
+        delete (this as any)._nearHorizonAtlasKey;
+    }
+
     _destroyShadowHiZ() {
         if (this._shadowHiZTextures) {
             for (const texture of this._shadowHiZTextures) {
@@ -215,6 +243,7 @@ export class Terrain {
         if (this._fboNearShadowTexture) this._fboNearShadowTexture.destroy();
         if (this._fboNearShadowBlurTexture) this._fboNearShadowBlurTexture.destroy();
         if (this._fboDaylightTexture) this._fboDaylightTexture.destroy();
+        if (this._fboNearDaylightTexture) this._fboNearDaylightTexture.destroy();
         if (this._fboElevation) this._fboElevation.destroy();
         if (this._fboShadow) this._fboShadow.destroy();
         if (this._fboShadowBlur) this._fboShadowBlur.destroy();
@@ -222,6 +251,7 @@ export class Terrain {
         if (this._fboNearShadow) this._fboNearShadow.destroy();
         if (this._fboNearShadowBlur) this._fboNearShadowBlur.destroy();
         if (this._fboDaylight) this._fboDaylight.destroy();
+        if (this._fboNearDaylight) this._fboNearDaylight.destroy();
         if (this._emptyDemTexture) this._emptyDemTexture.destroy();
         if (this._emptyDepthTexture) this._emptyDepthTexture.destroy();
         if (this._coordsTexture) this._coordsTexture.destroy();
@@ -229,6 +259,7 @@ export class Terrain {
             this._meshCache[key].destroy();
         }
         this._destroyHorizonAtlases();
+        this._destroyNearHorizonAtlases();
         this._destroyShadowHiZ();
     }
 
@@ -375,10 +406,15 @@ export class Terrain {
     _fboNearShadow: Framebuffer;
     _fboNearShadowBlur: Framebuffer;
     _fboDaylight: Framebuffer;
+    _fboNearDaylight: Framebuffer;
     _fboHorizon0: Framebuffer;
     _fboHorizon1: Framebuffer;
     _fboHorizon2: Framebuffer;
     _fboHorizon3: Framebuffer;
+    _fboNearHorizon0: Framebuffer;
+    _fboNearHorizon1: Framebuffer;
+    _fboNearHorizon2: Framebuffer;
+    _fboNearHorizon3: Framebuffer;
     static readonly ATLAS_SIZE = 2048;
     static readonly SHADOW_ATLAS_SIZE = 2048;
     static readonly NEAR_SHADOW_ATLAS_SIZE = 2048;
@@ -399,6 +435,7 @@ export class Terrain {
             if (this._fboNearShadowTexture) this._fboNearShadowTexture.destroy();
             if (this._fboNearShadowBlurTexture) this._fboNearShadowBlurTexture.destroy();
             if (this._fboDaylightTexture) this._fboDaylightTexture.destroy();
+            if (this._fboNearDaylightTexture) this._fboNearDaylightTexture.destroy();
             this._destroyShadowHiZ();
             if (this._fboElevation) this._fboElevation.destroy();
             if (this._fboShadow) this._fboShadow.destroy();
@@ -407,6 +444,7 @@ export class Terrain {
             if (this._fboNearShadow) this._fboNearShadow.destroy();
             if (this._fboNearShadowBlur) this._fboNearShadowBlur.destroy();
             if (this._fboDaylight) this._fboDaylight.destroy();
+            if (this._fboNearDaylight) this._fboNearDaylight.destroy();
             delete this._fbo;
             delete this._fboDepthTexture;
             delete this._fboElevationTexture;
@@ -416,6 +454,7 @@ export class Terrain {
             delete this._fboNearShadowTexture;
             delete this._fboNearShadowBlurTexture;
             delete this._fboDaylightTexture;
+            delete this._fboNearDaylightTexture;
             delete this._fboCoordsTexture;
             delete this._fboElevation;
             delete this._fboShadow;
@@ -424,6 +463,7 @@ export class Terrain {
             delete this._fboNearShadow;
             delete this._fboNearShadowBlur;
             delete this._fboDaylight;
+            delete this._fboNearDaylight;
             delete (this as any)._shadowAtlasReady;
             delete (this as any)._daylightAtlasReady;
             delete (this as any)._daylightAtlasKey;
@@ -432,6 +472,7 @@ export class Terrain {
             delete (this as any)._shadowAtlasReusedWhileMoving;
             delete (this as any)._shadowAtlasNeedsRefreshAfterCameraMove;
             this._destroyHorizonAtlases();
+            this._destroyNearHorizonAtlases();
         }
         if (!this._fboCoordsTexture) {
             this._fboCoordsTexture = new Texture(painter.context, { width, height, data: null }, painter.context.gl.RGBA, { premultiply: false });
@@ -454,34 +495,23 @@ export class Terrain {
         const elevationAtlasSize = shadowV3Active ?
             Math.max(baseAtlasSize, Math.min(maxTextureSize, Math.round(requestedV3AtlasSize))) :
             baseAtlasSize;
-        const requestedShadowAtlasSize = typeof window !== 'undefined' && Number.isFinite((window as any)._shadowAtlasSize) ?
-            Number((window as any)._shadowAtlasSize) :
-            Terrain.SHADOW_ATLAS_SIZE;
         const shadowAtlasSize = shadowV3Active ?
             elevationAtlasSize :
-            Math.max(baseAtlasSize, Math.min(maxTextureSize, Math.round(requestedShadowAtlasSize)));
-        const useLogSweep = typeof window !== 'undefined' && (window as any)._shadowUseLogSweep === true;
+            baseAtlasSize;
         const requestedShadowMaskScale = shadowV3Active ?
             (typeof window !== 'undefined' && Number.isFinite((window as any)._shadowV3MaskScale) ? Number((window as any)._shadowV3MaskScale) : 0.5) :
-            useLogSweep ? 1.0 : typeof window !== 'undefined' && Number.isFinite((window as any)._shadowMaskScale) ?
-                Number((window as any)._shadowMaskScale) :
-                0.5;
+            0.5;
         const shadowMaskScale = Math.max(0.25, Math.min(1.0, requestedShadowMaskScale));
         const shadowMaskSize = Math.max(512, Math.min(shadowAtlasSize, Math.round(shadowAtlasSize * shadowMaskScale)));
-        const requestedNearAtlasSize = typeof window !== 'undefined' && Number.isFinite((window as any)._shadowNearAtlasSize) ?
-            Number((window as any)._shadowNearAtlasSize) :
-            Terrain.NEAR_SHADOW_ATLAS_SIZE;
         const requestedV3NearAtlasSize = typeof window !== 'undefined' && Number.isFinite((window as any)._shadowV3NearAtlasSize) ?
             Number((window as any)._shadowV3NearAtlasSize) :
             requestedV3AtlasSize;
         const nearAtlasSize = shadowV3Active ?
             Math.max(512, Math.min(maxTextureSize, Math.round(requestedV3NearAtlasSize))) :
-            Math.max(512, Math.min(maxTextureSize, Math.round(requestedNearAtlasSize)));
+            baseAtlasSize;
         const requestedNearMaskScale = shadowV3Active ?
             (typeof window !== 'undefined' && Number.isFinite((window as any)._shadowV3NearMaskScale) ? Number((window as any)._shadowV3NearMaskScale) : 0.5) :
-            useLogSweep ? 1.0 : typeof window !== 'undefined' && Number.isFinite((window as any)._shadowNearMaskScale) ?
-                Number((window as any)._shadowNearMaskScale) :
-                1.0;
+            1.0;
         const nearMaskScale = Math.max(0.5, Math.min(1.0, requestedNearMaskScale));
         const nearMaskSize = Math.max(512, Math.min(nearAtlasSize, Math.round(nearAtlasSize * nearMaskScale)));
         if (this._fboElevationTexture && this._fboElevationTexture.size[0] !== elevationAtlasSize) {
@@ -508,6 +538,8 @@ export class Terrain {
             delete this._fboNearElevationTexture;
             delete this._fboNearElevation;
             delete (this as any)._shadowNearAtlasReady;
+            delete (this as any)._nearDaylightAtlasReady;
+            delete (this as any)._nearHorizonAtlasReady;
         }
         if (!this._fboNearElevationTexture) {
             this._fboNearElevationTexture = new Texture(painter.context, { width: nearAtlasSize, height: nearAtlasSize, data: null }, painter.context.gl.RGBA, { premultiply: false });
@@ -572,9 +604,23 @@ export class Terrain {
             this._fboDaylightTexture = new Texture(painter.context, { width: baseAtlasSize, height: baseAtlasSize, data: null }, painter.context.gl.RGBA, { premultiply: false });
             this._fboDaylightTexture.bind(painter.context.gl.LINEAR, painter.context.gl.CLAMP_TO_EDGE);
         }
+        if (this._fboNearDaylightTexture && this._fboNearDaylightTexture.size[0] !== baseAtlasSize) {
+            this._fboNearDaylightTexture.destroy();
+            if (this._fboNearDaylight) this._fboNearDaylight.destroy();
+            delete this._fboNearDaylightTexture;
+            delete this._fboNearDaylight;
+            delete (this as any)._nearDaylightAtlasReady;
+        }
+        if (!this._fboNearDaylightTexture) {
+            this._fboNearDaylightTexture = new Texture(painter.context, { width: baseAtlasSize, height: baseAtlasSize, data: null }, painter.context.gl.RGBA, { premultiply: false });
+            this._fboNearDaylightTexture.bind(painter.context.gl.LINEAR, painter.context.gl.CLAMP_TO_EDGE);
+        }
         const horizonAtlasSize = Math.max(512, Math.min(baseAtlasSize, Math.round(this._horizonAtlasSize || Terrain.HORIZON_ATLAS_SIZE)));
         if (this._fboHorizon0Texture && this._fboHorizon0Texture.size[0] !== horizonAtlasSize) {
             this._destroyHorizonAtlases();
+        }
+        if (this._fboNearHorizon0Texture && this._fboNearHorizon0Texture.size[0] !== horizonAtlasSize) {
+            this._destroyNearHorizonAtlases();
         }
         if (!this._fboHorizon0Texture) {
             this._fboHorizon0Texture = new Texture(painter.context, { width: horizonAtlasSize, height: horizonAtlasSize, data: null }, painter.context.gl.RGBA, { premultiply: false });
@@ -591,6 +637,22 @@ export class Terrain {
         if (!this._fboHorizon3Texture) {
             this._fboHorizon3Texture = new Texture(painter.context, { width: horizonAtlasSize, height: horizonAtlasSize, data: null }, painter.context.gl.RGBA, { premultiply: false });
             this._fboHorizon3Texture.bind(painter.context.gl.LINEAR, painter.context.gl.CLAMP_TO_EDGE);
+        }
+        if (!this._fboNearHorizon0Texture) {
+            this._fboNearHorizon0Texture = new Texture(painter.context, { width: horizonAtlasSize, height: horizonAtlasSize, data: null }, painter.context.gl.RGBA, { premultiply: false });
+            this._fboNearHorizon0Texture.bind(painter.context.gl.LINEAR, painter.context.gl.CLAMP_TO_EDGE);
+        }
+        if (!this._fboNearHorizon1Texture) {
+            this._fboNearHorizon1Texture = new Texture(painter.context, { width: horizonAtlasSize, height: horizonAtlasSize, data: null }, painter.context.gl.RGBA, { premultiply: false });
+            this._fboNearHorizon1Texture.bind(painter.context.gl.LINEAR, painter.context.gl.CLAMP_TO_EDGE);
+        }
+        if (!this._fboNearHorizon2Texture) {
+            this._fboNearHorizon2Texture = new Texture(painter.context, { width: horizonAtlasSize, height: horizonAtlasSize, data: null }, painter.context.gl.RGBA, { premultiply: false });
+            this._fboNearHorizon2Texture.bind(painter.context.gl.LINEAR, painter.context.gl.CLAMP_TO_EDGE);
+        }
+        if (!this._fboNearHorizon3Texture) {
+            this._fboNearHorizon3Texture = new Texture(painter.context, { width: horizonAtlasSize, height: horizonAtlasSize, data: null }, painter.context.gl.RGBA, { premultiply: false });
+            this._fboNearHorizon3Texture.bind(painter.context.gl.LINEAR, painter.context.gl.CLAMP_TO_EDGE);
         }
         if (!this._fbo) {
             this._fbo = painter.context.createFramebuffer(width, height, true, false);
@@ -657,6 +719,13 @@ export class Terrain {
             this._fboDaylight.colorAttachment.set(this._fboDaylightTexture.texture);
             return this._fboDaylight;
         }
+        if (texture === 'near_daylight') {
+            if (!this._fboNearDaylight) {
+                this._fboNearDaylight = painter.context.createFramebuffer(baseAtlasSize, baseAtlasSize, false, false);
+            }
+            this._fboNearDaylight.colorAttachment.set(this._fboNearDaylightTexture.texture);
+            return this._fboNearDaylight;
+        }
         if (texture === 'horizon0') {
             if (!this._fboHorizon0) {
                 this._fboHorizon0 = painter.context.createFramebuffer(horizonAtlasSize, horizonAtlasSize, false, false);
@@ -684,6 +753,34 @@ export class Terrain {
             }
             this._fboHorizon3.colorAttachment.set(this._fboHorizon3Texture.texture);
             return this._fboHorizon3;
+        }
+        if (texture === 'near_horizon0') {
+            if (!this._fboNearHorizon0) {
+                this._fboNearHorizon0 = painter.context.createFramebuffer(horizonAtlasSize, horizonAtlasSize, false, false);
+            }
+            this._fboNearHorizon0.colorAttachment.set(this._fboNearHorizon0Texture.texture);
+            return this._fboNearHorizon0;
+        }
+        if (texture === 'near_horizon1') {
+            if (!this._fboNearHorizon1) {
+                this._fboNearHorizon1 = painter.context.createFramebuffer(horizonAtlasSize, horizonAtlasSize, false, false);
+            }
+            this._fboNearHorizon1.colorAttachment.set(this._fboNearHorizon1Texture.texture);
+            return this._fboNearHorizon1;
+        }
+        if (texture === 'near_horizon2') {
+            if (!this._fboNearHorizon2) {
+                this._fboNearHorizon2 = painter.context.createFramebuffer(horizonAtlasSize, horizonAtlasSize, false, false);
+            }
+            this._fboNearHorizon2.colorAttachment.set(this._fboNearHorizon2Texture.texture);
+            return this._fboNearHorizon2;
+        }
+        if (texture === 'near_horizon3') {
+            if (!this._fboNearHorizon3) {
+                this._fboNearHorizon3 = painter.context.createFramebuffer(horizonAtlasSize, horizonAtlasSize, false, false);
+            }
+            this._fboNearHorizon3.colorAttachment.set(this._fboNearHorizon3Texture.texture);
+            return this._fboNearHorizon3;
         }
 
         this._fbo.colorAttachment.set(texture === 'coords' ? this._fboCoordsTexture.texture :

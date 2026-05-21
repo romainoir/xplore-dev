@@ -47,6 +47,8 @@ function getElements() {
     modeGlobal: document.getElementById('shadowV3DebugModeGlobal'),
     modeNear: document.getElementById('shadowV3DebugModeNear'),
     modeSelf: document.getElementById('shadowV3DebugModeSelf'),
+    nearReplace: document.getElementById('shadowV3DebugNearReplace'),
+    skipCore: document.getElementById('shadowV3DebugSkipCore'),
     copy: document.getElementById('shadowV3DebugCopy'),
     settingsToggle: document.getElementById('debugShadowV3AtlasToggle'),
   };
@@ -537,12 +539,13 @@ function buildDebugText(map) {
     '',
     `near atlas size=${nearMeta.size || '-'} cells=${nearMeta.tiles?.length || 0} lod=${nearMeta.lodZooms?.join('/') || '-'}`,
     `near bounds ${boundsLabel(nearMeta.bounds)}`,
+    `near cache ready=${map?.terrain?._shadowNearAtlasReady === true} stale=${map?.terrain?._shadowNearAtlasStale === true} reason=${map?.terrain?._shadowNearAtlasStaleReason || '-'}`,
     `near capture z ${formatCounts(nearMeta.captureZooms)}`,
     `near source z ${formatCounts(nearMeta.sourceZooms)}`,
     '',
     `reuse covered=${atlasReuse.reusedCoveredAtlas === true} cachedPhase=${atlasReuse.cachedAtlasPhase || '-'} requested=${atlasReuse.requestedBounds ? boundsLabel([atlasReuse.requestedBounds.minX, atlasReuse.requestedBounds.minY, atlasReuse.requestedBounds.maxX, atlasReuse.requestedBounds.maxY]) : '-'}`,
     '',
-    `shadow algo=${shadow.algorithm || 'raymarch'} duration=${fmtMs(shadow.durationMs)} upsample=${fmtMs(shadow.upsampleMs ?? shadow.blurMs)} size=${shadow.atlasPixelSize || '-'} raw=${shadow.rawAtlasPixelSize || '-'} scale=${fmtNum(shadow.rawToFinalScale, 2)}`,
+    `shadow algo=${shadow.algorithm || 'raymarch'} duration=${fmtMs(shadow.durationMs)} upsample=${fmtMs(shadow.upsampleMs ?? shadow.blurMs)} size=${shadow.atlasPixelSize || '-'} raw=${shadow.rawAtlasPixelSize || '-'} scale=${fmtNum(shadow.rawToFinalScale, 2)} skipNearCore=${shadow.skipNearCore === true}`,
     `shadow steps=${shadow.maxSteps ?? '-'} step=${shadow.stepMeters ?? '-'} maxDist=${shadow.maxDistance ?? '-'} mpp=${fmtNum(shadow.metersPerPixelX, 2)}/${fmtNum(shadow.metersPerPixelY, 2)}`,
     `near shadow algo=${nearShadow.algorithm || 'raymarch'} duration=${fmtMs(nearShadow.durationMs)} upsample=${fmtMs(nearShadow.upsampleMs ?? nearShadow.blurMs)} size=${nearShadow.atlasPixelSize || '-'} raw=${nearShadow.rawAtlasPixelSize || '-'}`,
     '',
@@ -551,7 +554,8 @@ function buildDebugText(map) {
     `source z ${formatCounts(terrain.sourceZooms)}`,
     '',
     `settings v3Atlas=${window._shadowV3AtlasSize || '-'} v3MaskScale=${window._shadowV3MaskScale ?? '-'} v3NearAtlas=${window._shadowV3NearAtlasSize || '-'} v3NearMaskScale=${window._shadowV3NearMaskScale ?? '-'}`,
-    `hiz=${window._shadowV3UseHiZ === true} logSweep=${window._shadowUseLogSweep === true} contact=${window._shadowV3ContactShadows === true}`,
+    `globalSoftness=${fmtNum(window._shadowV3GlobalSoftness ?? 1.55, 2)} nearFadeMs=${window._shadowV3NearFadeMs ?? 1200}`,
+    `hiz=${window._shadowV3UseHiZ === true} contact=${window._shadowV3ContactShadows === true} nearReplace=${window._shadowV3NearReplace !== false} skipCore=${window._shadowV3SkipGlobalNearCore !== false}`,
   ].join('\n');
 }
 
@@ -577,10 +581,13 @@ function createClipboardText(map) {
       shadowV3MaskScale: window._shadowV3MaskScale,
       shadowV3NearAtlasSize: window._shadowV3NearAtlasSize,
       shadowV3NearMaskScale: window._shadowV3NearMaskScale,
+      shadowV3GlobalSoftness: window._shadowV3GlobalSoftness,
+      shadowV3NearFadeMs: window._shadowV3NearFadeMs,
       shadowV3UseHiZ: window._shadowV3UseHiZ,
-      shadowUseLogSweep: window._shadowUseLogSweep,
       shadowV3ContactShadows: window._shadowV3ContactShadows,
       shadowV3ComponentMode: window._shadowV3ComponentMode,
+      shadowV3NearReplace: window._shadowV3NearReplace,
+      shadowV3SkipGlobalNearCore: window._shadowV3SkipGlobalNearCore,
     },
   };
   return `${buildDebugText(map)}\n\nraw snapshot\n${JSON.stringify(snapshot, null, 2)}`;
@@ -647,12 +654,21 @@ export function initShadowV3DebugOverlay(map) {
     els.modeGlobal?.setAttribute('data-active', String(mode === 'global'));
     els.modeNear?.setAttribute('data-active', String(mode === 'near'));
     els.modeSelf?.setAttribute('data-active', String(mode === 'self'));
+    els.nearReplace?.setAttribute('data-active', String(window._shadowV3NearReplace !== false));
+    els.skipCore?.setAttribute('data-active', String(window._shadowV3SkipGlobalNearCore !== false));
   };
 
   const setComponentMode = (mode) => {
     window._shadowV3ComponentMode = mode;
     updateComponentModeButtons();
     if (els.status) els.status.textContent = `Shadow V3 component mode: ${mode}`;
+    map.triggerRepaint?.();
+    refresh();
+  };
+
+  const toggleOptimizationFlag = (name) => {
+    window[name] = window[name] === false;
+    updateComponentModeButtons();
     map.triggerRepaint?.();
     refresh();
   };
@@ -830,6 +846,8 @@ export function initShadowV3DebugOverlay(map) {
   els.modeGlobal?.addEventListener('click', () => setComponentMode('global'));
   els.modeNear?.addEventListener('click', () => setComponentMode('near'));
   els.modeSelf?.addEventListener('click', () => setComponentMode('self'));
+  els.nearReplace?.addEventListener('click', () => toggleOptimizationFlag('_shadowV3NearReplace'));
+  els.skipCore?.addEventListener('click', () => toggleOptimizationFlag('_shadowV3SkipGlobalNearCore'));
   els.copy?.addEventListener('click', async () => {
     const text = createClipboardText(map);
     if (els.log) els.log.value = text;

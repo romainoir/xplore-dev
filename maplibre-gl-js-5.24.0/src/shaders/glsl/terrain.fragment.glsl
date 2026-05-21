@@ -26,6 +26,8 @@ uniform float u_shadow_near_fade;
 uniform float u_shadow_near_debug_tint;
 uniform float u_shadow_display_mode;
 uniform float u_shadow_component_mode;
+uniform float u_shadow_near_replace_mode;
+uniform float u_shadow_global_softness;
 uniform float u_horizon_available;
 uniform float u_horizon_bins;
 uniform float u_horizon_edge_softness;
@@ -136,17 +138,24 @@ vec2 samplePreparedDemGradient(vec2 coord) {
     return ((encoded - 0.5) * 8.0) * u_dem_ao_exag;
 }
 
+vec2 sampleCheapDemGradient(vec2 coord) {
+    vec2 safeCoord = clamp(coord, vec2(1.0), vec2(u_dem_ao_dim));
+    float left = sampleDemTexel(safeCoord + vec2(-1.0, 0.0));
+    float right = sampleDemTexel(safeCoord + vec2(1.0, 0.0));
+    float down = sampleDemTexel(safeCoord + vec2(0.0, -1.0));
+    float up = sampleDemTexel(safeCoord + vec2(0.0, 1.0));
+    return vec2(right - left, up - down) / (2.0 * max(u_dem_ao_meters_per_pixel, 1.0));
+}
+
 vec2 sampleReliefGradient(vec2 coord) {
     if (u_dem_derivative_available > 0.5) {
         return samplePreparedDemGradient(coord);
     }
 
-    // Do not run the 16-sample DEM Sobel fallback in the terrain fragment
-    // shader. During pan/zoom, newly visible tiles often do not have their
-    // prepared derivative texture yet; the fallback made those interactive
-    // frames dramatically more expensive. A neutral gradient is cheaper and
-    // the native derivative cache fills in after the camera settles.
-    return vec2(0.0);
+    // Keep relief shadows stable while MapLibre's derivative cache catches up.
+    // The full Sobel fallback is too expensive during pan/zoom, but a cheap
+    // central difference prevents tiles from briefly becoming flat/white.
+    return sampleCheapDemGradient(coord);
 }
 
 float skyAmbientAmount(float altitude) {
@@ -275,9 +284,10 @@ vec2 shadowAtlasEdgeNormal(vec2 atlasUV, float rawMask) {
 
 float remapShadowMask(float rawMask, vec2 atlasUV) {
     if (u_shadow_display_mode > 0.5) {
+        float globalSoftness = clamp(u_shadow_global_softness, 1.0, 3.0);
         float edgeGradient = fwidth(rawMask);
         float atlasFootprint = max(length(dFdx(atlasUV) * u_shadow_atlas_size), length(dFdy(atlasUV) * u_shadow_atlas_size));
-        float aa = clamp(max(edgeGradient * 0.36, 0.0035 + atlasFootprint * 0.0018), 0.0035, 0.026);
+        float aa = clamp(max(edgeGradient * mix(0.36, 0.58, (globalSoftness - 1.0) * 0.5), 0.0035 + atlasFootprint * mix(0.0018, 0.0042, (globalSoftness - 1.0) * 0.5)), 0.0035, 0.052);
         float base = smoothstep(0.10 - aa, 0.88 + aa, rawMask);
         if (edgeGradient < 0.0015 && (base < 0.001 || base > 0.999)) {
             return base;
@@ -286,11 +296,11 @@ float remapShadowMask(float rawMask, vec2 atlasUV) {
         vec2 edgeNormal = shadowAtlasEdgeNormal(atlasUV, rawMask);
         float atlasScale = max(u_shadow_atlas_size, 1.0);
         float lowSunSoftness = 1.0 - smoothstep(radians(10.0), radians(34.0), u_sun_altitude);
-        float radius = clamp(mix(0.80, 1.45, lowSunSoftness) + atlasFootprint * 0.28, 0.80, 2.10);
+        float radius = clamp((mix(0.92, 1.95, lowSunSoftness) + atlasFootprint * 0.42) * globalSoftness, 0.92, 5.40);
         float edgeBand = smoothstep(0.03, 0.42, base) * (1.0 - smoothstep(0.58, 0.98, base));
         float stableNoise = valueNoise(atlasUV * atlasScale * 0.65 + vec2(41.0, 137.0)) * 0.65 +
             valueNoise(atlasUV * atlasScale * 1.37 + vec2(211.0, 17.0)) * 0.35;
-        float jitter = (stableNoise - 0.5) * edgeBand * 0.018;
+        float jitter = (stableNoise - 0.5) * edgeBand * 0.013;
         vec2 texelNormal = edgeNormal / atlasScale;
         vec2 texelTangent = vec2(-texelNormal.y, texelNormal.x);
         float s0 = smoothstep(0.10 - aa + jitter, 0.88 + aa + jitter, rawMask);
@@ -298,10 +308,14 @@ float remapShadowMask(float rawMask, vec2 atlasUV) {
         float s2 = shadowHitAt(atlasUV - texelNormal * radius, aa, jitter * 0.35);
         float s3 = shadowHitAt(atlasUV + texelTangent * radius * 0.62, aa, jitter * 0.20);
         float s4 = shadowHitAt(atlasUV - texelTangent * radius * 0.62, aa, jitter * 0.20);
-        float filtered = (s0 * 2.60 + s1 * 0.92 + s2 * 0.92 + s3 * 0.42 + s4 * 0.42) / 5.28;
-        float crisp = smoothstep(0.16, 0.84, filtered);
+        float s5 = shadowHitAt(atlasUV + texelNormal * radius * 2.05 + texelTangent * radius * 0.25, aa, jitter * 0.16);
+        float s6 = shadowHitAt(atlasUV - texelNormal * radius * 2.05 - texelTangent * radius * 0.25, aa, jitter * 0.16);
+        float s7 = shadowHitAt(atlasUV + texelNormal * radius * 1.35 - texelTangent * radius * 0.95, aa, jitter * 0.12);
+        float s8 = shadowHitAt(atlasUV - texelNormal * radius * 1.35 + texelTangent * radius * 0.95, aa, jitter * 0.12);
+        float filtered = (s0 * 2.20 + s1 * 0.92 + s2 * 0.92 + s3 * 0.48 + s4 * 0.48 + s5 * 0.42 + s6 * 0.42 + s7 * 0.25 + s8 * 0.25) / 6.34;
+        float crisp = smoothstep(0.13, 0.87, filtered);
 
-        return clamp(mix(filtered, crisp, 0.10), 0.0, 1.0);
+        return clamp(mix(filtered, crisp, 0.05), 0.0, 1.0);
     }
 
     float edgeGradient = fwidth(rawMask);
@@ -596,16 +610,41 @@ void main() {
         float nearFade = smoothstep(0.0, 1.0, clamp(u_shadow_near_fade, 0.0, 1.0));
         float nearCoverage = nearAtlasCoverage(v_near_atlas_uv) * nearFade;
         float additiveShadow = max(shadowMask, nearShadowMask * nearCoverage);
-
-        // The global atlas is intentionally wide and coarse, so its transition
-        // pixels can remain visible around the refined near edge. Let the near
-        // atlas replace only partial global edges inside a stricter trusted
-        // region; preserve full global shadows for long-distance casters.
-        float globalPartialEdge = smoothstep(0.035, 0.30, shadowMask) * (1.0 - smoothstep(0.76, 0.97, shadowMask));
         float replaceCoverage = nearAtlasReplaceCoverage(v_near_atlas_uv);
-        float nearAddsDetail = smoothstep(-0.02, 0.10, nearShadowMask - shadowMask);
-        float replaceWeight = replaceCoverage * globalPartialEdge * nearFade * nearAddsDetail;
-        shadowMask = mix(additiveShadow, max(additiveShadow, nearShadowMask), replaceWeight);
+        if (!useGlobalCastShadow) {
+            shadowMask = nearShadowMask * nearCoverage;
+        } else if (u_shadow_near_replace_mode > 0.5) {
+            // V3 optimized composition:
+            // - outside near atlas: global remains authoritative;
+            // - border ring: additive blend avoids holes while near fades in;
+            // - trusted core: near replaces the coarse global edge, reducing
+            //   double-shadow halos and making the refined atlas visibly useful.
+            //
+            // At very low sun angles the global atlas may include long-range
+            // mountain casters outside the near atlas, so keep strong global
+            // shadows if the near atlas says "lit".
+            float lowSunLongShadow = 1.0 - smoothstep(radians(10.0), radians(22.0), u_sun_altitude);
+            float strongGlobalOnly = smoothstep(0.82, 0.98, shadowMask) * (1.0 - smoothstep(0.08, 0.36, nearShadowMask));
+            float preserveLongGlobal = strongGlobalOnly * lowSunLongShadow * 0.82;
+
+            // Fade shadow creation and shadow removal differently. New near
+            // contact shadows can appear early, but removing a coarse global
+            // shadow must be delayed; otherwise the cross-fade briefly exposes
+            // the white base as a bright halo before the refined mask settles.
+            float nearLighter = smoothstep(0.02, 0.18, shadowMask - nearShadowMask);
+            float addReplaceFade = smoothstep(0.04, 0.92, nearFade);
+            float removeReplaceFade = smoothstep(0.42, 1.0, nearFade);
+            float replaceFade = mix(addReplaceFade, removeReplaceFade, nearLighter);
+            float replaceWeight = replaceCoverage * replaceFade * (1.0 - preserveLongGlobal);
+            float stableBase = mix(additiveShadow, shadowMask, nearLighter * (1.0 - addReplaceFade));
+            shadowMask = mix(stableBase, nearShadowMask, replaceWeight);
+        } else {
+            // Legacy V3 blend kept as a runtime fallback for visual A/B.
+            float globalPartialEdge = smoothstep(0.035, 0.30, shadowMask) * (1.0 - smoothstep(0.76, 0.97, shadowMask));
+            float nearAddsDetail = smoothstep(-0.02, 0.10, nearShadowMask - shadowMask);
+            float replaceWeight = replaceCoverage * globalPartialEdge * nearFade * nearAddsDetail;
+            shadowMask = mix(additiveShadow, max(additiveShadow, nearShadowMask), replaceWeight);
+        }
         nearContribution = max(shadowMask - previousShadowMask, 0.0);
     }
     if (u_shadow_near_debug_tint > 0.5 && nearShadowMask > 0.01) {

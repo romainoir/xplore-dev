@@ -40,13 +40,9 @@ export function applyHillshadeAppearance(map) {
     if (!map.getLayer('hillshade')) return;
 
     const style = HILLSHADE_METHOD_STYLES.igor;
-    const shadowState = typeof window !== 'undefined' ? window.imageryState?.get?.('shadow') : null;
-    const shadowV2State = typeof window !== 'undefined' ? window.imageryState?.get?.('shadow-v2') : null;
     const shadowV3State = typeof window !== 'undefined' ? window.imageryState?.get?.('shadow-v3') : null;
     const suppressNativeHillshade = Boolean(
         (typeof window !== 'undefined' && window._xploreShadowSuppressesNativeHillshade === true) ||
-        (shadowState?.enabled && clampOpacity(shadowState.opacity ?? 0) > 0) ||
-        (shadowV2State?.enabled && clampOpacity(shadowV2State.opacity ?? 0) > 0) ||
         (shadowV3State?.enabled && clampOpacity(shadowV3State.opacity ?? 0) > 0)
     );
     map.setPaintProperty('hillshade', 'hillshade-illumination-anchor', 'map');
@@ -167,8 +163,6 @@ export function applyOverlays(map, deps = {}) {
         if (Array.isArray(option.linkedLayerIds)) option.linkedLayerIds.forEach(id => { if (typeof id === 'string') layerIds.push(id); });
         layerIds.forEach(rmL);
     });
-    ['shadow-detail', 'shadow-native', 'detail-native'].forEach(rmL);
-
     // Remove existing imagery sources (but NOT DEM sources — preserved by injection)
     IMAGERY_OPTIONS.forEach(option => {
         const sourceIds = [];
@@ -242,29 +236,6 @@ export function applyOverlays(map, deps = {}) {
         source: 'terrainSource',
         layout: { 'visibility': 'none' },
         paint: {
-            'daylight-opacity': 0.78,
-            'daylight-color-ramp': [
-                'interpolate',
-                ['linear'],
-                ['line-progress'],
-                0.0, '#440154',
-                0.15, '#46327e',
-                0.32, '#365c8d',
-                0.50, '#277f8e',
-                0.64, '#2fb47c',
-                0.78, '#b8de29',
-                0.90, '#fdae32',
-                1.0, '#d7191c'
-            ]
-        }
-    }, topLabelId || undefined);
-
-    ensureL({
-        id: 'daylight-v2-native',
-        type: 'daylight',
-        source: 'terrainSource',
-        layout: { 'visibility': 'none' },
-        paint: {
             'daylight-opacity': 0.94,
             'daylight-color-ramp': [
                 'interpolate',
@@ -315,40 +286,6 @@ export function applyOverlays(map, deps = {}) {
 
     // ─── Raymarched cast shadows. Keep this on the same terrainSource path as
     // shadow_debug_poc.html; horizon atlases are reserved for daylight duration.
-    ensureL({
-        id: 'shadow-coarse',
-        type: 'shadow',
-        source: 'terrainSource',
-        layout: { 'visibility': 'none' },
-        paint: {
-            'shadow-opacity': 1.0,
-            'shadow-color': '#000000',
-            'shadow-shadow-color': '#000000',
-            'shadow-highlight-color': '#ffffff',
-            'shadow-direction': 315,
-            'shadow-altitude': 45,
-            'shadow-max-distance': 8000,
-            'shadow-penumbra': 1.0
-        }
-    });
-
-    ensureL({
-        id: 'shadow-v2-coarse',
-        type: 'shadow',
-        source: 'terrainSource',
-        layout: { 'visibility': 'none' },
-        paint: {
-            'shadow-opacity': 1.0,
-            'shadow-color': '#000000',
-            'shadow-shadow-color': '#000000',
-            'shadow-highlight-color': '#ffffff',
-            'shadow-direction': 315,
-            'shadow-altitude': 45,
-            'shadow-max-distance': 8000,
-            'shadow-penumbra': 1.0
-        }
-    });
-
     ensureL({
         id: 'shadow-v3-coarse',
         type: 'shadow',

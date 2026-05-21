@@ -702,13 +702,7 @@ export class Painter {
             doUpdate = true;
         }
 
-        const shadowV3Active = typeof window !== 'undefined' &&
-            (window as any).imageryState?.get?.('shadow-v3')?.enabled === true &&
-            ((window as any).imageryState?.get?.('shadow-v3')?.opacity ?? 1) > 0;
-        const shadowV2Active = typeof window !== 'undefined' &&
-            (window as any).imageryState?.get?.('shadow-v2')?.enabled === true &&
-            ((window as any).imageryState?.get?.('shadow-v2')?.opacity ?? 1) > 0;
-        const shadowLayer = this.style.getLayer(shadowV3Active ? 'shadow-v3-coarse' : shadowV2Active ? 'shadow-v2-coarse' : 'shadow-coarse') as ShadowStyleLayer;
+        const shadowLayer = this.style.getLayer('shadow-v3-coarse') as ShadowStyleLayer;
         let shadowPropsChanged = false;
         let shadowProps: ReturnType<ShadowStyleLayer['getShadowProperties']> | null = null;
         if (shadowLayer) {

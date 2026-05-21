@@ -317,22 +317,22 @@ function lerpNumber(a: number, b: number, t: number): number {
     return a * (1 - t) + b * t;
 }
 
-function getShadowAtlasLodOptions(previewAtlas: boolean, detailedV2: boolean): AtlasLodOptions {
+function getShadowAtlasLodOptions(previewAtlas: boolean, detailedAtlas: boolean): AtlasLodOptions {
     const profile = typeof window !== 'undefined' ? (window as any)._shadowReachProfile : null;
     const longReach = clamp(numberFromProfile(profile, 'longReach', 0), 0, 1);
 
     if (previewAtlas) {
-        const previewScale = detailedV2 ? 0.78 : 1.0;
+        const previewScale = detailedAtlas ? 0.78 : 1.0;
         return {
-            maxTiles: Math.round(detailedV2 ? clamp(numberFromProfile(profile, 'previewMaxTiles', 28) * 0.86, 26, 42) : numberFromProfile(profile, 'previewMaxTiles', 28)),
-            maxCoreTiles: Math.round(detailedV2 ? clamp(numberFromProfile(profile, 'previewMaxCoreTiles', 10) * 1.18, 12, 18) : numberFromProfile(profile, 'previewMaxCoreTiles', 10)),
-            zoomBias: numberFromProfile(profile, 'previewZoomBias', -1.35) + (detailedV2 ? 0.48 : 0),
+            maxTiles: Math.round(detailedAtlas ? clamp(numberFromProfile(profile, 'previewMaxTiles', 28) * 0.86, 26, 42) : numberFromProfile(profile, 'previewMaxTiles', 28)),
+            maxCoreTiles: Math.round(detailedAtlas ? clamp(numberFromProfile(profile, 'previewMaxCoreTiles', 10) * 1.18, 12, 18) : numberFromProfile(profile, 'previewMaxCoreTiles', 10)),
+            zoomBias: numberFromProfile(profile, 'previewZoomBias', -1.35) + (detailedAtlas ? 0.48 : 0),
             midReachMeters: Math.round(numberFromProfile(profile, 'previewMidReachMeters', 1400) * previewScale),
             farReachMeters: Math.round(numberFromProfile(profile, 'previewFarReachMeters', 3400) * previewScale)
         };
     }
 
-    if (detailedV2) {
+    if (detailedAtlas) {
         const midReach = numberFromProfile(profile, 'midReachMeters', MID_SHADOW_REACH_METERS) * lerpNumber(0.58, 0.82, longReach);
         const farReach = numberFromProfile(profile, 'farReachMeters', SHADOW_REACH_METERS) * lerpNumber(0.52, 0.86, longReach);
         return {
@@ -353,11 +353,11 @@ function getShadowAtlasLodOptions(previewAtlas: boolean, detailedV2: boolean): A
     };
 }
 
-function getShadowNearAtlasLodOptions(detailedV2: boolean): AtlasLodOptions {
+function getShadowNearAtlasLodOptions(detailedAtlas: boolean): AtlasLodOptions {
     const profile = typeof window !== 'undefined' ? (window as any)._shadowReachProfile : null;
     const longReach = clamp(numberFromProfile(profile, 'longReach', 0), 0, 1);
 
-    if (detailedV2) {
+    if (detailedAtlas) {
         return {
             maxTiles: Math.round(numberFromProfile(profile, 'refineMaxTiles', 58)),
             maxCoreTiles: Math.round(numberFromProfile(profile, 'refineMaxCoreTiles', 42)),
@@ -507,14 +507,8 @@ function drawElevationAtlas(painter: Painter, terrain: Terrain, target: 'global'
     const shadowV3Active = typeof window !== 'undefined' &&
         (window as any).imageryState?.get?.('shadow-v3')?.enabled === true &&
         ((window as any).imageryState?.get?.('shadow-v3')?.opacity ?? 1) > 0;
-    const shadowV2Active = typeof window !== 'undefined' &&
-        (window as any).imageryState?.get?.('shadow-v2')?.enabled === true &&
-        ((window as any).imageryState?.get?.('shadow-v2')?.opacity ?? 1) > 0;
-    const daylightV2Active = typeof window !== 'undefined' &&
-        (window as any).imageryState?.get?.('daylight-v2')?.enabled === true &&
-        ((window as any).imageryState?.get?.('daylight-v2')?.opacity ?? 1) > 0;
-    const detailedV2 = shadowV3Active || shadowV2Active || daylightV2Active;
-    const shadowLayer = painter.style.getLayer(shadowV3Active ? 'shadow-v3-coarse' : shadowV2Active ? 'shadow-v2-coarse' : 'shadow-coarse') as ShadowStyleLayer;
+    const detailedAtlas = shadowV3Active;
+    const shadowLayer = painter.style.getLayer('shadow-v3-coarse') as ShadowStyleLayer;
     const sunDir = shadowLayer ? shadowLayer.getShadowProperties() : { directionRadians: 0 };
     const dxRes = Math.sin(sunDir.directionRadians);
     const dyRes = -Math.cos(sunDir.directionRadians);
@@ -556,7 +550,7 @@ function drawElevationAtlas(painter: Painter, terrain: Terrain, target: 'global'
     const targetMaxZoom = sourceMaxZoom + terrainDeltaZoom;
     const progressivePhase = typeof window !== 'undefined' ? (window as any)._shadowProgressivePhase : '';
     const previewAtlas = !isNearAtlas && progressivePhase === 'preview';
-    const atlasLodOptions = isNearAtlas ? getShadowNearAtlasLodOptions(detailedV2) : getShadowAtlasLodOptions(previewAtlas, detailedV2);
+    const atlasLodOptions = isNearAtlas ? getShadowNearAtlasLodOptions(detailedAtlas) : getShadowAtlasLodOptions(previewAtlas, detailedAtlas);
     const atlasCells = collectLodTileIDs(
         { minX, minY, maxX, maxY },
         dxRes,
@@ -594,10 +588,18 @@ function drawElevationAtlas(painter: Painter, terrain: Terrain, target: 'global'
 
     // Store Atlas Bounds in terrain object for the shadow raymarcher to use
     if (isNearAtlas) {
-        (terrain as any)._shadowNearAtlasBounds = [minX, minY, maxX, maxY];
-        (terrain as any)._shadowNearAtlasVisibleBounds = [visibleBounds.minX, visibleBounds.minY, visibleBounds.maxX, visibleBounds.maxY];
-        (terrain as any)._shadowNearAtlasReady = false;
-        delete (terrain as any)._shadowNearAtlasReadyAt;
+        // Keep active near bounds paired with the active near shadow texture.
+        // The near elevation atlas may be redrawn one frame before the near
+        // shadow pass completes; publishing these bounds early makes the old
+        // near shadow sample with a new projection, which looks like flicker
+        // or a static shadow layer while the camera/time changes.
+        (terrain as any)._shadowNearAtlasPendingBounds = [minX, minY, maxX, maxY];
+        (terrain as any)._shadowNearAtlasPendingVisibleBounds = [visibleBounds.minX, visibleBounds.minY, visibleBounds.maxX, visibleBounds.maxY];
+        (terrain as any)._shadowNearAtlasStale = true;
+        if (!(terrain as any)._fboNearShadowTexture) {
+            (terrain as any)._shadowNearAtlasReady = false;
+            delete (terrain as any)._shadowNearAtlasReadyAt;
+        }
     } else {
         (terrain as any)._elevationAtlasBounds = [minX, minY, maxX, maxY];
         (terrain as any)._elevationAtlasVisibleBounds = [visibleBounds.minX, visibleBounds.minY, visibleBounds.maxX, visibleBounds.maxY];
@@ -605,8 +607,7 @@ function drawElevationAtlas(painter: Painter, terrain: Terrain, target: 'global'
         (terrain as any)._elevationAtlasScreenClamped = atlasVisible.screenClamped;
         (terrain as any)._elevationAtlasScreenTop = atlasVisible.screenTop;
         (terrain as any)._elevationAtlasProgressivePhase = previewAtlas ? 'preview' : progressivePhase === 'full' ? 'full' : 'stable';
-        (terrain as any)._shadowNearAtlasReady = false;
-        delete (terrain as any)._shadowNearAtlasReadyAt;
+        (terrain as any)._shadowNearAtlasStale = true;
         (terrain as any)._daylightAtlasReady = false;
         (terrain as any)._horizonAtlasReady = false;
     }

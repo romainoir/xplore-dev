@@ -202,11 +202,8 @@ export function updateAnalyticalLegends(map, imageryState, updateShadowTime) {
     if (imageryState.get('snow')?.enabled) activeAnalyzers.push('snow');
     if (imageryState.get('snow-depth')?.enabled) activeAnalyzers.push('snow-depth');
     if (
-        imageryState.get('shadow')?.enabled ||
-        imageryState.get('shadow-v2')?.enabled ||
         imageryState.get('shadow-v3')?.enabled ||
         imageryState.get('daylight')?.enabled ||
-        imageryState.get('daylight-v2')?.enabled ||
         imageryState.get('sunrise-window')?.enabled ||
         imageryState.get('sunset-window')?.enabled
     ) activeAnalyzers.push('shadow');
@@ -369,9 +366,7 @@ function createShadowLegend(map, updateShadowTime, imageryState) {
     const content = document.createElement('div');
     content.className = 'shadow-legend__content';
 
-    const shadowActive = imageryState?.get?.('shadow')?.enabled === true ||
-        imageryState?.get?.('shadow-v2')?.enabled === true ||
-        imageryState?.get?.('shadow-v3')?.enabled === true;
+    const shadowActive = imageryState?.get?.('shadow-v3')?.enabled === true;
     const now = new Date(window.skySimulationDate || Date.now());
     const startOfYear = new Date(now.getFullYear(), 0, 0);
     const diff = now - startOfYear;
@@ -556,7 +551,7 @@ export function setupTerrainHoverInfo(map, imageryState) {
             return;
         }
 
-        if (activeLayer === 'daylight' || activeLayer === 'daylight-v2' || activeLayer === 'sunrise-window' || activeLayer === 'sunset-window') {
+        if (activeLayer === 'daylight' || activeLayer === 'sunrise-window' || activeLayer === 'sunset-window') {
             const content = buildSunExposureHoverContent(map, e.lngLat, activeLayer);
             if (content) {
                 hoverEl.innerHTML = content;
@@ -615,7 +610,6 @@ function getActiveAnalysisLayer(imageryState) {
     if (!imageryState) return null;
     if (imageryState.get('sunrise-window')?.enabled) return 'sunrise-window';
     if (imageryState.get('sunset-window')?.enabled) return 'sunset-window';
-    if (imageryState.get('daylight-v2')?.enabled) return 'daylight-v2';
     if (imageryState.get('daylight')?.enabled) return 'daylight';
     if (imageryState.get('avalanche')?.enabled) return 'avalanche';
     if (imageryState.get('slope')?.enabled) return 'slope';
