@@ -1,0 +1,36 @@
+<svg width="32" height="32" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <g id="dense-leaf" fill="none" stroke="#34482e" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.05">
+      <path d="M0 4v-7.2"/>
+      <path d="M0-3.5c-1.7-2.6-4.8-.6-3.5 1.8-2.5.3-2.4 3.6.2 3.5.6 1.8 3.3 1.8 3.6 0 2.2.9 4-2 1.9-3.2 1-2.3-1.9-3.8-2.2-2.1z"/>
+      <path d="M-2.1.8c1-.6 2.1-.6 3.2-.1"/>
+    </g>
+    <g id="dense-pine" fill="none" stroke="#2d412e" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.05">
+      <path d="M0 4.1v-8"/>
+      <path d="m0-7.2-3.1 4h1.9L-4 .4h2.4L-4 4h8L1.6.4H4l-2.8-3.6h1.9z"/>
+    </g>
+  </defs>
+  <g opacity=".82">
+    <use href="#dense-leaf" transform="translate(5 7) rotate(-8) scale(.68)"/>
+    <use href="#dense-leaf" transform="translate(13 10) rotate(11) scale(.62)"/>
+    <use href="#dense-pine" transform="translate(23 6) rotate(-5) scale(.6)"/>
+    <use href="#dense-leaf" transform="translate(34 9) rotate(8) scale(.7)"/>
+    <use href="#dense-pine" transform="translate(45 6) rotate(12) scale(.62)"/>
+    <use href="#dense-leaf" transform="translate(57 10) rotate(-10) scale(.66)"/>
+    <use href="#dense-pine" transform="translate(8 22) rotate(7) scale(.62)"/>
+    <use href="#dense-leaf" transform="translate(18 20) rotate(-12) scale(.72)"/>
+    <use href="#dense-leaf" transform="translate(28 25) rotate(9) scale(.66)"/>
+    <use href="#dense-pine" transform="translate(39 20) rotate(-5) scale(.7)"/>
+    <use href="#dense-leaf" transform="translate(52 23) rotate(13) scale(.72)"/>
+    <use href="#dense-leaf" transform="translate(4 38) rotate(12) scale(.66)"/>
+    <use href="#dense-pine" transform="translate(16 36) rotate(-9) scale(.68)"/>
+    <use href="#dense-leaf" transform="translate(26 40) rotate(5) scale(.76)"/>
+    <use href="#dense-leaf" transform="translate(38 35) rotate(-14) scale(.64)"/>
+    <use href="#dense-pine" transform="translate(49 41) rotate(8) scale(.66)"/>
+    <use href="#dense-leaf" transform="translate(59 38) rotate(-5) scale(.62)"/>
+    <use href="#dense-pine" transform="translate(10 55) rotate(10) scale(.62)"/>
+    <use href="#dense-leaf" transform="translate(23 53) rotate(-6) scale(.7)"/>
+    <use href="#dense-pine" transform="translate(35 56) rotate(13) scale(.58)"/>
+    <use href="#dense-leaf" transform="translate(50 54) rotate(7) scale(.74)"/>
+  </g>
+</svg>

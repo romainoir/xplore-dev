@@ -1,0 +1,29 @@
+<svg width="32" height="32" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <g id="pine" fill="none" stroke="#2d412e" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.2">
+      <path d="M0 4.5v-9.4"/>
+      <path d="m0-8.8-3.9 5.1h2.3L-5.2.8h3L-5 5.1H5L2.2.8h3L1.6-3.7h2.3z"/>
+      <path d="M-2.8 1.1H2.8"/>
+    </g>
+    <g id="small-pine" fill="none" stroke="#2d412e" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.1">
+      <path d="M0 4v-8"/>
+      <path d="m0-7.4-3.2 4.2h2L-4.2.5h2.5L-4 4h8L1.7.5h2.5l-3-3.7h2z"/>
+    </g>
+  </defs>
+  <g opacity=".84">
+    <use href="#pine" transform="translate(6 7) rotate(-4) scale(.78)"/>
+    <use href="#small-pine" transform="translate(19 5) rotate(5) scale(.68)"/>
+    <use href="#pine" transform="translate(36 8) rotate(8) scale(.76)"/>
+    <use href="#small-pine" transform="translate(54 6) rotate(-9) scale(.66)"/>
+    <use href="#small-pine" transform="translate(12 20) rotate(11) scale(.68)"/>
+    <use href="#pine" transform="translate(28 22) rotate(-7) scale(.88)"/>
+    <use href="#pine" transform="translate(48 19) rotate(5) scale(.74)"/>
+    <use href="#small-pine" transform="translate(4 36) rotate(-10) scale(.64)"/>
+    <use href="#pine" transform="translate(20 39) rotate(6) scale(.8)"/>
+    <use href="#small-pine" transform="translate(38 35) rotate(12) scale(.7)"/>
+    <use href="#pine" transform="translate(56 40) rotate(-6) scale(.78)"/>
+    <use href="#pine" transform="translate(12 55) rotate(7) scale(.74)"/>
+    <use href="#small-pine" transform="translate(31 53) rotate(-8) scale(.67)"/>
+    <use href="#pine" transform="translate(50 55) rotate(10) scale(.82)"/>
+  </g>
+</svg>

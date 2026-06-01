@@ -1392,6 +1392,8 @@ body {
   border: 1px solid var(--glass-border) !important;
   border-radius: 12px !important;
   margin-top: 8px !important;
+  max-height: 384px !important;
+  overflow-y: auto !important;
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5) !important;
 }
 
@@ -1404,6 +1406,76 @@ body {
 .header-geocoder .suggestions>li>a:hover {
   background: rgba(255, 255, 255, 0.15) !important;
   color: #fff !important;
+}
+
+.header-geocoder .xplore-search-result {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  width: 100%;
+}
+
+.header-geocoder .xplore-search-result__icon {
+  width: 18px;
+  height: 18px;
+  background: var(--xplore-search-icon-color, #7bb7ff);
+  -webkit-mask-image: var(--xplore-search-icon-url);
+  mask-image: var(--xplore-search-icon-url);
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.45));
+}
+
+.header-geocoder .xplore-search-result__body {
+  min-width: 0;
+}
+
+.header-geocoder .xplore-search-result__title {
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.95);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.header-geocoder .xplore-search-result__title strong {
+  color: #fff;
+  font-weight: 800;
+}
+
+.header-geocoder .xplore-search-result__meta {
+  display: flex;
+  min-width: 0;
+  gap: 8px;
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.header-geocoder .xplore-search-result__meta span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.header-geocoder .xplore-search-result__elevation {
+  color: rgba(132, 190, 255, 0.95);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .maplibre-preload__logo {
@@ -6813,6 +6885,186 @@ input[type="file"].hidden-file-input {
 
 .toast--info .toast-icon {
   background: #3498db;
+}
+
+/* Peak label DOM badges. Native Peak labels still handle rank/collision. */
+.xplore-peak-marker {
+  --peak-label-scale: 1;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.xplore-peak-marker__body {
+  position: absolute;
+  bottom: -3px;
+  left: 0;
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  transform: translateX(-50%) scale(var(--peak-label-scale));
+  transform-origin: 50% 100%;
+  will-change: transform;
+}
+
+.xplore-peak-marker__row {
+  display: flex;
+  align-items: center;
+  filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.34));
+}
+
+.xplore-peak-marker__badge {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: stretch;
+  height: 27px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.26);
+  border-radius: 7px;
+  background: rgba(28, 35, 38, 0.22);
+  color: #fff;
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 12px;
+  font-weight: 750;
+  letter-spacing: 0;
+  line-height: 27px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85), 0 0 3px rgba(0, 0, 0, 0.72);
+  white-space: nowrap;
+  backdrop-filter: blur(5px);
+}
+
+.xplore-peak-marker__name {
+  display: block;
+  max-width: 165px;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0 9px 0 10px;
+  text-overflow: ellipsis;
+}
+
+.xplore-peak-marker__elevation {
+  display: block;
+  min-width: 54px;
+  padding: 0 9px;
+  border-left: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.13);
+  color: #fff;
+  text-align: center;
+}
+
+.xplore-peak-marker__icon-slot {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 0;
+  height: 29px;
+}
+
+.xplore-peak-marker__star,
+.xplore-peak-marker__mountain {
+  display: none;
+  flex: 0 0 auto;
+}
+
+.xplore-peak-marker--starred .xplore-peak-marker__star {
+  display: block;
+  width: 24px;
+  height: 24px;
+  margin-left: -4px;
+  transform: translateY(-10px);
+}
+
+.xplore-peak-marker__star svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  fill: #fff;
+  stroke: rgba(0, 0, 0, 0.72);
+  stroke-linejoin: round;
+  stroke-width: 2.5;
+}
+
+.xplore-peak-marker--highest .xplore-peak-marker__mountain {
+  display: block;
+  width: 30px;
+  height: 30px;
+  margin-left: 3px;
+  transform: translateY(-10px);
+}
+
+.xplore-peak-marker__mountain svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.xplore-peak-marker__mountain-bg {
+  fill: #ff3f55;
+  stroke: rgba(255, 255, 255, 0.84);
+  stroke-width: 2.6;
+}
+
+.xplore-peak-marker__mountain-shape,
+.xplore-peak-marker__mountain-star {
+  fill: #fff;
+}
+
+.xplore-peak-marker__mountain-cut {
+  fill: #ff3f55;
+}
+
+.xplore-peak-marker__mountain-star {
+  stroke: rgba(0, 0, 0, 0.55);
+  stroke-linejoin: round;
+  stroke-width: 1.6;
+}
+
+.xplore-peak-marker__leader {
+  display: block;
+  width: 1px;
+  height: 38px;
+  margin-top: -1px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.56);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.28);
+}
+
+.xplore-peak-marker__dot {
+  display: block;
+  width: 7px;
+  height: 7px;
+  margin-top: -1px;
+  border: 1px solid rgba(255, 255, 255, 0.92);
+  border-radius: 50%;
+  background: rgba(22, 28, 32, 0.92);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.38);
+}
+
+@media (max-width: 720px) {
+  .xplore-peak-marker__badge {
+    height: 27px;
+    font-size: 12px;
+    line-height: 27px;
+  }
+
+  .xplore-peak-marker__name {
+    max-width: 132px;
+    padding-inline: 9px;
+  }
+
+  .xplore-peak-marker__elevation {
+    min-width: 54px;
+    padding-inline: 8px;
+  }
+
+  .xplore-peak-marker__leader {
+    height: 36px;
+  }
 }
 
 /* Wikimedia Photo Hover Morph Bubble */

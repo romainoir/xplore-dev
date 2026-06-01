@@ -69,6 +69,10 @@ export function createViewModeController(map, options = {}) {
   let moveEndHandler = null;
   let isInternalChange = false;
 
+  function shadowAtmosphereActive() {
+    return typeof window !== 'undefined' && window._xploreShadowAtmosphereActive === true;
+  }
+
   function setSunAnalysisTerrainFlag(required) {
     if (typeof window !== 'undefined') {
       window._xploreSunAnalysisTerrain = Boolean(required);
@@ -143,6 +147,7 @@ export function createViewModeController(map, options = {}) {
     // Kill-switch: window._disableGlare = true to skip all glare updates
     if (typeof window !== 'undefined' && window._disableGlare) return;
     if (skipSky) return;
+    if (!shadowAtmosphereActive()) return;
     if (currentMode !== VIEW_MODES.THREED || !lastSimulationDate) return;
 
     // Debounce: wait 100ms after last moveend before updating
@@ -190,6 +195,7 @@ export function createViewModeController(map, options = {}) {
 
   function applySky(is3D, simulationDate = null) {
     if (skipSky) return; // Feature gate: sky/fog disabled
+    if (!shadowAtmosphereActive()) return;
     if (typeof map.setSky !== 'function') {
       return;
     }
@@ -444,6 +450,8 @@ export function createViewModeController(map, options = {}) {
     if (simulationDate) {
       lastSimulationDate = simulationDate;
     }
+
+    if (!shadowAtmosphereActive()) return;
 
     if (currentMode === VIEW_MODES.THREED) {
       applySky(true, simulationDate);

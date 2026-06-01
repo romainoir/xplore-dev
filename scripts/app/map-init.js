@@ -3,10 +3,12 @@
  */
 
 import {
-    DEFAULT_3D_ORIENTATION,
     TILE_FADE_DURATION,
 } from '../config/map-config.js';
 import { initializeGeocoder } from '../map/geocoder-control.js';
+
+const XPLORE_OUTDOOR_STYLE_URL = './xplore_outdoor_hybrid-2.json?v=20260525-relief-wip';
+const CARTES_SPRITE_URL = new URL('../../data/cartes-sprite/sprite', import.meta.url).href;
 
 // ─── UI icon images data-icon-id → src ───
 const UI_ICON_SOURCES = Object.freeze({
@@ -66,7 +68,7 @@ function updatePeakLabelLayer(map, layerId) {
         'format',
         ['coalesce', ['get', 'name:en'], ['get', 'name']], { 'font-scale': 1 },
         '\n', {},
-        ['concat', ['number-format', ['get', 'ele'], { 'maximumFractionDigits': 0 }], ' m'], { 'font-scale': 0.85 }
+        ['concat', ['number-format', ['get', 'ele'], { 'max-fraction-digits': 0 }], ' m'], { 'font-scale': 0.85 }
     ];
     map.setLayoutProperty(layerId, 'icon-image', PEAK_POINTER_ID);
     map.setLayoutProperty(layerId, 'icon-size', 0.42);
@@ -111,8 +113,10 @@ export function rebuildBaseStyleLayerBuckets() {
         const idLower = layerId.toLowerCase();
         const isRoadLike = sourceLayer.includes('road') || sourceLayer.includes('highway')
             || sourceLayer.includes('transport') || sourceLayer.includes('cycle')
+            || sourceLayer.includes('route')
             || sourceLayer.includes('rail') || idLower.includes('road')
-            || idLower.includes('path') || idLower.includes('track') || idLower.includes('rail');
+            || idLower.includes('path') || idLower.includes('track') || idLower.includes('rail')
+            || idLower.includes('cycle') || idLower.includes('route');
         const isBuilding = sourceLayer.includes('building') || idLower.includes('building');
         const isBoundary = sourceLayer.includes('boundary') || idLower.includes('boundary');
         const isWaterway = sourceLayer.includes('waterway') || idLower.includes('river')
@@ -185,9 +189,10 @@ export function parseAndCacheBaseStyleLayers(style) {
 export async function createMap() {
     unregisterLegacyServiceWorker();
 
-    // Fetch OpenFreeMap Liberty style
-    const versaStyle = await fetch('https://tiles.openfreemap.org/styles/liberty', { cache: 'no-store' }).then(r => r.json());
+    // Fetch the local vector style used by the app.
+    const versaStyle = await fetch(XPLORE_OUTDOOR_STYLE_URL, { cache: 'no-store' }).then(r => r.json());
     versaStyle.projection = { type: 'mercator' };
+    versaStyle.sprite = CARTES_SPRITE_URL;
     versaStyle.sky = { 'sky-color': '#bcd0e6', 'horizon-color': '#e6effa', 'sky-horizon-blend': 0.5 };
     versaStyle.light = { 'anchor': 'map', 'position': [1.5, 90, 80] };
 
@@ -200,8 +205,8 @@ export async function createMap() {
         hash: true,
         center: [7.6586, 45.9763],
         zoom: 11.7,
-        pitch: DEFAULT_3D_ORIENTATION.pitch,
-        bearing: DEFAULT_3D_ORIENTATION.bearing,
+        pitch: 0,
+        bearing: 0,
         style: versaStyle,
         minZoom: 6,
         maxZoom: 18,

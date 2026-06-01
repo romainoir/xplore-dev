@@ -9,6 +9,17 @@ const CAMERA_SHADOW_SETTLE_MS = 300;
 const CAMERA_SHADOW_REFINE_DELAY_MS = 450;
 const CAMERA_SHADOW_IDLE_TIMEOUT_MS = 1800;
 const SHADOW_RENDER_LAYER_IDS = Object.freeze(['shadow-v3-coarse']);
+const NATIVE_HILLSHADE_LAYER_IDS = Object.freeze(['hillshade', 'hillshade2']);
+const NATIVE_HILLSHADE_PAINT_PROPS = Object.freeze([
+    'hillshade-illumination-anchor',
+    'hillshade-method',
+    'hillshade-illumination-direction',
+    'hillshade-illumination-altitude',
+    'hillshade-shadow-color',
+    'hillshade-highlight-color',
+    'hillshade-accent-color',
+    'hillshade-exaggeration'
+]);
 
 function clamp(value, min, max) {
     return Math.max(min, Math.min(max, value));
@@ -120,7 +131,19 @@ function setDefaultGlobal(name, value) {
     if (window[name] === undefined) window[name] = value;
 }
 
+function cloneStyleValue(value) {
+    if (value === undefined) return undefined;
+    try {
+        return typeof structuredClone === 'function'
+            ? structuredClone(value)
+            : JSON.parse(JSON.stringify(value));
+    } catch (_) {
+        return value;
+    }
+}
+
 function ensureShadowRuntimeDefaults() {
+    setDefaultGlobal('_xploreShadowAtmosphereActive', false);
     setDefaultGlobal('_shadowTileDebugEnabled', false);
     setDefaultGlobal('_shadowUseHorizonCurrent', false);
     setDefaultGlobal('_terrainNativeDemZoom', true);
@@ -174,6 +197,73 @@ export function createShadowController(map, deps = {}) {
     let cameraShadowIdleTimer = null;
     let cameraShadowRefineTimer = null;
     let cameraShadowIdleRelease = null;
+    let shadowAtmosphereActive = Boolean(window._xploreShadowAtmosphereActive);
+    let atmosphereSnapshot = null;
+    let nativeHillshadePaintSnapshot = null;
+
+    function captureAtmosphereSnapshot() {
+        if (atmosphereSnapshot || !map) return;
+        atmosphereSnapshot = {
+            sky: typeof map.getSky === 'function' ? cloneStyleValue(map.getSky()) : undefined,
+            light: typeof map.getLight === 'function' ? cloneStyleValue(map.getLight()) : undefined
+        };
+    }
+
+    function restoreAtmosphereSnapshot() {
+        if (!map) return;
+        try {
+            if (typeof map.setSky === 'function') {
+                map.setSky(atmosphereSnapshot?.sky ?? {});
+            }
+        } catch (_) { }
+        try {
+            if (typeof map.setLight === 'function' && atmosphereSnapshot?.light) {
+                map.setLight(atmosphereSnapshot.light);
+            }
+        } catch (_) { }
+        try {
+            if (typeof map.setFog === 'function') {
+                map.setFog(null);
+            }
+        } catch (_) { }
+    }
+
+    function clearAtmosphereGlobals() {
+        if (typeof window === 'undefined') return;
+        delete window._xploreSolarState;
+        delete window._skySunAzimuthRad;
+        delete window._skySunAltitudeRad;
+        delete window._actualSunAltitudeRad;
+        delete window._directSunAmount;
+        delete window._skyAmbientAmount;
+        delete window.sunConfig;
+    }
+
+    function captureNativeHillshadePaint() {
+        if (nativeHillshadePaintSnapshot || !map) return;
+        nativeHillshadePaintSnapshot = new Map();
+        NATIVE_HILLSHADE_LAYER_IDS.forEach((layerId) => {
+            if (!map.getLayer(layerId)) return;
+            const paint = {};
+            NATIVE_HILLSHADE_PAINT_PROPS.forEach((property) => {
+                try {
+                    const value = map.getPaintProperty(layerId, property);
+                    if (value !== undefined) paint[property] = cloneStyleValue(value);
+                } catch (_) { }
+            });
+            nativeHillshadePaintSnapshot.set(layerId, paint);
+        });
+    }
+
+    function restoreNativeHillshadePaint() {
+        if (!nativeHillshadePaintSnapshot || !map) return;
+        nativeHillshadePaintSnapshot.forEach((paint, layerId) => {
+            if (!map.getLayer(layerId)) return;
+            Object.entries(paint).forEach(([property, value]) => {
+                try { map.setPaintProperty(layerId, property, cloneStyleValue(value)); } catch (_) { }
+            });
+        });
+    }
 
     function safeSetPaint(layerId, property, value) {
         if (!map?.getLayer(layerId)) return;
@@ -303,6 +393,19 @@ export function createShadowController(map, deps = {}) {
     }
 
     if (map?.on) {
+        map.on('style.load', () => {
+            atmosphereSnapshot = null;
+            nativeHillshadePaintSnapshot = null;
+            window.setTimeout(() => {
+                if (shadowAtmosphereActive) {
+                    captureAtmosphereSnapshot();
+                    captureNativeHillshadePaint();
+                    updateShadowTime(currentShadowDate(), { forceRepaint: false, skipNearRefine: true });
+                } else {
+                    clearAtmosphereGlobals();
+                }
+            }, 0);
+        });
         map.on('movestart', deferCameraShadowRefresh);
         map.on('move', deferCameraShadowRefresh);
         map.on('moveend', finishCameraShadowRefresh);
@@ -351,15 +454,19 @@ export function createShadowController(map, deps = {}) {
             const colors = colorRampForSun(sunAlt);
 
             publishSolarState(date, center, sunPos, sunAzi, sunAlt);
-            window._directSunAmount = colors.directSun;
-            window._skyAmbientAmount = colors.skyAmbient;
-            window.sunConfig = {
-                azimuth: sunAzi,
-                altitude: sunAlt,
-                renderAltitude,
-                directSun: colors.directSun,
-                skyAmbient: colors.skyAmbient
-            };
+            if (shadowAtmosphereActive) {
+                window._directSunAmount = colors.directSun;
+                window._skyAmbientAmount = colors.skyAmbient;
+                window.sunConfig = {
+                    azimuth: sunAzi,
+                    altitude: sunAlt,
+                    renderAltitude,
+                    directSun: colors.directSun,
+                    skyAmbient: colors.skyAmbient
+                };
+            } else {
+                clearAtmosphereGlobals();
+            }
 
             SHADOW_RENDER_LAYER_IDS.forEach((layerId) => {
                 safeSetPaint(layerId, 'shadow-direction', sunAzi);
@@ -368,20 +475,24 @@ export function createShadowController(map, deps = {}) {
                 safeSetPaint(layerId, 'shadow-shadow-color', colors.shadow);
                 safeSetPaint(layerId, 'shadow-highlight-color', colors.highlight);
             });
-            safeSetPaint('terrain-derivative-cache', 'hillshade-illumination-direction', sunAzi);
-            safeSetPaint('terrain-derivative-cache', 'hillshade-illumination-altitude', renderAltitude);
 
-            if (map.getLayer('hillshade')) {
-                map.setPaintProperty('hillshade', 'hillshade-illumination-direction', [sunAzi, (sunAzi + 45) % 360, (sunAzi - 45 + 360) % 360, (sunAzi + 180) % 360]);
-                map.setPaintProperty('hillshade', 'hillshade-illumination-altitude', [renderAltitude, renderAltitude, renderAltitude, renderAltitude]);
-                map.setPaintProperty('hillshade', 'hillshade-shadow-color', colors.hillshadeShadow);
-                map.setPaintProperty('hillshade', 'hillshade-highlight-color', colors.hillshadeHighlight);
+            if (shadowAtmosphereActive) {
+                captureNativeHillshadePaint();
+                safeSetPaint('terrain-derivative-cache', 'hillshade-illumination-direction', sunAzi);
+                safeSetPaint('terrain-derivative-cache', 'hillshade-illumination-altitude', renderAltitude);
+
+                if (map.getLayer('hillshade')) {
+                    map.setPaintProperty('hillshade', 'hillshade-illumination-direction', [sunAzi, (sunAzi + 45) % 360, (sunAzi - 45 + 360) % 360, (sunAzi + 180) % 360]);
+                    map.setPaintProperty('hillshade', 'hillshade-illumination-altitude', [renderAltitude, renderAltitude, renderAltitude, renderAltitude]);
+                    map.setPaintProperty('hillshade', 'hillshade-shadow-color', colors.hillshadeShadow);
+                    map.setPaintProperty('hillshade', 'hillshade-highlight-color', colors.hillshadeHighlight);
+                }
             }
 
             invalidateDaylightCacheIfDayChanged(date);
         } catch (_) { }
 
-        if (viewModeController?.updateSkyForTime) {
+        if (shadowAtmosphereActive && viewModeController?.updateSkyForTime) {
             viewModeController.updateSkyForTime(date);
         }
         if (options.forceRepaint !== false) map.triggerRepaint();
@@ -399,9 +510,35 @@ export function createShadowController(map, deps = {}) {
         }
     }
 
-    window.setTimeout(() => updateShadowTime(currentShadowDate(), { forceRepaint: false }), 0);
+    function setShadowAtmosphereActive(active) {
+        const nextActive = Boolean(active);
+        if (shadowAtmosphereActive === nextActive) return;
+        shadowAtmosphereActive = nextActive;
+        window._xploreShadowAtmosphereActive = nextActive;
+
+        if (nextActive) {
+            captureAtmosphereSnapshot();
+            captureNativeHillshadePaint();
+            updateShadowTime(currentShadowDate(), { forceRepaint: false, skipNearRefine: true });
+        } else {
+            restoreAtmosphereSnapshot();
+            restoreNativeHillshadePaint();
+            clearAtmosphereGlobals();
+        }
+        map?.triggerRepaint?.();
+    }
+
+    window._xploreShadowAtmosphereActive = shadowAtmosphereActive;
+    window.setTimeout(() => {
+        if (shadowAtmosphereActive) {
+            updateShadowTime(currentShadowDate(), { forceRepaint: false, skipNearRefine: true });
+        } else {
+            clearAtmosphereGlobals();
+        }
+    }, 0);
 
     return {
         updateShadowTime,
+        setShadowAtmosphereActive,
     };
 }

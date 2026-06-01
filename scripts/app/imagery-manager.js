@@ -12,6 +12,8 @@ import { setWikimediaPhotosEnabled } from '../map/wikimedia-photos.js';
 const IGN_ATTRIBUTION = '<a href="https://www.ign.fr/">© IGN</a>';
 const WMTS_PREVIEW_COORDS = Object.freeze({ z: 14, x: 8508, y: 5911 });
 export const DEM_SOURCE_MAX_ZOOM = 15;
+const COLOR_RELIEF_LAYER_ID = 'color-relief';
+const DOM_OWNED_SYMBOL_LAYER_IDS = new Set(['Peak labels']);
 
 function createIgnTileTemplate(layerName, format = 'image/png') {
     const encodedFormat = encodeURIComponent(format);
@@ -54,6 +56,7 @@ export const IMAGERY_OPTIONS = Object.freeze([
     },
     { id: 'osm-features', label: 'OSM Features', type: 'osm-overlay', previewImage: './data/OSM_vector.png', defaultOpacity: 1, defaultVisible: true },
     { id: 'wikimedia-photos', label: 'Wikimedia Photos', type: 'wikimedia', previewImage: './data/icons_Xmap/camera.png', defaultVisible: false, defaultOpacity: 1, linkedLayerIds: ['wikimedia-photos-base', 'wikimedia-thumbnails-small', 'wikimedia-thumbnails-large'] },
+    { id: 'color-relief', label: 'Color Relief', type: 'color-relief', layerId: COLOR_RELIEF_LAYER_ID, defaultVisible: true, defaultOpacity: 0.4, hiddenControl: true },
     { id: 'strava-heatmap-all', label: 'Strava Heatmap (All)', sourceId: 'strava-heatmap-all', layerId: 'strava-heatmap-all', tileTemplate: 'https://atlas.hartakji.com/strava-heatmap-all/{z}/{x}/{y}', tileSize: 256, minZoom: 0, maxZoom: 15, attribution: '<a href="https://www.strava.com">© Strava</a>', defaultVisible: false, defaultOpacity: 1 },
     { id: 'strava-winter', label: 'Strava Winter', sourceId: 'strava-winter', layerId: 'strava-winter', tileTemplate: 'https://atlas.hartakji.com/strava-winter/{z}/{x}/{y}', tileSize: 256, minZoom: 0, maxZoom: 15, attribution: '<a href="https://www.strava.com">© Strava</a>', defaultVisible: false, defaultOpacity: 1 },
     { id: 'strava-backcountry-ski', label: 'Strava Backcountry Ski', sourceId: 'strava-backcountry-ski', layerId: 'strava-backcountry-ski', tileTemplate: 'https://atlas.hartakji.com/strava-backcountry-ski/{z}/{x}/{y}', tileSize: 256, minZoom: 0, maxZoom: 15, attribution: '<a href="https://www.strava.com">© Strava</a>', defaultVisible: false, defaultOpacity: 1 },
@@ -132,13 +135,55 @@ export function setLayerSequenceOpacity(map, layerIds, alpha) {
             case 'background': setIf('background-opacity', alpha); break;
             case 'fill': setForce('fill-opacity', alpha); break;
             case 'line': setIf('line-opacity', alpha); break;
-            case 'symbol': setIf('text-opacity', alpha); setIf('icon-opacity', alpha); break;
+            case 'symbol': {
+                const symbolAlpha = DOM_OWNED_SYMBOL_LAYER_IDS.has(id) ? 0 : alpha;
+                setIf('text-opacity', symbolAlpha);
+                setIf('icon-opacity', symbolAlpha);
+                break;
+            }
             case 'circle': setIf('circle-opacity', alpha); break;
             case 'fill-extrusion': setIf('fill-extrusion-opacity', alpha); break;
             case 'heatmap': setIf('heatmap-opacity', alpha); break;
             case 'raster': setIf('raster-opacity', alpha); break;
         }
     });
+}
+
+function getLayerSourceLayer(layer) {
+    return String(layer?.sourceLayer || layer?.['source-layer'] || '').toLowerCase();
+}
+
+function isReliefBaseLayer(layer) {
+    if (!layer || layer.type === 'symbol' || layer.type === 'background') return false;
+    const sourceLayer = getLayerSourceLayer(layer);
+    if (sourceLayer.includes('route') || sourceLayer.includes('transport') || sourceLayer.includes('road')) return false;
+    if (sourceLayer.includes('building') || sourceLayer.includes('boundary')) return false;
+    return ['landcover', 'landuse', 'water', 'park', 'aeroway', 'mountain_peak']
+        .some(prefix => sourceLayer.startsWith(prefix));
+}
+
+function moveBaseReliefBelowHillshade(map, layerIds = []) {
+    const reliefOverlayAnchor = map.getLayer(COLOR_RELIEF_LAYER_ID)
+        ? COLOR_RELIEF_LAYER_ID
+        : null;
+    const hillshadeAnchor = map.getLayer('hillshade2')
+        ? 'hillshade2'
+        : (map.getLayer('hillshade') ? 'hillshade' : null);
+    const baseAnchor = reliefOverlayAnchor || hillshadeAnchor;
+    if (!baseAnchor) return;
+    const seen = new Set();
+    layerIds.forEach((id) => {
+        if (!id || seen.has(id) || id === baseAnchor || id === hillshadeAnchor || !map.getLayer(id)) return;
+        seen.add(id);
+        if (!isReliefBaseLayer(map.getLayer(id))) return;
+        try { map.moveLayer(id, baseAnchor); } catch (_) { }
+    });
+    if (reliefOverlayAnchor && map.getLayer('hillshade2')) {
+        try { map.moveLayer(reliefOverlayAnchor, 'hillshade2'); } catch (_) { }
+    }
+    if (map.getLayer('hillshade2') && map.getLayer('hillshade')) {
+        try { map.moveLayer('hillshade2', 'hillshade'); } catch (_) { }
+    }
 }
 
 /**
@@ -155,6 +200,7 @@ export function createImageryManager(map, deps = {}) {
         bringDebugNetworkToFront = () => { },
         updateAnalyticalLegends = () => { },
         viewModeController = null,
+        shadowController = null,
     } = deps;
 
     // ─── State ───
@@ -183,30 +229,17 @@ export function createImageryManager(map, deps = {}) {
 
     function syncNativeHillshadeVisibilityForShadow(shadowActive) {
         if (typeof window !== 'undefined') {
-            window._xploreShadowSuppressesNativeHillshade = Boolean(shadowActive);
+            window._xploreShadowSuppressesNativeHillshade = false;
+        }
+        if (typeof shadowController?.setShadowAtmosphereActive === 'function') {
+            shadowController.setShadowAtmosphereActive(Boolean(shadowActive));
         }
 
-        const nativeHillshadeLayerIds = ['hillshade', 'hillshade2'];
-        if (shadowActive) {
-            if (!nativeHillshadeSuppressionActive) {
-                nativeHillshadeRestoreVisibility.clear();
-                nativeHillshadeLayerIds.forEach((id) => {
-                    if (!map.getLayer(id)) return;
-                    try {
-                        nativeHillshadeRestoreVisibility.set(id, map.getLayoutProperty(id, 'visibility') || 'visible');
-                    } catch (_) {
-                        nativeHillshadeRestoreVisibility.set(id, 'visible');
-                    }
-                });
-                nativeHillshadeSuppressionActive = true;
-            }
-            nativeHillshadeLayerIds.forEach((id) => {
-                if (!map.getLayer(id)) return;
-                try { map.setLayoutProperty(id, 'visibility', 'none'); } catch (_) { }
-            });
+        if (shadowActive && !nativeHillshadeSuppressionActive) {
             return;
         }
 
+        const nativeHillshadeLayerIds = ['hillshade', 'hillshade2'];
         if (!nativeHillshadeSuppressionActive) return;
         const vectorBaseHidden = typeof window !== 'undefined' && window._xploreVectorBaseVisible === false;
         nativeHillshadeLayerIds.forEach((id) => {
@@ -294,6 +327,7 @@ export function createImageryManager(map, deps = {}) {
         const basemapEntries = [];
         const overlayEntries = [];
         imageryOrder.forEach((id) => {
+            if (id === COLOR_RELIEF_LAYER_ID) return;
             let layerSequence = [];
             if (id === 'osm-features') {
                 layerSequence = baseStyleOverlayLayerIds.filter(l => { const layer = map.getLayer(l); return layer && layer.type !== 'symbol'; });
@@ -336,6 +370,11 @@ export function createImageryManager(map, deps = {}) {
             }
         }
 
+        moveBaseReliefBelowHillshade(map, [
+            ...baseStyleFillLayerIds,
+            ...baseStyleUnderlayLayerIds,
+            ...baseStyleOverlayLayerIds,
+        ]);
 
         const routeLayers = ROUTE_LAYER_ORDER_TOP_TO_BOTTOM.filter(layerId => map.getLayer(layerId));
         let previousTopLayerId = null;
@@ -440,6 +479,19 @@ export function createImageryManager(map, deps = {}) {
             // Shader-based contours: state is read directly from window.imageryState by terra_program.ts
             if (option.type === 'hillshade') return;
             if (option.type === 'wikimedia') { setWikimediaPhotosEnabled(visible); return; }
+            if (option.type === 'color-relief') {
+                const vectorBaseHidden = typeof window !== 'undefined' && window._xploreVectorBaseVisible === false;
+                const forcedColorRelief = typeof window !== 'undefined' && window._xploreColorReliefVisible === true;
+                const soloColorRelief = typeof window !== 'undefined' && window._xploreColorReliefSolo === true;
+                const layerVisible = visible && (!vectorBaseHidden || forcedColorRelief);
+                if (map.getLayer(option.layerId)) {
+                    try {
+                        map.setLayoutProperty(option.layerId, 'visibility', layerVisible ? 'visible' : 'none');
+                        map.setPaintProperty(option.layerId, 'color-relief-opacity', layerVisible ? (soloColorRelief ? 1 : opacity) : 0);
+                    } catch (_) { }
+                }
+                return;
+            }
             if (option.type === 'native-layer') {
                 if (map.getLayer(option.layerId)) {
                     try {

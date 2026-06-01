@@ -486,7 +486,7 @@
           "allotments",
           "allotments",
           "bare_rock",
-          "rock_overlay",
+          "cartesapp-bare_rock",
           "beach",
           "beach",
           "bog",
@@ -494,7 +494,7 @@
           "scrub",
           "scrub",
           "forest",
-          "leaftype_unknown",
+          "cartesapp-unknown_leaf",
           "mangrove",
           "wetland_mangrove",
           "marsh",
@@ -508,7 +508,7 @@
           "saltmarsh",
           "wetland_marsh",
           "scree",
-          "scree_overlay",
+          "cartesapp-scree",
           "swamp",
           "wetland_swamp",
           "vineyard",
@@ -518,7 +518,7 @@
           "wetland",
           "wetland",
           "wood",
-          "leaftype_unknown",
+          "cartesapp-unknown_leaf",
           ""
         ]
       }

@@ -62040,7 +62040,7 @@ const terrainUniformValues = (eleDelta, fogMatrix, sky, pitch, isGlobeMode, zoom
         'u_contact_shadow_strength': (typeof window !== 'undefined' && Number.isFinite(window._shadowV3ContactStrength)) ? window._shadowV3ContactStrength : 0.72,
         'u_contact_shadow_distance': (typeof window !== 'undefined' && Number.isFinite(window._shadowV3ContactDistance)) ? window._shadowV3ContactDistance : 520.0,
         'u_contact_shadow_steps': (typeof window !== 'undefined' && Number.isFinite(window._shadowV3ContactSteps)) ? window._shadowV3ContactSteps : 10.0,
-        'u_shadow_white_base': activeShadowLayer ? 1.0 : 0.0,
+        'u_shadow_white_base': 0.0,
     };
 };
 const terrainElevationUniformValues = (eleDelta) => ({

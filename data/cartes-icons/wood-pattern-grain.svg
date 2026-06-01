@@ -1,0 +1,27 @@
+<svg width="32" height="32" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <g id="sapling" fill="none" stroke="#34482e" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.05">
+      <path d="M0 4.4v-9.2"/>
+      <path d="M0-3.8c-2.1-.8-4.1.6-4 2.6 2.3.7 4-.3 4-2.6z"/>
+      <path d="M0-1.3c2.2-.9 4.2.5 4.2 2.5-2.2.8-4.1-.2-4.2-2.5z"/>
+      <path d="M0 1.2c-1.6-.5-3 .4-3 1.9 1.7.5 3-.2 3-1.9z"/>
+    </g>
+  </defs>
+  <g opacity=".82">
+    <use href="#sapling" transform="translate(6 7) rotate(-10) scale(.74)"/>
+    <use href="#sapling" transform="translate(18 5) rotate(6) scale(.62)"/>
+    <use href="#sapling" transform="translate(33 9) rotate(13) scale(.68)"/>
+    <use href="#sapling" transform="translate(51 6) rotate(-5) scale(.7)"/>
+    <use href="#sapling" transform="translate(13 19) rotate(14) scale(.66)"/>
+    <use href="#sapling" transform="translate(27 22) rotate(-7) scale(.82)"/>
+    <use href="#sapling" transform="translate(45 20) rotate(9) scale(.64)"/>
+    <use href="#sapling" transform="translate(58 25) rotate(-12) scale(.58)"/>
+    <use href="#sapling" transform="translate(5 36) rotate(5) scale(.6)"/>
+    <use href="#sapling" transform="translate(22 39) rotate(12) scale(.72)"/>
+    <use href="#sapling" transform="translate(39 35) rotate(-15) scale(.66)"/>
+    <use href="#sapling" transform="translate(55 41) rotate(8) scale(.72)"/>
+    <use href="#sapling" transform="translate(14 55) rotate(-7) scale(.68)"/>
+    <use href="#sapling" transform="translate(31 53) rotate(10) scale(.6)"/>
+    <use href="#sapling" transform="translate(50 56) rotate(16) scale(.76)"/>
+  </g>
+</svg>

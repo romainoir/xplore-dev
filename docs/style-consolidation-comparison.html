@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Style consolidation comparison</title>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #f7f7f4;
+    --panel: #ffffff;
+    --ink: #20231f;
+    --muted: #6b7068;
+    --line: #d9ddd3;
+    --accent: #2f6f5e;
+    --accent2: #8a5a2b;
+    --warn: #9a5a00;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  header { padding: 24px 28px 16px; border-bottom: 1px solid var(--line); background: #fbfbf8; position: sticky; top: 0; z-index: 5; }
+  h1 { margin: 0 0 8px; font-size: 24px; letter-spacing: 0; }
+  h2 { margin: 28px 0 10px; font-size: 18px; }
+  h3 { margin: 18px 0 8px; font-size: 15px; }
+  main { padding: 18px 28px 44px; max-width: 1480px; margin: 0 auto; }
+  .muted { color: var(--muted); }
+  .grid { display: grid; grid-template-columns: repeat(4, minmax(180px, 1fr)); gap: 12px; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px; }
+  .panel strong { display: block; margin-bottom: 6px; }
+  code { background: #eef1ea; padding: 1px 4px; border-radius: 4px; font-size: 12px; }
+  table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--line); }
+  th, td { text-align: left; vertical-align: top; padding: 8px 9px; border-bottom: 1px solid var(--line); }
+  th { background: #eef1ea; position: sticky; top: 82px; z-index: 2; }
+  tbody tr:hover { background: #fafbf7; }
+  .chip { display: inline-block; margin: 2px 4px 2px 0; padding: 3px 7px; border: 1px solid var(--line); border-radius: 999px; background: #fbfcf8; white-space: nowrap; }
+  .ok { color: var(--accent); font-weight: 700; }
+  .warn { color: var(--warn); font-weight: 700; }
+  .section { margin-top: 22px; }
+  .two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
+  .scroll { overflow: auto; max-height: 520px; border: 1px solid var(--line); }
+  .small { font-size: 12px; }
+  @media (max-width: 900px) { .grid, .two { grid-template-columns: 1fr; } header { position: static; } th { position: static; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Style consolidation comparison</h1>
+  <div class="muted">Local styles + Overture PMTiles assessment. Goal: one editable outdoor style with a small visual vocabulary.</div>
+</header>
+<main>
+  <section class="grid">
+    <div class="panel"><strong>Xplore Outdoor Hybrid</strong><div>154 layers</div><div class="muted small">New candidate style: Cartes Outdoor readability, Xplore soft landcover edges, no Cartes server URLs.</div></div>
+<div class="panel"><strong>Cartes Outdoor local</strong><div>150 layers</div><div class="muted small">Best outdoor starting point: natural textures, POI icons, outdoor labels, compact enough to edit.</div></div>
+<div class="panel"><strong>Xplore / Alpine Topo</strong><div>65 layers</div><div class="muted small">Most concise custom topo style: useful palette, IGN path experiment, hillshade integration.</div></div>
+<div class="panel"><strong>OSM Liberty local</strong><div>196 layers</div><div class="muted small">Full OpenMapTiles reference: good coverage, but too verbose for hand styling.</div></div>
+<div class="panel"><strong>Terrain Stadia</strong><div>81 layers</div><div class="muted small">Good terrain structure and global landcover idea, but external provider and less outdoor detail.</div></div>
+  </section>
+
+  <section class="section">
+    <h2>Executive recommendation</h2>
+    <table>
+      <tbody>
+        <tr><td>Best base style</td><td><b>Cartes Outdoor local</b></td><td>It already has the most useful outdoor decisions: landcover patterns, peaks, paths, icons, water, and compact style semantics.</td></tr>
+<tr><td>Primary vector data</td><td><b>Tuiles en Liberte OpenMapTiles PMTiles</b></td><td>Use it for the core OpenMapTiles source. It covers all Cartes Outdoor openmaptiles source-layers except route after the mountain_peak remap.</td></tr>
+<tr><td>Landcover supplement</td><td><b>Overture base.pmtiles</b></td><td>Use as optional broad land_cover/land_use/bathymetry supplement. It is not a drop-in replacement for Cartes h3-landcover.</td></tr>
+<tr><td>Layer count target</td><td><b>90-120 style layers</b></td><td>Enough for outdoor readability, but far below Liberty. Keep advanced route and analysis layers as optional app groups.</td></tr>
+<tr><td>Category count target</td><td><b>9 categories</b></td><td>Small enough to style quickly; enough to avoid mixing unrelated visual decisions.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="section">
+    <h2>Style summary</h2>
+    <table>
+      <thead><tr><th>Style</th><th>Sources</th><th>Layer types</th><th>Semantic categories</th><th>Top source/layers</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><b>Xplore Outdoor Hybrid</b><br><code>xplore_outdoor_hybrid.json</code></td>
+          <td><code>openmaptiles</code> <code>overture_base</code></td>
+          <td><span class="chip">line <b>74</b></span> <span class="chip">symbol <b>40</b></span> <span class="chip">fill <b>36</b></span> <span class="chip">background <b>2</b></span> <span class="chip">circle <b>1</b></span> <span class="chip">fill-extrusion <b>1</b></span></td>
+          <td><span class="chip">transport <b>75</b></span> <span class="chip">landcover <b>19</b></span> <span class="chip">labels/pois <b>14</b></span> <span class="chip">water <b>12</b></span> <span class="chip">boundaries/parks <b>11</b></span> <span class="chip">landuse <b>8</b></span> <span class="chip">terrain features <b>5</b></span> <span class="chip">other <b>3</b></span> <span class="chip">relief <b>3</b></span> <span class="chip">base land <b>2</b></span> <span class="chip">buildings <b>2</b></span></td>
+          <td><table class="small"><tbody><tr><td><code>openmaptiles:transportation</code></td><td>49</td></tr>
+<tr><td><code>openmaptiles:route</code></td><td>20</td></tr>
+<tr><td><code>openmaptiles:landcover</code></td><td>14</td></tr>
+<tr><td><code>openmaptiles:boundary</code></td><td>9</td></tr>
+<tr><td><code>openmaptiles:landuse</code></td><td>8</td></tr>
+<tr><td><code>openmaptiles:place</code></td><td>8</td></tr>
+<tr><td><code>openmaptiles:transportation_name</code></td><td>6</td></tr>
+<tr><td><code>openmaptiles:mountain_peak</code></td><td>5</td></tr>
+<tr><td><code>overture_base:land_cover</code></td><td>5</td></tr>
+<tr><td><code>openmaptiles:aeroway</code></td><td>4</td></tr>
+<tr><td><code>openmaptiles:park</code></td><td>4</td></tr>
+<tr><td><code>openmaptiles:poi</code></td><td>4</td></tr></tbody></table></td>
+        </tr>
+<tr>
+          <td><b>Cartes Outdoor local</b><br><code>cartes_outdoor.json</code></td>
+          <td><code>openmaptiles</code> <code>landcover</code> <code>bathymetry</code></td>
+          <td><span class="chip">line <b>70</b></span> <span class="chip">symbol <b>40</b></span> <span class="chip">fill <b>36</b></span> <span class="chip">background <b>2</b></span> <span class="chip">circle <b>1</b></span> <span class="chip">fill-extrusion <b>1</b></span></td>
+          <td><span class="chip">transport <b>75</b></span> <span class="chip">landcover <b>17</b></span> <span class="chip">labels/pois <b>14</b></span> <span class="chip">boundaries/parks <b>11</b></span> <span class="chip">water <b>11</b></span> <span class="chip">landuse <b>7</b></span> <span class="chip">terrain features <b>5</b></span> <span class="chip">other <b>3</b></span> <span class="chip">relief <b>3</b></span> <span class="chip">base land <b>2</b></span> <span class="chip">buildings <b>2</b></span></td>
+          <td><table class="small"><tbody><tr><td><code>openmaptiles:transportation</code></td><td>49</td></tr>
+<tr><td><code>openmaptiles:route</code></td><td>20</td></tr>
+<tr><td><code>openmaptiles:landcover</code></td><td>12</td></tr>
+<tr><td><code>openmaptiles:boundary</code></td><td>9</td></tr>
+<tr><td><code>openmaptiles:place</code></td><td>8</td></tr>
+<tr><td><code>openmaptiles:landuse</code></td><td>7</td></tr>
+<tr><td><code>openmaptiles:transportation_name</code></td><td>6</td></tr>
+<tr><td><code>landcover:landcover</code></td><td>5</td></tr>
+<tr><td><code>openmaptiles:mountain_peak</code></td><td>5</td></tr>
+<tr><td><code>openmaptiles:aeroway</code></td><td>4</td></tr>
+<tr><td><code>openmaptiles:park</code></td><td>4</td></tr>
+<tr><td><code>openmaptiles:poi</code></td><td>4</td></tr></tbody></table></td>
+        </tr>
+<tr>
+          <td><b>Xplore / Alpine Topo</b><br><code>Xplore.json</code></td>
+          <td><code>openmaptiles</code> <code>mapterhorn</code> <code>ign_plan</code></td>
+          <td><span class="chip">line <b>33</b></span> <span class="chip">fill <b>17</b></span> <span class="chip">symbol <b>13</b></span> <span class="chip">background <b>1</b></span> <span class="chip">hillshade <b>1</b></span></td>
+          <td><span class="chip">transport <b>18</b></span> <span class="chip">landcover <b>10</b></span> <span class="chip">water <b>8</b></span> <span class="chip">labels/pois <b>7</b></span> <span class="chip">terrain features <b>7</b></span> <span class="chip">boundaries/parks <b>6</b></span> <span class="chip">other <b>4</b></span> <span class="chip">landuse <b>2</b></span> <span class="chip">base land <b>1</b></span> <span class="chip">buildings <b>1</b></span> <span class="chip">relief <b>1</b></span></td>
+          <td><table class="small"><tbody><tr><td><code>openmaptiles:transportation</code></td><td>17</td></tr>
+<tr><td><code>openmaptiles:landcover</code></td><td>10</td></tr>
+<tr><td><code>openmaptiles:mountain_peak</code></td><td>7</td></tr>
+<tr><td><code>openmaptiles:waterway</code></td><td>5</td></tr>
+<tr><td><code>openmaptiles:place</code></td><td>4</td></tr>
+<tr><td><code>openmaptiles:aeroway</code></td><td>3</td></tr>
+<tr><td><code>openmaptiles:boundary</code></td><td>3</td></tr>
+<tr><td><code>openmaptiles:park</code></td><td>3</td></tr>
+<tr><td><code>openmaptiles:water</code></td><td>3</td></tr>
+<tr><td><code>openmaptiles:landuse</code></td><td>2</td></tr>
+<tr><td><code>(style):(none)</code></td><td>1</td></tr>
+<tr><td><code>ign_plan:routier_chemin</code></td><td>1</td></tr></tbody></table></td>
+        </tr>
+<tr>
+          <td><b>OSM Liberty local</b><br><code>osm_liberty.json</code></td>
+          <td><code>openmaptiles</code> <code>ne2_shaded</code></td>
+          <td><span class="chip">line <b>106</b></span> <span class="chip">symbol <b>45</b></span> <span class="chip">fill <b>43</b></span> <span class="chip">background <b>1</b></span> <span class="chip">fill-extrusion <b>1</b></span></td>
+          <td><span class="chip">transport <b>103</b></span> <span class="chip">labels/pois <b>32</b></span> <span class="chip">landcover <b>32</b></span> <span class="chip">water <b>12</b></span> <span class="chip">landuse <b>6</b></span> <span class="chip">boundaries/parks <b>5</b></span> <span class="chip">other <b>2</b></span> <span class="chip">terrain features <b>2</b></span> <span class="chip">base land <b>1</b></span> <span class="chip">buildings <b>1</b></span></td>
+          <td><table class="small"><tbody><tr><td><code>openmaptiles:transportation</code></td><td>97</td></tr>
+<tr><td><code>openmaptiles:landcover</code></td><td>32</td></tr>
+<tr><td><code>openmaptiles:poi</code></td><td>22</td></tr>
+<tr><td><code>openmaptiles:waterway</code></td><td>8</td></tr>
+<tr><td><code>openmaptiles:place</code></td><td>7</td></tr>
+<tr><td><code>openmaptiles:landuse</code></td><td>6</td></tr>
+<tr><td><code>openmaptiles:transportation_name</code></td><td>6</td></tr>
+<tr><td><code>openmaptiles:aeroway</code></td><td>4</td></tr>
+<tr><td><code>openmaptiles:boundary</code></td><td>2</td></tr>
+<tr><td><code>openmaptiles:mountain_peak</code></td><td>2</td></tr>
+<tr><td><code>openmaptiles:park</code></td><td>2</td></tr>
+<tr><td><code>openmaptiles:water</code></td><td>2</td></tr></tbody></table></td>
+        </tr>
+<tr>
+          <td><b>Terrain Stadia</b><br><code>terrain_vector_on_stadia.json</code></td>
+          <td><code>stamen-omt</code> <code>global_landcover_v1</code> <code>stamen_null</code> <code>terrarium</code></td>
+          <td><span class="chip">line <b>43</b></span> <span class="chip">fill <b>18</b></span> <span class="chip">symbol <b>18</b></span> <span class="chip">background <b>1</b></span> <span class="chip">hillshade <b>1</b></span></td>
+          <td><span class="chip">transport <b>33</b></span> <span class="chip">landcover <b>10</b></span> <span class="chip">labels/pois <b>9</b></span> <span class="chip">boundaries/parks <b>8</b></span> <span class="chip">water <b>6</b></span> <span class="chip">landuse <b>4</b></span> <span class="chip">other <b>4</b></span> <span class="chip">relief <b>3</b></span> <span class="chip">buildings <b>2</b></span> <span class="chip">base land <b>1</b></span> <span class="chip">terrain features <b>1</b></span></td>
+          <td><table class="small"><tbody><tr><td><code>stamen-omt:transportation</code></td><td>31</td></tr>
+<tr><td><code>stamen-omt:place</code></td><td>6</td></tr>
+<tr><td><code>stamen-omt:boundary</code></td><td>5</td></tr>
+<tr><td><code>stamen-omt:landcover</code></td><td>5</td></tr>
+<tr><td><code>stamen-omt:landuse</code></td><td>4</td></tr>
+<tr><td><code>stamen-omt:waterway</code></td><td>4</td></tr>
+<tr><td><code>global_landcover_v1:global_landcover</code></td><td>3</td></tr>
+<tr><td><code>stamen-omt:aeroway</code></td><td>3</td></tr>
+<tr><td><code>stamen-omt:building</code></td><td>2</td></tr>
+<tr><td><code>stamen-omt:landuse_overlay</code></td><td>2</td></tr>
+<tr><td><code>stamen-omt:park</code></td><td>2</td></tr>
+<tr><td><code>stamen-omt:transportation_name</code></td><td>2</td></tr></tbody></table></td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="section">
+    <h2>Semantic category pressure</h2>
+    <table>
+      <thead><tr><th>Category</th><th>Xplore Outdoor Hybrid</th><th>Cartes Outdoor local</th><th>Xplore / Alpine Topo</th><th>OSM Liberty local</th><th>Terrain Stadia</th></tr></thead>
+      <tbody><tr><th>base land</th><td>2</td><td>2</td><td>1</td><td>1</td><td>1</td></tr>
+<tr><th>landcover</th><td>19</td><td>17</td><td>10</td><td>32</td><td>10</td></tr>
+<tr><th>landuse</th><td>8</td><td>7</td><td>2</td><td>6</td><td>4</td></tr>
+<tr><th>water</th><td>12</td><td>11</td><td>8</td><td>12</td><td>6</td></tr>
+<tr><th>relief</th><td>3</td><td>3</td><td>1</td><td></td><td>3</td></tr>
+<tr><th>transport</th><td>75</td><td>75</td><td>18</td><td>103</td><td>33</td></tr>
+<tr><th>terrain features</th><td>5</td><td>5</td><td>7</td><td>2</td><td>1</td></tr>
+<tr><th>boundaries/parks</th><td>11</td><td>11</td><td>6</td><td>5</td><td>8</td></tr>
+<tr><th>buildings</th><td>2</td><td>2</td><td>1</td><td>1</td><td>2</td></tr>
+<tr><th>labels/pois</th><td>14</td><td>14</td><td>7</td><td>32</td><td>9</td></tr>
+<tr><th>other</th><td>3</td><td>3</td><td>4</td><td>2</td><td>4</td></tr></tbody>
+    </table>
+  </section>
+
+  <section class="section">
+    <h2>Source-layer availability by style</h2>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>source-layer</th><th>Xplore Outdoor Hybrid</th><th>Cartes Outdoor local</th><th>Xplore / Alpine Topo</th><th>OSM Liberty local</th><th>Terrain Stadia</th></tr></thead>
+        <tbody>
+          <tr><td><code>aerodrome_label</code></td><td><span class="ok">yes</span></td><td><span class="ok">yes</span></td><td><span class="ok">yes</span></td><td><span class="ok">yes</span></td><td><span class="ok">yes</span></td></tr>
+<tr><td><code>aeroway</code></td><td><span class="ok">yes</span></td><td><span class="ok">yes</span></td><td><span class="ok">yes</span></td><td><span class="ok">yes</span></td><td><span class="ok">yes</span></td></tr>
+<tr><td><code>bathymetry</code></td><td><span class="ok">yes</span></td><td><span class="ok">yes</span></td><td></td><td></td><td></td></tr>
+<tr><td><code>boundary</code></td><td><span class="ok">yes</span></td><td><span class="ok">yes</span></td><td><span class="ok">yes</span></td><td><span class="ok">yes</span></td><td><span class="ok">yes</span></td></tr>
+<tr><td><code>building</code></td><td><span class="ok">yes</span></td><td><span class="ok">yes</span></td><td><span class="ok">yes</span></td><td><span class="ok">yes</span></td><td><span class="ok">yes</span></td></tr>
+<tr><td><code>global_landcover</code></td><td></td><td></td><td></td><td></td><td><span class="ok">yes</span></td></tr>
+<tr><td><code>housenumber</code></td><td><span class="ok">yes</span></td><td><span class="ok">yes</span></td><td><span class="ok">yes</span></td><td><span class="ok">yes</span></td><td></td></tr>
+<tr><td><code>land_cover</code></td><td><span class="ok">yes</span></td><td></td><td></td><td></td><td></td></tr>
+<tr><td><code>landcover</code></td><td><span class="ok">yes</span></td><td><span class="ok">yes</span></td><td><span class="ok">yes</span></td><td><span class="ok">yes</span></td><td><span class="ok">yes</span></td></tr>
+<tr><td><code>landuse</code></td><td><span class="ok">yes</span></td><td><span class="ok">yes</span></td><td><span class="ok">yes</span></td><td><span class="ok">yes</span></td><td><span class="ok">yes</span></td></tr>
+<tr><td><code>landuse_overlay</code></td><td></td><td></td><td></td><td></td><td><span class="ok">yes</span></td></tr>
+<tr><td><code>mountain_peak</code></td><td><span class="ok">yes</span></td><td><span class="ok">yes</span></td><td><span class="ok">yes</span></td><td><span class="ok">yes</span></td><td><span class="ok">yes</span></td></tr>
+<tr><td><code>natural_label</code></td><td></td><td></td><td></td><td></td><td><span class="ok">yes</span></td></tr>
+<tr><td><code>null-island</code></td><td></td><td></td><td></td><td></td><td><span class="ok">yes</span></td></tr>
+<tr><td><code>null-island-label</code></td><td></td><td></td><td></td><td></td><td><span class="ok">yes</span></td></tr>
+<tr><td><code>park</code></td><td><span class="ok">yes</span></td><td><span class="ok">yes</span></td><td><span class="ok">yes</span></td><td><span class="ok">yes</span></td><td><span class="ok">yes</span></td></tr>
+<tr><td><code>place</code></td><td><span class="ok">yes</span></td><td><span class="ok">yes</span></td><td><span class="ok">yes</span></td><td><span class="ok">yes</span></td><td><span class="ok">yes</span></td></tr>
+<tr><td><code>poi</code></td><td><span class="ok">yes</span></td><td><span class="ok">yes</span></td><td><span class="ok">yes</span></td><td><span class="ok">yes</span></td><td><span class="ok">yes</span></td></tr>
+<tr><td><code>route</code></td><td><span class="ok">yes</span></td><td><span class="ok">yes</span></td><td></td><td></td><td></td></tr>
+<tr><td><code>routier_chemin</code></td><td></td><td></td><td><span class="ok">yes</span></td><td></td><td></td></tr>
+<tr><td><code>transportation</code></td><td><span class="ok">yes</span></td><td><span class="ok">yes</span></td><td><span class="ok">yes</span></td><td><span class="ok">yes</span></td><td><span class="ok">yes</span></td></tr>
+<tr><td><code>transportation_name</code></td><td><span class="ok">yes</span></td><td><span class="ok">yes</span></td><td><span class="ok">yes</span></td><td><span class="ok">yes</span></td><td><span class="ok">yes</span></td></tr>
+<tr><td><code>water</code></td><td><span class="ok">yes</span></td><td><span class="ok">yes</span></td><td><span class="ok">yes</span></td><td><span class="ok">yes</span></td><td><span class="ok">yes</span></td></tr>
+<tr><td><code>water_name</code></td><td><span class="ok">yes</span></td><td><span class="ok">yes</span></td><td></td><td><span class="ok">yes</span></td><td><span class="ok">yes</span></td></tr>
+<tr><td><code>waterway</code></td><td><span class="ok">yes</span></td><td><span class="ok">yes</span></td><td><span class="ok">yes</span></td><td><span class="ok">yes</span></td><td><span class="ok">yes</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="section">
+    <h2>Overture landcover fit</h2>
+    <p class="muted">Source candidate: <code>pmtiles://https://overturemaps-extras-us-west-2.s3.us-west-2.amazonaws.com/tiles/2026-05-20.0/base.pmtiles</code></p>
+    <div class="two">
+      <table>
+        <thead><tr><th>Question</th><th>Answer</th><th>Implication</th></tr></thead>
+        <tbody><tr><td>Can replace Cartes h3-landcover directly?</td><td>No</td><td>Layer name and fields differ: Cartes uses source-layer landcover, Overture uses land_cover with subtype/cartography. Need dedicated layers.</td></tr>
+<tr><td>Can recover broad landcover from Overture?</td><td>Yes</td><td>Add a vector source to Overture base.pmtiles and create muted fill layers against source-layer land_cover.</td></tr>
+<tr><td>Can replace Cartes bathymetry?</td><td>Mostly yes</td><td>Overture base has bathymetry with depth/cartography up to z13. It may differ visually from Cartes, but is usable.</td></tr>
+<tr><td>Can reduce dependency on Cartes?</td><td>Yes</td><td>Keep Cartes sprites/icons locally; move main data to Tuiles en Liberte + optional Overture base.</td></tr>
+<tr><td>Production suitability</td><td>Careful</td><td>Overture docs say these PMTiles are designed for inspection, not production cartography. Good as reference/supplement, not as sole basemap.</td></tr></tbody>
+      </table>
+      <table>
+        <thead><tr><th>Overture source-layer</th><th>Zoom</th><th>Fields</th></tr></thead>
+        <tbody><tr><td><code>bathymetry</code></td><td>0-13</td><td>cartography, depth, subtype-like metadata</td></tr>
+<tr><td><code>infrastructure</code></td><td>13-13</td><td>class, subtype, surface, names</td></tr>
+<tr><td><code>land</code></td><td>0-13</td><td>class, subtype, surface, elevation, names</td></tr>
+<tr><td><code>land_cover</code></td><td>0-13</td><td>subtype, cartography</td></tr>
+<tr><td><code>land_use</code></td><td>6-13</td><td>class, subtype, surface, names</td></tr>
+<tr><td><code>water</code></td><td>0-13</td><td>class, subtype, is_intermittent, is_salt, names</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="section">
+    <h2>Recommended target categories</h2>
+    <table>
+      <thead><tr><th>Category</th><th>Contents</th><th>Styling rule</th></tr></thead>
+      <tbody><tr><td>01 base land</td><td>Background + neutral land polygons</td><td>Keep 1 background and 2-4 broad land layers. Avoid many landuse tint variants.</td></tr>
+<tr><td>02 landcover texture</td><td>wood, grass, bare rock, scree, sand, wetland, glacier</td><td>Use Cartes Outdoor patterns, plus optional Overture land_cover as broad underlay. Keep <= 8 visual classes.</td></tr>
+<tr><td>03 water</td><td>ocean/lake/river/intermittent + optional bathymetry</td><td>Use OpenMapTiles water for normal map; use Overture/Cartes bathymetry as a subtle optional layer.</td></tr>
+<tr><td>04 relief</td><td>hillshade, contours, shadow/daylight</td><td>Keep app-generated relief outside the editable basemap style where possible.</td></tr>
+<tr><td>05 built areas</td><td>residential/industrial/cemetery/school/hospital/buildings</td><td>Use muted fills. Buildings only from z14/z15.</td></tr>
+<tr><td>06 transport</td><td>roads, tracks, paths, rail, bridges/tunnels</td><td>Collapse Liberty/Cartes road families to fewer styling classes.</td></tr>
+<tr><td>07 outdoor routes</td><td>hiking/bicycle/mtb/ski routes</td><td>Keep as optional group. Cartes route source is not present in Tuiles en Liberte PMTiles.</td></tr>
+<tr><td>08 boundaries/parks</td><td>admin boundaries, protected areas, parks</td><td>Thin lines and low opacity; avoid competing with routes.</td></tr>
+<tr><td>09 labels/icons</td><td>places, road labels, water labels, peaks, POIs</td><td>Use strong hierarchy: place/road/water/peak first, POIs second.</td></tr></tbody>
+    </table>
+  </section>
+
+  <section class="section">
+    <h2>What to reuse</h2>
+    <table>
+      <thead><tr><th>Source</th><th>Use</th></tr></thead>
+      <tbody><tr><td>Cartes Outdoor</td><td>Start from this. Keep natural palette, pattern logic, outdoor POIs, peak/cliff rendering, and many road/path decisions.</td></tr>
+<tr><td>Xplore</td><td>Steal the concise topo choices: fewer layers, local edits, IGN path experiment, hillshade expectations.</td></tr>
+<tr><td>OSM Liberty</td><td>Use as reference only for mature road casing/label hierarchy. Do not copy its full layer count.</td></tr>
+<tr><td>Terrain Stadia</td><td>Borrow terrain/global-landcover ideas if useful, but avoid depending on the whole style.</td></tr>
+<tr><td>Tuiles en Liberte</td><td>Primary OpenMapTiles source for the unified style. Good free OSM vector base, PMTiles already supported in the app.</td></tr>
+<tr><td>Overture base</td><td>Supplemental land_cover/land_use/water/bathymetry source, not a drop-in replacement for Cartes h3-landcover.</td></tr></tbody>
+    </table>
+  </section>
+
+  <section class="section">
+    <h2>Redundancy to resolve</h2>
+    <table>
+      <thead><tr><th>Area</th><th>Where duplicated</th><th>Recommendation</th></tr></thead>
+      <tbody><tr><td>landcover</td><td>Cartes Outdoor, Xplore, Liberty, Terrain, Overture</td><td>Keep one detailed OSM landcover set + one optional broad Overture underlay.</td></tr>
+<tr><td>roads/transport</td><td>Cartes Outdoor, Liberty, Terrain, Xplore</td><td>Use Cartes Outdoor as base; borrow Liberty casing only where readability is better.</td></tr>
+<tr><td>mountains/peaks</td><td>Cartes Outdoor, Xplore, Liberty, Terrain</td><td>Use Cartes Outdoor/Xplore. Standardize on source-layer mountain_peak.</td></tr>
+<tr><td>water/bathymetry</td><td>Cartes bathymetry, Overture bathymetry, OpenMapTiles water</td><td>Use OpenMapTiles water; decide between Overture or Cartes bathymetry, not both visible.</td></tr>
+<tr><td>POIs/icons</td><td>Cartes Outdoor + Liberty</td><td>Use fewer POI groups. Cartes sprite/icons are better for this app.</td></tr>
+<tr><td>relief</td><td>style hillshade + app shadow/terrain</td><td>Keep relief in app stack, not duplicated inside every style.</td></tr></tbody>
+    </table>
+  </section>
+
+  <section class="section">
+    <h2>Proposed source model</h2>
+    <table>
+      <thead><tr><th>Source id</th><th>URL</th><th>Purpose</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td><code>openmaptiles</code></td><td><code>pmtiles://https://tuiles.enliberte.fr/planet.pmtiles</code></td><td>Core basemap: roads, landcover, water, buildings, labels, POIs.</td><td><span class="ok">already in cartes_outdoor.json</span></td></tr>
+<tr><td><code>overture_base</code></td><td><code>pmtiles://https://overturemaps-extras-us-west-2.s3.us-west-2.amazonaws.com/tiles/2026-05-20.0/base.pmtiles</code></td><td>Optional broad land_cover, land_use, bathymetry and water supplement.</td><td><span class="warn">needs new layers</span></td></tr>
+<tr><td><code>landcover</code> Cartes</td><td><code>https://serveur.cartes.app/zxy/h3-landcover/{z}/{x}/{y}.mvt</code></td><td>Cartes h3 natural cover. Good visual detail, but keeps Cartes data dependency.</td><td><span class="warn">decide keep/remove</span></td></tr>
+<tr><td><code>bathymetry</code> Cartes</td><td><code>https://serveur.cartes.app/zxy/bathymetry/{z}/{x}/{y}.mvt</code></td><td>Bathymetry. Can likely be replaced by Overture bathymetry.</td><td><span class="warn">candidate for removal</span></td></tr>
+      </tbody>
+    </table>
+  </section>
+</main>
+</body>
+</html>

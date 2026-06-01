@@ -7,9 +7,9 @@
  */
 
 // ─── Module imports ───
-import { createMap, getBaseStyleLayerBuckets, parseAndCacheBaseStyleLayers } from './map-init.js';
-import { createImageryManager, IMAGERY_OPTIONS, LAYER_GROUP_BY_MEMBER_ID, SUN_DURATION_ADDON_IDS } from './imagery-manager.js';
-import { applyOverlays, applyHillshadeAppearance, injectOverlaysIntoStyle } from './overlay-manager.js';
+import { createMap, getBaseStyleLayerBuckets, parseAndCacheBaseStyleLayers } from './map-init.js?v=20260525-relief-match';
+import { createImageryManager, IMAGERY_OPTIONS, LAYER_GROUP_BY_MEMBER_ID, SUN_DURATION_ADDON_IDS } from './imagery-manager.js?v=20260525-relief-match';
+import { applyOverlays, applyHillshadeAppearance, injectOverlaysIntoStyle } from './overlay-manager.js?v=20260525-relief-match';
 import { createRoutingOrchestrator } from './routing-orchestrator.js';
 import { createShadowController } from './shadow-controller.js';
 import { initShadowV3DebugOverlay } from './shadow-v3-debug-overlay.js?v=20260521-daylight-normal-z-relief';
@@ -20,13 +20,15 @@ import {
 } from './terrain-analysis-controller.js';
 
 // ─── External module imports ───
-import { createViewModeController } from '../map/map-view-mode-controller.js';
+import { createViewModeController } from '../map/map-view-mode-controller.js?v=20260522-outdoor-no-forced-3d';
 import { DirectionsManager } from '../directions/core/directions-manager.js';
 import { RouteLibraryManager } from '../storage/route-library-manager.js';
 import { RouteLibraryUI } from '../ui/route-library-ui.js';
 import { ensureGpxLayers, zoomToGeojson, parseGpxToGeoJson, geojsonToGpx } from '../gpx/gpx-io.js';
 import { initializeWikimediaPhotos, restoreWikimediaLayers } from '../map/wikimedia-photos.js';
+import { initPeakLabelMarkers } from '../map/peak-label-markers.js?v=20260523-dom-depth-peaks';
 import { initContours } from '../map/contour-2d.js';
+import '../map/pmtiles-protocol.js';
 import { Modal } from '../ui/modal.js';
 import { Toast } from '../ui/toast.js';
 
@@ -36,6 +38,505 @@ import {
   VIEW_MODES,
   DEFAULT_3D_ORIENTATION,
 } from '../config/map-config.js';
+
+const TRANSPARENT_IMAGE = Object.freeze({ width: 1, height: 1, data: new Uint8Array([0, 0, 0, 0]) });
+const CARTES_SPRITE_URL = new URL('../../data/cartes-sprite/sprite', import.meta.url).href;
+const OPENFREEMAP_GLYPHS_URL = 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf';
+const CARTES_ICON_URLS = new Map([
+  ['cartesapp-arete', new URL('../../data/cartes-icons/arete.svg', import.meta.url).href],
+  ['cartesapp-bare_rock', new URL('../../data/cartes-icons/bare_rock.svg', import.meta.url).href],
+  ['cartesapp-cliff', new URL('../../data/cartes-icons/cliff.svg', import.meta.url).href],
+  ['cartesapp-scree', new URL('../../data/cartes-icons/scree.svg', import.meta.url).href],
+  ['cartesapp-stone', new URL('../../data/cartes-icons/stone.svg', import.meta.url).href],
+  ['cartesapp-triangle', new URL('../../data/cartes-icons/triangle.svg', import.meta.url).href],
+]);
+const CARTES_STYLE_IDS = new Set(['xplore-outdoor-hybrid', 'xplore-outdoor-hybrid-2']);
+const CARTES_ICON_SIZE_OVERRIDES = new Map([
+  ['cartesapp-arete', 16],
+  ['cartesapp-bare_rock', 24],
+  ['cartesapp-bollard', 16],
+  ['cartesapp-broadleaved', 20],
+  ['cartesapp-cliff', 16],
+  ['cartesapp-cycle_barrier', 16],
+  ['cartesapp-entrance', 16],
+  ['cartesapp-gate', 16],
+  ['cartesapp-lift-gate', 16],
+  ['cartesapp-mixed', 20],
+  ['cartesapp-needleleaved', 20],
+  ['cartesapp-oneway', 16],
+  ['cartesapp-scree', 20],
+  ['cartesapp-shelter', 16],
+  ['cartesapp-stone', 30],
+  ['cartesapp-triangle', 16],
+  ['cartesapp-unknown_leaf', 20],
+  ['cartesapp-waste_basket', 16],
+]);
+const CARTES_PATTERN_IMAGE_IDS = new Set([
+  'cartesapp-bare_rock',
+  'cartesapp-broadleaved',
+  'cartesapp-mixed',
+  'cartesapp-needleleaved',
+  'cartesapp-scree',
+  'cartesapp-unknown_leaf',
+]);
+const CARTES_RASTER_PIXEL_RATIO = 2;
+
+function getCartesIconUrl(id) {
+  if (CARTES_ICON_URLS.has(id)) return CARTES_ICON_URLS.get(id);
+  if (!id.startsWith('cartesapp-')) return '';
+  const iconName = id.slice('cartesapp-'.length);
+  if (!/^[a-z0-9_-]+$/i.test(iconName)) return '';
+  return new URL(`../../data/cartes-icons/${iconName}.svg`, import.meta.url).href;
+}
+
+function getCartesIconSize(id) {
+  if (CARTES_PATTERN_IMAGE_IDS.has(id)) {
+    return CARTES_ICON_SIZE_OVERRIDES.get(id) || 40;
+  }
+  return CARTES_ICON_SIZE_OVERRIDES.get(id) || 32;
+}
+
+function rasterizeCartesSvg(url, id, sizeOverride = null) {
+  const displaySize = sizeOverride || getCartesIconSize(id);
+  const pixelRatio = CARTES_RASTER_PIXEL_RATIO;
+  const rasterSize = Math.max(1, Math.round(displaySize * pixelRatio));
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = rasterSize;
+      canvas.height = rasterSize;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        reject(new Error(`No canvas context for ${id}`));
+        return;
+      }
+      ctx.clearRect(0, 0, rasterSize, rasterSize);
+      ctx.drawImage(img, 0, 0, rasterSize, rasterSize);
+      resolve({
+        data: ctx.getImageData(0, 0, rasterSize, rasterSize),
+        options: { pixelRatio }
+      });
+    };
+    img.onerror = (event) => reject(new Error(`Failed to load Cartes SVG ${id}: ${event?.message || 'unknown error'}`));
+    img.src = url;
+  });
+}
+
+function makeCanvasImage(size, draw) {
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return TRANSPARENT_IMAGE;
+  ctx.clearRect(0, 0, size, size);
+  draw(ctx, size);
+  return ctx.getImageData(0, 0, size, size);
+}
+
+function roundedRectPath(ctx, x, y, width, height, radius) {
+  const r = Math.min(radius, width / 2, height / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + width - r, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + r);
+  ctx.lineTo(x + width, y + height - r);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+  ctx.lineTo(x + r, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+function createStretchablePillImage({ fill, stroke = null, shadow = null }) {
+  const pixelRatio = 2;
+  const width = 128;
+  const height = 48;
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+
+  ctx.clearRect(0, 0, width, height);
+  const pad = 5;
+  const radius = 18;
+  if (shadow) {
+    ctx.save();
+    ctx.shadowColor = shadow.color;
+    ctx.shadowBlur = shadow.blur;
+    ctx.shadowOffsetY = shadow.offsetY;
+    ctx.fillStyle = fill;
+    roundedRectPath(ctx, pad + 1, pad + 1, width - pad * 2 - 2, height - pad * 2 - 2, radius);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  ctx.fillStyle = fill;
+  roundedRectPath(ctx, pad, pad, width - pad * 2, height - pad * 2, radius);
+  ctx.fill();
+
+  if (stroke) {
+    ctx.strokeStyle = stroke.color;
+    ctx.lineWidth = stroke.width;
+    roundedRectPath(ctx, pad + stroke.width / 2, pad + stroke.width / 2, width - pad * 2 - stroke.width, height - pad * 2 - stroke.width, radius);
+    ctx.stroke();
+  }
+
+  return {
+    data: ctx.getImageData(0, 0, width, height),
+    options: {
+      pixelRatio,
+      stretchX: [[30, width - 30]],
+      stretchY: [[20, height - 20]],
+      content: [24, 12, width - 24, height - 12],
+    },
+  };
+}
+
+function createPeakLabelFrameImage() {
+  const pixelRatio = 2;
+  const width = 292;
+  const height = 52;
+  const elevationStart = width - 154;
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+
+  ctx.clearRect(0, 0, width, height);
+
+  ctx.save();
+  ctx.shadowColor = 'rgba(20, 30, 38, 0.18)';
+  ctx.shadowBlur = 10;
+  ctx.shadowOffsetY = 2;
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.97)';
+  roundedRectPath(ctx, 5, 7, width - 10, height - 14, 18);
+  ctx.fill();
+  ctx.restore();
+
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.97)';
+  roundedRectPath(ctx, 5, 7, width - 10, height - 14, 18);
+  ctx.fill();
+
+  ctx.fillStyle = 'rgba(53, 188, 207, 0.98)';
+  roundedRectPath(ctx, elevationStart, 7, width - elevationStart - 5, height - 14, 18);
+  ctx.fill();
+
+  ctx.fillStyle = 'rgba(53, 188, 207, 0.98)';
+  ctx.fillRect(elevationStart, 7, 36, height - 14);
+
+  ctx.strokeStyle = 'rgba(33, 45, 55, 0.15)';
+  ctx.lineWidth = 1.5;
+  roundedRectPath(ctx, 5.75, 7.75, width - 11.5, height - 15.5, 17);
+  ctx.stroke();
+
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.62)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(elevationStart, 10);
+  ctx.lineTo(elevationStart, height - 10);
+  ctx.stroke();
+
+  return {
+    data: ctx.getImageData(0, 0, width, height),
+    options: {
+      pixelRatio,
+      stretchX: [[28, elevationStart - 14]],
+      stretchY: [[22, height - 22]],
+      content: [16, 10, width - 14, height - 10],
+    },
+  };
+}
+
+function createPeakLeaderImage() {
+  const pixelRatio = 2;
+  const width = 36;
+  const height = 108;
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+  const centerX = width / 2;
+  const dotY = height - 13;
+
+  ctx.clearRect(0, 0, width, height);
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.92)';
+  ctx.lineWidth = 4;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(centerX, 8);
+  ctx.lineTo(centerX, dotY);
+  ctx.stroke();
+
+  ctx.strokeStyle = 'rgba(37, 54, 64, 0.2)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(centerX, 8);
+  ctx.lineTo(centerX, dotY);
+  ctx.stroke();
+
+  ctx.fillStyle = '#e6007e';
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.95)';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.arc(centerX, dotY, 6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+
+  return {
+    data: ctx.getImageData(0, 0, width, height),
+    options: { pixelRatio },
+  };
+}
+
+function createPeakRedMountainIcon() {
+  const pixelRatio = 2;
+  const size = 64;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+
+  ctx.clearRect(0, 0, size, size);
+  ctx.fillStyle = '#ff3f55';
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.98)';
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.arc(32, 34, 23, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.moveTo(16, 45);
+  ctx.lineTo(29, 23);
+  ctx.lineTo(36, 33);
+  ctx.lineTo(40, 28);
+  ctx.lineTo(49, 45);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = '#ff3f55';
+  ctx.beginPath();
+  ctx.moveTo(25, 29);
+  ctx.lineTo(29, 23);
+  ctx.lineTo(34, 31);
+  ctx.lineTo(30, 29);
+  ctx.lineTo(27, 32);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.moveTo(49, 4);
+  ctx.lineTo(52, 14);
+  ctx.lineTo(62, 17);
+  ctx.lineTo(52, 20);
+  ctx.lineTo(49, 30);
+  ctx.lineTo(46, 20);
+  ctx.lineTo(36, 17);
+  ctx.lineTo(46, 14);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(93, 108, 118, 0.45)';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  return {
+    data: ctx.getImageData(0, 0, size, size),
+    options: { pixelRatio },
+  };
+}
+
+function createPeakStarIcon() {
+  const pixelRatio = 2;
+  const size = 48;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+
+  const center = size / 2;
+  const outer = 18;
+  const inner = 8.2;
+  ctx.clearRect(0, 0, size, size);
+  ctx.beginPath();
+  for (let i = 0; i < 10; i += 1) {
+    const radius = i % 2 === 0 ? outer : inner;
+    const angle = -Math.PI / 2 + i * Math.PI / 5;
+    const x = center + Math.cos(angle) * radius;
+    const y = center + Math.sin(angle) * radius;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+  ctx.fillStyle = '#ffffff';
+  ctx.strokeStyle = 'rgba(93, 108, 118, 0.75)';
+  ctx.lineWidth = 3;
+  ctx.lineJoin = 'round';
+  ctx.fill();
+  ctx.stroke();
+
+  return {
+    data: ctx.getImageData(0, 0, size, size),
+    options: { pixelRatio },
+  };
+}
+
+function createGeneratedStyleImage(id) {
+  if (id === 'xplore-peak-red-mountain') return createPeakRedMountainIcon();
+  if (id === 'xplore-peak-star') return createPeakStarIcon();
+  if (id === 'xplore-peak-label-frame') return createPeakLabelFrameImage();
+  if (id === 'xplore-peak-name-pill') {
+    return createStretchablePillImage({
+      fill: 'rgba(255, 255, 255, 0.96)',
+      stroke: { color: 'rgba(33, 45, 55, 0.16)', width: 2 },
+      shadow: { color: 'rgba(0, 0, 0, 0.16)', blur: 8, offsetY: 2 },
+    });
+  }
+  if (id === 'xplore-peak-elevation-pill') {
+    return createStretchablePillImage({
+      fill: 'rgba(53, 188, 207, 0.96)',
+      stroke: { color: 'rgba(255, 255, 255, 0.58)', width: 1.5 },
+      shadow: { color: 'rgba(0, 0, 0, 0.14)', blur: 7, offsetY: 2 },
+    });
+  }
+  if (id === 'xplore-peak-leader') return createPeakLeaderImage();
+  return null;
+}
+
+function createCartesFallbackImage(id) {
+  if (id === 'cartesapp-triangle') {
+    return makeCanvasImage(32, (ctx, size) => {
+      ctx.fillStyle = '#f97316';
+      ctx.beginPath();
+      ctx.moveTo(size * 0.5, size * 0.12);
+      ctx.lineTo(size * 0.88, size * 0.84);
+      ctx.lineTo(size * 0.12, size * 0.84);
+      ctx.closePath();
+      ctx.fill();
+    });
+  }
+  if (id === 'cartesapp-cliff' || id === 'cartesapp-arete') {
+    return makeCanvasImage(32, (ctx, size) => {
+      ctx.strokeStyle = id === 'cartesapp-cliff' ? '#5b6472' : '#7c6f64';
+      ctx.lineWidth = 3;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(size * 0.2, size * 0.74);
+      ctx.lineTo(size * 0.44, size * 0.24);
+      ctx.lineTo(size * 0.8, size * 0.74);
+      ctx.stroke();
+    });
+  }
+  if (id === 'cartesapp-stone') {
+    return makeCanvasImage(24, (ctx, size) => {
+      ctx.fillStyle = '#827a70';
+      ctx.beginPath();
+      ctx.moveTo(size * 0.5, size * 0.14);
+      ctx.lineTo(size * 0.86, size * 0.5);
+      ctx.lineTo(size * 0.5, size * 0.86);
+      ctx.lineTo(size * 0.14, size * 0.5);
+      ctx.closePath();
+      ctx.fill();
+    });
+  }
+  if (id === 'cartesapp-oneway') {
+    return makeCanvasImage(24, (ctx, size) => {
+      ctx.fillStyle = '#4f88c7';
+      ctx.beginPath();
+      ctx.moveTo(size * 0.18, size * 0.38);
+      ctx.lineTo(size * 0.62, size * 0.38);
+      ctx.lineTo(size * 0.62, size * 0.22);
+      ctx.lineTo(size * 0.88, size * 0.5);
+      ctx.lineTo(size * 0.62, size * 0.78);
+      ctx.lineTo(size * 0.62, size * 0.62);
+      ctx.lineTo(size * 0.18, size * 0.62);
+      ctx.closePath();
+      ctx.fill();
+    });
+  }
+  if (id === 'bicycle') {
+    return makeCanvasImage(28, (ctx, size) => {
+      ctx.strokeStyle = '#3b82f6';
+      ctx.lineWidth = 2.6;
+      ctx.beginPath();
+      ctx.arc(size * 0.28, size * 0.68, size * 0.17, 0, Math.PI * 2);
+      ctx.arc(size * 0.72, size * 0.68, size * 0.17, 0, Math.PI * 2);
+      ctx.moveTo(size * 0.28, size * 0.68);
+      ctx.lineTo(size * 0.46, size * 0.42);
+      ctx.lineTo(size * 0.58, size * 0.68);
+      ctx.lineTo(size * 0.4, size * 0.68);
+      ctx.lineTo(size * 0.72, size * 0.68);
+      ctx.stroke();
+    });
+  }
+  if (/^(road|exit|[a-z]+_road|[a-z]+)_[0-9]+$/.test(id)) {
+    return makeCanvasImage(32, (ctx, size) => {
+      const x = size * 0.12, y = size * 0.25, w = size * 0.76, h = size * 0.5, r = 5;
+      ctx.fillStyle = '#f8fafc';
+      ctx.strokeStyle = '#6b7280';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.lineTo(x + w - r, y);
+      ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+      ctx.lineTo(x + w, y + h - r);
+      ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+      ctx.lineTo(x + r, y + h);
+      ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+      ctx.lineTo(x, y + r);
+      ctx.quadraticCurveTo(x, y, x + r, y);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    });
+  }
+  return null;
+}
+
+function addAsyncStyleImage(map, id, url, pendingImages, options = {}) {
+  if (!url || pendingImages.has(id) || map.hasImage(id)) return true;
+  pendingImages.add(id);
+  rasterizeCartesSvg(url, id, options.size)
+    .then(({ data, options: imageOptions }) => {
+      pendingImages.delete(id);
+      if (map.hasImage(id)) return;
+      try {
+        map.addImage(id, data, imageOptions);
+        if (typeof map.triggerRepaint === 'function') map.triggerRepaint();
+      } catch (error) {
+        console.warn(`[Basemap] Failed to add style image ${id}:`, error);
+      }
+    })
+    .catch(() => {
+      pendingImages.delete(id);
+      if (map.hasImage(id)) return;
+      try {
+        map.addImage(id, createCartesFallbackImage(id) || TRANSPARENT_IMAGE, { pixelRatio: CARTES_RASTER_PIXEL_RATIO });
+      } catch (error) {
+        console.warn(`[Basemap] Failed to add fallback style image ${id}:`, error);
+      }
+    });
+  return true;
+}
+
+function styleUsesNotoFonts(style) {
+  const layers = Array.isArray(style?.layers) ? style.layers : [];
+  const hasNoto = (value) => {
+    if (typeof value === 'string') return value.includes('Noto Sans');
+    if (Array.isArray(value)) return value.some(hasNoto);
+    if (value && typeof value === 'object') return Object.values(value).some(hasNoto);
+    return false;
+  };
+  return layers.some((layer) => hasNoto(layer?.layout?.['text-font']));
+}
 
 // ═══════════════════════════════════════════════════════════════════════
 // INIT
@@ -60,7 +561,7 @@ async function init() {
     toggleButton: viewToggleBtn,
     vignetteElement: vignetteEl,
     skySettings: SKY_SETTINGS,
-    defaultMode: VIEW_MODES.THREED,
+    defaultMode: VIEW_MODES.TWOD,
     defaultOrientation: DEFAULT_3D_ORIENTATION,
     terrainSourceId: 'terrainSource',
     hdSources: ['terrainSource', 'hillshadeSource', 'reliefDem'],
@@ -78,11 +579,13 @@ async function init() {
     baseStyleUnderlayLayerIds,
     baseStyleFillLayerIds,
     viewModeController,
+    shadowController: shadowCtrl,
     updateAnalyticalLegends: () => renderAnalyticalLegends(map, imagery.imageryState, shadowCtrl.updateShadowTime),
   });
 
   // ── 5b. Wikimedia Photos ──
   initializeWikimediaPhotos(map, { enabled: false });
+  window.xplorePeakLabelMarkers = initPeakLabelMarkers(map);
 
   // ── 6. Routing orchestrator ──
   const routing = createRoutingOrchestrator(map);
@@ -131,9 +634,20 @@ async function init() {
   applyGpxData(EMPTY_COLLECTION);
 
   // ── 8. Style image missing handler ──
+  const pendingStyleImages = new Set();
   map.on('styleimagemissing', (e) => {
     if (map.hasImage(e.id)) return;
-    map.addImage(e.id, { width: 1, height: 1, data: new Uint8Array([0, 0, 0, 0]) });
+    const generatedImage = createGeneratedStyleImage(e.id);
+    if (generatedImage) {
+      map.addImage(e.id, generatedImage.data, generatedImage.options);
+      return;
+    }
+    const cartesIconUrl = getCartesIconUrl(e.id);
+    if (cartesIconUrl) {
+      addAsyncStyleImage(map, e.id, cartesIconUrl, pendingStyleImages);
+      return;
+    }
+    map.addImage(e.id, createCartesFallbackImage(e.id) || TRANSPARENT_IMAGE, { pixelRatio: 2 });
   });
 
   // ── 9. Overlay wiring ──
@@ -908,21 +1422,36 @@ async function init() {
     // Basemap definitions — order matters for display
     // Style cache to avoid re-fetching on repeated switches
     const styleCache = new Map();
-    const injectStyleDefaults = (style) => {
+    const injectStyleDefaults = (style, sub = null) => {
       style.projection = { type: 'mercator' };
       style.sky = { 'sky-color': '#bcd0e6', 'horizon-color': '#e6effa', 'sky-horizon-blend': 0.5 };
       style.light = { 'anchor': 'map', 'position': [1.5, 90, 80] };
+      if (CARTES_STYLE_IDS.has(sub?.id)) {
+        style.sprite = CARTES_SPRITE_URL;
+      }
+      if (CARTES_STYLE_IDS.has(sub?.id) || (/cartes\.app\/fonts\/glyphs/i.test(style.glyphs || '') && styleUsesNotoFonts(style))) {
+        style.glyphs = OPENFREEMAP_GLYPHS_URL;
+      }
       return style;
     };
 
     const BASEMAP_OPTIONS = [
       {
-        id: 'vector', label: 'Vector',
+        id: 'none',
+        label: 'None',
+        noBasemap: true,
+      },
+      {
+        id: 'color-relief-only',
+        label: 'Color Relief',
+        colorReliefOnly: true,
+      },
+      {
+        id: 'vector', label: 'Xplore Outdoor',
         isStyleSwap: true,
         subOptions: [
-          { id: 'liberty', label: 'Liberty', styleUrl: 'https://tiles.openfreemap.org/styles/liberty' },
-          { id: 'terrain-stadia', label: 'Terrain', styleUrl: './terrain_vector_on_stadia.json' },
-          { id: 'liberty-local', label: 'Liberty Local', styleUrl: './Xplore.json' },
+          { id: 'xplore-outdoor-hybrid-2', label: 'Outdoor Relief WIP', styleUrl: './xplore_outdoor_hybrid-2.json?v=20260525-relief-wip', previewImage: './data/vector-map.svg' },
+          { id: 'xplore-outdoor-hybrid', label: 'Xplore Outdoor', styleUrl: './xplore_outdoor_hybrid.json?v=20260523-color-relief-strong', previewImage: './data/vector-map.svg' },
         ],
         previewImage: './data/vector-map.svg',
       },
@@ -995,15 +1524,43 @@ async function init() {
       });
     };
 
+    const setNeutralBackgroundVisible = (visible) => {
+      if (!visible) return;
+      const vis = 'visible';
+      (map.getStyle()?.layers || []).forEach((layer) => {
+        if (layer?.type !== 'background') return;
+        try { map.setLayoutProperty(layer.id, 'visibility', layer.id === 'terrain-bg' ? vis : 'none'); } catch (_) { }
+      });
+      if (map.getLayer('terrain-bg')) {
+        try {
+          map.setPaintProperty('terrain-bg', 'background-color', '#ffffff');
+          map.setPaintProperty('terrain-bg', 'background-opacity', 1);
+          map.setLayoutProperty('terrain-bg', 'visibility', vis);
+        } catch (_) { }
+      }
+    };
+
     // Hide/show hillshade + terrain background + all non-overlay vector layers
-    const TERRAIN_BG_LAYERS = ['hillshade', 'hillshade2', 'terrain-bg', 'terrain'];
-    const setVectorBaseVisible = (visible) => {
+    const TERRAIN_BG_LAYERS = ['color-relief', 'hillshade', 'hillshade2', 'terrain-bg', 'terrain'];
+    const setVectorBaseVisible = (visible, reliefOptions = {}) => {
+      const colorReliefVisible = reliefOptions.colorReliefVisible ?? visible;
+      const hillshadeVisible = reliefOptions.hillshadeVisible ?? visible;
+      const terrainBgVisible = reliefOptions.terrainBgVisible ?? (visible || colorReliefVisible);
+      const terrainRasterVisible = reliefOptions.terrainRasterVisible ?? visible;
       window._xploreVectorBaseVisible = Boolean(visible);
-      const vis = visible ? 'visible' : 'none';
+      window._xploreColorReliefVisible = Boolean(colorReliefVisible);
+      window._xploreColorReliefSolo = Boolean(reliefOptions.colorReliefSolo);
+      window.dispatchEvent(new CustomEvent('xplore-vector-base-visible-change', { detail: { visible: Boolean(visible) } }));
       // Hillshade and terrain raster
       TERRAIN_BG_LAYERS.forEach(id => {
         if (map.getLayer(id)) {
-          try { map.setLayoutProperty(id, 'visibility', vis); } catch (_) { }
+          const visibleLayer =
+            (id === 'color-relief' && colorReliefVisible) ||
+            (id === 'hillshade' && hillshadeVisible) ||
+            (id === 'hillshade2' && hillshadeVisible) ||
+            (id === 'terrain-bg' && terrainBgVisible) ||
+            (id === 'terrain' && terrainRasterVisible);
+          try { map.setLayoutProperty(id, 'visibility', visibleLayer ? 'visible' : 'none'); } catch (_) { }
         }
       });
       // All non-overlay base style layers (fills + underlay: water, waterways, parks, etc.)
@@ -1021,7 +1578,15 @@ async function init() {
       if (!bm) return;
 
       // Show terrain background + vector fills only for vector basemap
-      setVectorBaseVisible(basemapId === 'vector');
+      const colorReliefOnly = Boolean(bm.colorReliefOnly);
+      setVectorBaseVisible(basemapId === 'vector', {
+        colorReliefVisible: basemapId === 'vector' || colorReliefOnly,
+        colorReliefSolo: colorReliefOnly,
+        hillshadeVisible: basemapId === 'vector',
+        terrainBgVisible: basemapId === 'vector' || colorReliefOnly,
+        terrainRasterVisible: basemapId === 'vector',
+      });
+      setNeutralBackgroundVisible(Boolean(bm.noBasemap));
 
       if (bm.isStyleSwap && bm.subOptions) {
         // ── Style swap (vector basemap sub-options) ──
@@ -1041,7 +1606,7 @@ async function init() {
               }
               // Deep clone to avoid mutating the cache
               const liveStyle = JSON.parse(JSON.stringify(style));
-              injectStyleDefaults(liveStyle);
+              injectStyleDefaults(liveStyle, sub);
               parseAndCacheBaseStyleLayers(liveStyle);
               // Inject overlay defs so diff engine keeps DEM/terrain/hillshade intact
               injectOverlaysIntoStyle(liveStyle);
@@ -1062,6 +1627,13 @@ async function init() {
         if (osmState) { osmState.enabled = true; osmState.opacity = 1; }
       } else if (bm.activate) {
         bm.activate();
+      } else if (colorReliefOnly) {
+        const reliefState = imagery.imageryState.get('color-relief');
+        if (reliefState) reliefState.enabled = true;
+        const osmState = imagery.imageryState.get('osm-features');
+        if (osmState) { osmState.enabled = false; osmState.opacity = 0; }
+        const fillsState = imagery.imageryState.get('vector-fills');
+        if (fillsState) { fillsState.enabled = false; fillsState.opacity = 0; }
       } else if (bm.isLidar) {
         activateLidarLayers();
       } else if (bm.subOptions && subOptionId) {
@@ -1098,7 +1670,7 @@ async function init() {
 
       // Re-apply pathway state so Routes persist across non-vector basemap switches
       // On Vector basemap, overlay is always shown (part of the full map)
-      if (basemapId !== 'vector' && typeof reapplyAllPathways === 'function') reapplyAllPathways();
+      if (basemapId !== 'vector' && !colorReliefOnly && typeof reapplyAllPathways === 'function') reapplyAllPathways();
     };
 
     const updateBasemapUI = () => {
@@ -1124,7 +1696,7 @@ async function init() {
       });
       // Update main toggle thumbnail
       if (basemapToggle) {
-        const isNonDefault = activeBasemapId !== 'vector';
+        const isNonDefault = activeBasemapId !== 'vector' && activeBasemapId !== 'none';
         basemapToggle.classList.toggle('has-active-layer', isNonDefault);
         let thumb = basemapToggle.querySelector('.map-action-btn__thumb');
         if (!thumb) { thumb = document.createElement('div'); thumb.className = 'map-action-btn__thumb'; basemapToggle.prepend(thumb); }
@@ -1320,8 +1892,8 @@ async function init() {
         basemapBox.appendChild(row);
       });
 
-      // Initialize: vector is default basemap (liberty sub-option)
-      activateBasemap('vector', 'liberty');
+      // Initialize: the tuned outdoor relief style is the default vector basemap.
+      activateBasemap('vector', 'xplore-outdoor-hybrid-2');
     }
   }
 

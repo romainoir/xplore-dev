@@ -19,9 +19,54 @@ import {
     DEM_SOURCE_MAX_ZOOM,
     clampOpacity,
 
-} from './imagery-manager.js';
+} from './imagery-manager.js?v=20260525-relief-match';
 
-import { updatePeakLabels, getBaseStyleLayerBuckets } from './map-init.js';
+import { updatePeakLabels, getBaseStyleLayerBuckets } from './map-init.js?v=20260525-relief-match';
+
+export const COLOR_RELIEF_LAYER_ID = 'color-relief';
+
+const COLOR_RELIEF_PAINT = Object.freeze({
+    'color-relief-opacity': 0.4,
+    'color-relief-color': [
+        'interpolate',
+        ['linear'],
+        ['elevation'],
+        -100, '#31565a',
+        0, '#455641',
+        350, '#555d3f',
+        800, '#716d4e',
+        1200, '#928267',
+        1700, '#aa977e',
+        2300, '#b59e8a',
+        2900, '#a79e96',
+        3400, '#bfd5dc',
+        4200, '#d6e8ee',
+        5200, '#f4fbfb'
+    ],
+    resampling: 'linear'
+});
+
+function createColorReliefLayer(visibility = 'visible') {
+    return {
+        id: COLOR_RELIEF_LAYER_ID,
+        type: 'color-relief',
+        source: 'reliefDem',
+        layout: { visibility },
+        paint: { ...COLOR_RELIEF_PAINT }
+    };
+}
+
+function hasManagedReliefMetadata(layer) {
+    const metadata = layer?.metadata || {};
+    return metadata['xplore:layer-group'] === '08 DEM / relief overlays'
+        || metadata.group === '08 DEM / relief overlays'
+        || metadata['mapbox:group'] === 'xplore-08-dem-overlays';
+}
+
+function getStyleLayer(map, id) {
+    const layers = map?.getStyle?.()?.layers;
+    return Array.isArray(layers) ? layers.find(layer => layer?.id === id) : null;
+}
 
 // ─── Hillshade method style presets ───
 const HILLSHADE_METHOD_STYLES = Object.freeze({
@@ -39,12 +84,15 @@ const HILLSHADE_METHOD_STYLES = Object.freeze({
 export function applyHillshadeAppearance(map) {
     if (!map.getLayer('hillshade')) return;
 
+    const preserveStylePaint = hasManagedReliefMetadata(getStyleLayer(map, 'hillshade'));
     const style = HILLSHADE_METHOD_STYLES.igor;
-    const shadowV3State = typeof window !== 'undefined' ? window.imageryState?.get?.('shadow-v3') : null;
     const suppressNativeHillshade = Boolean(
-        (typeof window !== 'undefined' && window._xploreShadowSuppressesNativeHillshade === true) ||
-        (shadowV3State?.enabled && clampOpacity(shadowV3State.opacity ?? 0) > 0)
+        typeof window !== 'undefined' && window._xploreShadowSuppressesNativeHillshade === true
     );
+    if (preserveStylePaint) {
+        map.setLayoutProperty('hillshade', 'visibility', suppressNativeHillshade ? 'none' : 'visible');
+        return;
+    }
     map.setPaintProperty('hillshade', 'hillshade-illumination-anchor', 'map');
     map.setPaintProperty('hillshade', 'hillshade-method', 'igor');
 
@@ -90,6 +138,7 @@ export function getOverlayDefinitions() {
     };
     const layers = [
         { id: 'terrain-bg', type: 'background', paint: { 'background-color': '#e8e8e8', 'background-opacity': 1 } },
+        createColorReliefLayer(),
         { id: 'hillshade2', type: 'hillshade', source: 'reliefDem', paint: { 'hillshade-highlight-color': 'rgba(255,255,255,0.6)', 'hillshade-accent-color': 'rgba(0,0,0,0.3)', 'hillshade-exaggeration': 0.15, 'hillshade-shadow-color': 'rgba(0,0,0,0.4)' } },
         { id: 'hillshade', type: 'hillshade', source: 'hillshadeSource', paint: { 'hillshade-highlight-color': 'rgba(255,255,255,0.9)', 'hillshade-accent-color': 'rgba(0,0,0,0.55)', 'hillshade-exaggeration': 0.23, 'hillshade-shadow-color': 'rgba(0,0,0,0.55)' } },
         terrainDerivativeCache,
@@ -111,6 +160,10 @@ export function getOverlayDefinitions() {
  */
 export function injectOverlaysIntoStyle(style) {
     const { sources, layers } = getOverlayDefinitions();
+    const incomingBackground = Array.isArray(style.layers)
+        ? style.layers.find(l => l && l.type === 'background')
+        : null;
+    const backgroundPaint = incomingBackground?.paint || null;
     style.sources = style.sources || {};
     Object.assign(style.sources, sources);
     style.layers = style.layers || [];
@@ -118,9 +171,68 @@ export function injectOverlaysIntoStyle(style) {
     style.layers = style.layers.filter(l => l.type !== 'background');
     const existing = new Set(style.layers.map(l => l.id));
     // Prepend overlays at the BOTTOM so terrain-bg/hillshade sit below vector layers
-    const toInsert = layers.filter(l => !existing.has(l.id));
+    const preserveStyleHillshade = style.layers.some(layer => layer?.id === 'hillshade' && hasManagedReliefMetadata(layer));
+    const toInsert = layers
+        .filter(l => !existing.has(l.id))
+        .filter(l => !(l.id === 'hillshade2' && preserveStyleHillshade))
+        .map(l => {
+            if (l.id !== 'terrain-bg' || !backgroundPaint) return l;
+            return {
+                ...l,
+                paint: {
+                    ...l.paint,
+                    ...backgroundPaint,
+                    'background-opacity': l.paint?.['background-opacity'] ?? 1
+                }
+            };
+        });
     style.layers = [...toInsert, ...style.layers];
-    style.terrain = { source: 'terrainSource', exaggeration: 1 };
+    delete style.terrain;
+}
+
+function getLayerSourceLayer(layer) {
+    return String(layer?.sourceLayer || layer?.['source-layer'] || '').toLowerCase();
+}
+
+function isReliefBaseLayer(layer) {
+    if (!layer || layer.type === 'symbol' || layer.type === 'background') return false;
+    const sourceLayer = getLayerSourceLayer(layer);
+    if (sourceLayer.includes('route') || sourceLayer.includes('transport') || sourceLayer.includes('road')) return false;
+    if (sourceLayer.includes('building') || sourceLayer.includes('boundary')) return false;
+    return ['landcover', 'landuse', 'water', 'park', 'aeroway', 'mountain_peak']
+        .some(prefix => sourceLayer.startsWith(prefix));
+}
+
+function moveBaseReliefBelowHillshade(map, layerIds = []) {
+    const reliefOverlayAnchor = map.getLayer(COLOR_RELIEF_LAYER_ID)
+        ? COLOR_RELIEF_LAYER_ID
+        : null;
+    const hillshadeAnchor = map.getLayer('hillshade2')
+        ? 'hillshade2'
+        : (map.getLayer('hillshade') ? 'hillshade' : null);
+    const baseAnchor = reliefOverlayAnchor || hillshadeAnchor;
+    if (!baseAnchor) return 0;
+
+    let moved = 0;
+    const seen = new Set();
+    layerIds.forEach((id) => {
+        if (!id || seen.has(id) || id === baseAnchor || id === hillshadeAnchor || !map.getLayer(id)) return;
+        seen.add(id);
+        const layer = map.getLayer(id);
+        if (!isReliefBaseLayer(layer)) return;
+        try {
+            map.moveLayer(id, baseAnchor);
+            moved += 1;
+        } catch (_) { }
+    });
+
+    if (reliefOverlayAnchor && map.getLayer('hillshade2')) {
+        try { map.moveLayer(reliefOverlayAnchor, 'hillshade2'); } catch (_) { }
+    }
+    if (map.getLayer('hillshade2') && map.getLayer('hillshade')) {
+        try { map.moveLayer('hillshade2', 'hillshade'); } catch (_) { }
+    }
+    return moved;
 }
 
 /**
@@ -158,6 +270,7 @@ export function applyOverlays(map, deps = {}) {
 
     // Remove existing imagery layers (but NOT DEM/hillshade — those are preserved by style injection)
     IMAGERY_OPTIONS.forEach(option => {
+        if (option.type === 'color-relief') return;
         const layerIds = [];
         if (typeof option.layerId === 'string') layerIds.push(option.layerId);
         if (Array.isArray(option.linkedLayerIds)) option.linkedLayerIds.forEach(id => { if (typeof id === 'string') layerIds.push(id); });
@@ -179,8 +292,11 @@ export function applyOverlays(map, deps = {}) {
 
     // Background (covers hillshade tile gaps)
     ensureL({ id: 'terrain-bg', type: 'background', paint: { 'background-color': '#e8e8e8', 'background-opacity': 1 } });
-    ensureL({ id: 'terrain', type: 'raster', source: 'terrainSource' });
-    ensureL({ id: 'hillshade2', type: 'hillshade', source: 'reliefDem', paint: { 'hillshade-highlight-color': 'rgba(255,255,255,0.6)', 'hillshade-accent-color': 'rgba(0,0,0,0.3)', 'hillshade-exaggeration': 0.15, 'hillshade-shadow-color': 'rgba(0,0,0,0.4)' } }, topLabelId || undefined);
+    ensureL(createColorReliefLayer(), topLabelId || undefined);
+    const preserveStyleHillshade = hasManagedReliefMetadata(getStyleLayer(map, 'hillshade'));
+    if (!preserveStyleHillshade) {
+        ensureL({ id: 'hillshade2', type: 'hillshade', source: 'reliefDem', paint: { 'hillshade-highlight-color': 'rgba(255,255,255,0.6)', 'hillshade-accent-color': 'rgba(0,0,0,0.3)', 'hillshade-exaggeration': 0.15, 'hillshade-shadow-color': 'rgba(0,0,0,0.4)' } }, topLabelId || undefined);
+    }
 
     // ─── Add imagery layers ───
     IMAGERY_OPTIONS.forEach(option => {
@@ -308,14 +424,13 @@ export function applyOverlays(map, deps = {}) {
     // ─── Move vector fill layers above terrain DEM but below hillshade ───
     // Fills (parks, water, forests) sit between terrain raster and hillshade,
     // so hillshade composites relief shading on top of the colored fills.
-    const { fills: fillLayerIds, overlay: overlayLayerIds } = getBaseStyleLayerBuckets();
-    if (Array.isArray(fillLayerIds)) {
-        const hillshadeId = map.getLayer('hillshade') ? 'hillshade' : (topLabelId || undefined);
-        fillLayerIds.forEach(id => {
-            if (map.getLayer(id)) map.moveLayer(id, hillshadeId);
-        });
-        console.log(`[App] Repositioned ${fillLayerIds.length} vector fill layers below hillshade`);
-    }
+    const { fills: fillLayerIds, underlay: underlayLayerIds, overlay: overlayLayerIds, content: contentLayerIds } = getBaseStyleLayerBuckets();
+    const movedReliefBaseLayers = moveBaseReliefBelowHillshade(map, [
+        ...(Array.isArray(fillLayerIds) ? fillLayerIds : []),
+        ...(Array.isArray(underlayLayerIds) ? underlayLayerIds : []),
+        ...(Array.isArray(contentLayerIds) ? contentLayerIds : []),
+    ]);
+    console.log(`[App] Repositioned ${movedReliefBaseLayers} relief base layers below hillshade`);
 
     // Contour layers are shader-based (no map layers to reorder)
 
