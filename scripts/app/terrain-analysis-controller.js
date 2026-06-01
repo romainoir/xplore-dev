@@ -539,6 +539,23 @@ export function setupTerrainHoverInfo(map, imageryState) {
     if (!hoverEl) return;
 
     let throttleTimer = null;
+    const positionHover = (event) => {
+        const margin = 28;
+        const halfWidth = (hoverEl.offsetWidth || 160) / 2;
+        const minX = margin + halfWidth;
+        let maxX = window.innerWidth - margin - halfWidth;
+
+        if (document.body.classList.contains('layer-side-panel-open')) {
+            const panel = document.querySelector('.basemap-toolbox.layer-side-panel');
+            const panelLeft = panel?.getBoundingClientRect?.().left ?? window.innerWidth;
+            maxX = Math.min(maxX, panelLeft - margin - halfWidth);
+        }
+
+        const boundedMaxX = Math.max(minX, maxX);
+        hoverEl.style.left = `${Math.max(minX, Math.min(event.clientX, boundedMaxX))}px`;
+        hoverEl.style.top = `${event.clientY}px`;
+    };
+
     map.on('mousemove', (e) => {
         if (throttleTimer) return;
         throttleTimer = setTimeout(() => { throttleTimer = null; }, 60);
@@ -556,8 +573,7 @@ export function setupTerrainHoverInfo(map, imageryState) {
             if (content) {
                 hoverEl.innerHTML = content;
                 hoverEl.style.display = 'block';
-                hoverEl.style.left = `${e.originalEvent.clientX}px`;
-                hoverEl.style.top = `${e.originalEvent.clientY}px`;
+                positionHover(e.originalEvent);
             } else {
                 hoverEl.style.display = 'none';
             }
@@ -591,8 +607,7 @@ export function setupTerrainHoverInfo(map, imageryState) {
         if (content) {
             hoverEl.innerHTML = content;
             hoverEl.style.display = 'block';
-            hoverEl.style.left = `${e.originalEvent.clientX}px`;
-            hoverEl.style.top = `${e.originalEvent.clientY}px`;
+            positionHover(e.originalEvent);
         } else {
             hoverEl.style.display = 'none';
         }

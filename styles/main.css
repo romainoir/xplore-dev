@@ -312,6 +312,258 @@ body {
   transform: translateX(-50%) scale(1) translateY(0);
 }
 
+body.layer-side-panel-enabled .imagery-panel__buttons>.imagery-panel__control-group>#photosToolboxToggle,
+body.layer-side-panel-enabled .imagery-panel__buttons>.imagery-panel__control-group>#shadowToolboxToggle,
+body.layer-side-panel-enabled .imagery-panel__buttons>.imagery-panel__control-group>#snowToolboxToggle,
+body.layer-side-panel-enabled .imagery-panel__buttons>.imagery-panel__control-group>#terrainToolboxToggle,
+body.layer-side-panel-enabled .imagery-panel__buttons>.imagery-panel__control-group>#pathwayToolboxToggle {
+  display: none !important;
+}
+
+body.layer-side-panel-enabled .imagery-panel__control-group.layer-side-panel__source-group {
+  display: none !important;
+}
+
+.basemap-toolbox.layer-side-panel {
+  position: fixed !important;
+  top: 0 !important;
+  right: 0 !important;
+  left: auto !important;
+  bottom: 0 !important;
+  width: min(390px, calc(100vw - 24px)) !important;
+  height: 100vh !important;
+  max-height: none !important;
+  padding: calc(18px + env(safe-area-inset-top, 0px)) 14px calc(18px + env(safe-area-inset-bottom, 0px)) !important;
+  transform: translateX(105%) !important;
+  display: flex !important;
+  align-items: stretch !important;
+  gap: 0 !important;
+  border-radius: 20px 0 0 20px !important;
+  border-right: 0 !important;
+  opacity: 1 !important;
+  visibility: hidden !important;
+  overflow: hidden !important;
+  z-index: 1200 !important;
+  transition: transform 0.28s ease, visibility 0.28s ease !important;
+}
+
+.basemap-toolbox.layer-side-panel.visible {
+  transform: translateX(0) !important;
+  visibility: visible !important;
+}
+
+.layer-side-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 2px 2px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.layer-side-panel__title {
+  font-family: var(--font-ui);
+  font-size: 18px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.94);
+}
+
+.layer-side-panel__close {
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.layer-side-panel__close:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.layer-side-panel__body {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 14px 2px 4px;
+  overflow: auto;
+}
+
+.layer-side-panel__section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.layer-side-panel__section-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.layer-side-panel__section-title {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.9);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.layer-side-panel__section-hint {
+  color: rgba(255, 255, 255, 0.42);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.layer-side-panel__section-content {
+  min-width: 0;
+}
+
+.layer-side-panel__options,
+.layer-side-panel .terrain-toolbox,
+.layer-side-panel .snow-toolbox,
+.layer-side-panel .shadow-toolbox,
+.layer-side-panel .pathway-toolbox {
+  position: static !important;
+  inset: auto !important;
+  transform: none !important;
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  align-items: stretch !important;
+  gap: 10px !important;
+  width: 100% !important;
+  max-height: none !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  backdrop-filter: none !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  overflow: visible !important;
+}
+
+.layer-side-panel .toolbox-option-row {
+  min-width: 0;
+}
+
+.layer-side-panel .basemap-toolbox-options .toolbox-option-row,
+.layer-side-panel .pathway-toolbox .toolbox-option-row,
+.layer-side-panel .shadow-toolbox .toolbox-option-row {
+  display: contents;
+}
+
+.layer-side-panel .btn.terrain-toolbox__toggle,
+.layer-side-panel .btn.snow-toolbox__toggle,
+.layer-side-panel .btn.shadow-toolbox__toggle,
+.layer-side-panel .btn.pathway-toolbox__toggle,
+.layer-side-panel .btn.basemap-toolbox__toggle,
+.layer-side-panel .btn.photos-toolbox-toggle {
+  width: 100% !important;
+  min-width: 0 !important;
+  height: 78px !important;
+  border-radius: 14px !important;
+  flex-direction: column !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  padding: 7px 5px !important;
+  margin: 0 !important;
+  overflow: hidden !important;
+}
+
+.layer-side-panel .btn.terrain-toolbox__toggle::after,
+.layer-side-panel .btn.snow-toolbox__toggle::after,
+.layer-side-panel .btn.shadow-toolbox__toggle::after,
+.layer-side-panel .btn.pathway-toolbox__toggle::after,
+.layer-side-panel .btn.basemap-toolbox__toggle::after,
+.layer-side-panel .btn.photos-toolbox-toggle::after {
+  content: attr(title);
+  min-width: 0;
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.9);
+  font-family: var(--font-ui);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.05;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.layer-side-panel .btn.terrain-toolbox__toggle img,
+.layer-side-panel .btn.snow-toolbox__toggle img,
+.layer-side-panel .btn.shadow-toolbox__toggle img,
+.layer-side-panel .btn.pathway-toolbox__toggle img:not(.pathway-badge),
+.layer-side-panel .btn.basemap-toolbox__toggle img:not(.basemap-badge),
+.layer-side-panel .btn.photos-toolbox-toggle img {
+  width: 38px !important;
+  height: 38px !important;
+  flex: 0 0 38px !important;
+  object-fit: cover !important;
+  border-radius: 50% !important;
+}
+
+.layer-side-panel .pathway-toolbox .btn.pathway-toolbox__toggle[data-pathway-id="heatmap"] img:not(.pathway-badge),
+.layer-side-panel .pathway-toolbox .btn.pathway-toolbox__toggle[data-pathway-id="routes"] img:not(.pathway-badge),
+.layer-side-panel .pathway-toolbox .btn.pathway-toolbox__toggle[data-pathway-id="ski-rando"] img:not(.pathway-badge) {
+  width: 28px !important;
+  height: 28px !important;
+  flex-basis: 28px !important;
+  object-fit: contain !important;
+  border-radius: 0 !important;
+}
+
+.layer-side-panel .basemap-sub-menu,
+.layer-side-panel .pathway-sub-menu,
+.layer-side-panel .shadow-sub-menu {
+  position: static !important;
+  right: auto !important;
+  top: auto !important;
+  transform: none !important;
+  grid-column: 1 / -1;
+  width: 100%;
+  margin: -2px 0 0;
+  display: none !important;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 9px !important;
+  border-radius: 14px !important;
+  background: rgba(4, 18, 31, 0.48) !important;
+  white-space: normal;
+}
+
+.layer-side-panel .basemap-sub-menu.visible,
+.layer-side-panel .pathway-sub-menu.visible,
+.layer-side-panel .shadow-sub-menu.visible {
+  display: flex !important;
+}
+
+.layer-side-panel__photo-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.layer-side-panel__photo-row .photos-toolbox-toggle {
+  flex: 0 0 auto;
+}
+
+.layer-side-panel__option-label {
+  display: none;
+}
+
 /* Toolbox Active States - Standardized Glow */
 .terrain-toolbox-toggle.active,
 .snow-toolbox-toggle.active,
@@ -661,6 +913,397 @@ body {
   align-items: center;
   justify-content: center;
   padding: 4px 0;
+}
+
+/* Final side-panel overrides: keep legacy flyout toolbox rules from taking over. */
+.layer-side-panel .basemap-toolbox-options,
+.layer-side-panel .terrain-toolbox,
+.layer-side-panel .snow-toolbox,
+.layer-side-panel .shadow-toolbox,
+.layer-side-panel .pathway-toolbox {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 10px !important;
+  align-items: start !important;
+}
+
+.layer-side-panel .basemap-toolbox-options {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 12px !important;
+}
+
+.basemap-region-group {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.basemap-region-group__title {
+  color: rgba(255, 255, 255, 0.5);
+  font-family: var(--font-ui);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.basemap-region-group__grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  align-items: start;
+}
+
+.layer-side-panel .basemap-toolbox-options .toolbox-option-row,
+.layer-side-panel .pathway-toolbox .toolbox-option-row,
+.layer-side-panel .shadow-toolbox .toolbox-option-row {
+  display: contents !important;
+}
+
+.layer-side-panel .terrain-toolbox .btn.terrain-toolbox__toggle,
+.layer-side-panel .snow-toolbox .btn.snow-toolbox__toggle,
+.layer-side-panel .shadow-toolbox .btn.shadow-toolbox__toggle,
+.layer-side-panel .pathway-toolbox .btn.pathway-toolbox__toggle,
+.layer-side-panel .basemap-toolbox-options .btn.basemap-toolbox__toggle,
+.layer-side-panel .photos-toolbox-toggle {
+  width: 100% !important;
+  min-width: 0 !important;
+  height: 78px !important;
+  border-radius: 14px !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  padding: 7px 5px !important;
+  margin: 0 !important;
+  overflow: hidden !important;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+.layer-side-panel .terrain-toolbox .btn.terrain-toolbox__toggle:hover,
+.layer-side-panel .snow-toolbox .btn.snow-toolbox__toggle:hover,
+.layer-side-panel .shadow-toolbox .btn.shadow-toolbox__toggle:hover,
+.layer-side-panel .pathway-toolbox .btn.pathway-toolbox__toggle:hover,
+.layer-side-panel .basemap-toolbox-options .btn.basemap-toolbox__toggle:hover,
+.layer-side-panel .photos-toolbox-toggle:hover {
+  background: rgba(255, 255, 255, 0.07) !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+.layer-side-panel .terrain-toolbox .btn.terrain-toolbox__toggle.active,
+.layer-side-panel .snow-toolbox .btn.snow-toolbox__toggle.active,
+.layer-side-panel .shadow-toolbox .btn.shadow-toolbox__toggle.active,
+.layer-side-panel .pathway-toolbox .btn.pathway-toolbox__toggle.active,
+.layer-side-panel .basemap-toolbox-options .btn.basemap-toolbox__toggle.active,
+.layer-side-panel .photos-toolbox-toggle.active {
+  background: rgba(39, 174, 96, 0.24) !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+.layer-side-panel .pathway-toolbox .btn.pathway-toolbox__toggle[data-pathway-id="heatmap"].active {
+  background: rgba(220, 50, 30, 0.18) !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  animation: none !important;
+}
+
+.layer-side-panel .terrain-toolbox .btn.terrain-toolbox__toggle>span:not(.sr-only),
+.layer-side-panel .snow-toolbox .btn.snow-toolbox__toggle>span:not(.sr-only),
+.layer-side-panel .shadow-toolbox .btn.shadow-toolbox__toggle>span:not(.sr-only),
+.layer-side-panel .pathway-toolbox .btn.pathway-toolbox__toggle>span:not(.sr-only),
+.layer-side-panel .basemap-toolbox-options .btn.basemap-toolbox__toggle>span:not(.sr-only):not(.basemap-placeholder),
+.layer-side-panel .photos-toolbox-toggle>span:not(.sr-only) {
+  display: none !important;
+}
+
+.layer-side-panel .basemap-placeholder {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.92);
+  font-family: var(--font-ui);
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.layer-side-panel .basemap-placeholder--none {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.layer-side-panel .basemap-placeholder--color-relief-only {
+  background: linear-gradient(135deg, #31565a 0%, #716d4e 42%, #b59e8a 70%, #d6e8ee 100%);
+}
+
+.layer-side-panel .terrain-toolbox .btn.terrain-toolbox__toggle img,
+.layer-side-panel .snow-toolbox .btn.snow-toolbox__toggle img,
+.layer-side-panel .shadow-toolbox .btn.shadow-toolbox__toggle img,
+.layer-side-panel .pathway-toolbox .btn.pathway-toolbox__toggle img:not(.pathway-badge),
+.layer-side-panel .basemap-toolbox-options .btn.basemap-toolbox__toggle img:not(.basemap-badge),
+.layer-side-panel .photos-toolbox-toggle img {
+  width: 38px !important;
+  height: 38px !important;
+  flex: 0 0 38px !important;
+  border-radius: 8px !important;
+  object-fit: cover !important;
+}
+
+.layer-side-panel .pathway-toolbox .btn.pathway-toolbox__toggle[data-pathway-id="heatmap"] img:not(.pathway-badge),
+.layer-side-panel .pathway-toolbox .btn.pathway-toolbox__toggle[data-pathway-id="routes"] img:not(.pathway-badge),
+.layer-side-panel .pathway-toolbox .btn.pathway-toolbox__toggle[data-pathway-id="ski-rando"] img:not(.pathway-badge) {
+  width: 30px !important;
+  height: 30px !important;
+  flex: 0 0 30px !important;
+  border-radius: 6px !important;
+}
+
+.layer-side-panel .basemap-sub-menu,
+.layer-side-panel .pathway-sub-menu,
+.layer-side-panel .shadow-sub-menu {
+  position: static !important;
+  grid-column: 1 / -1 !important;
+  width: 100% !important;
+  margin: -2px 0 0 !important;
+  padding: 4px 0 0 !important;
+  transform: none !important;
+  flex-wrap: wrap !important;
+  justify-content: flex-start !important;
+  gap: 8px !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  white-space: normal !important;
+}
+
+.layer-side-panel .basemap-sub-menu.visible,
+.layer-side-panel .pathway-sub-menu.visible,
+.layer-side-panel .shadow-sub-menu.visible {
+  display: flex !important;
+}
+
+.layer-side-panel .sub-thumb-btn {
+  width: 42px !important;
+  height: 42px !important;
+  min-width: 42px !important;
+  border-radius: 9px !important;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+.layer-side-panel .sub-thumb-btn img {
+  width: 30px !important;
+  height: 30px !important;
+  border-radius: 6px !important;
+}
+
+.layer-side-panel .sub-thumb-btn:hover {
+  background: rgba(255, 255, 255, 0.07) !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+.layer-side-panel .sub-thumb-btn.active {
+  background: rgba(255, 255, 255, 0.12) !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+/* Compact no-scroll layer panel layout. */
+.basemap-toolbox.layer-side-panel {
+  width: min(390px, calc(100vw - 12px)) !important;
+  padding: calc(12px + env(safe-area-inset-top, 0px)) 16px calc(10px + env(safe-area-inset-bottom, 0px)) !important;
+}
+
+.layer-side-panel__header {
+  padding: 0 0 10px !important;
+}
+
+.layer-side-panel__title {
+  font-size: 17px !important;
+}
+
+.layer-side-panel__close {
+  width: 32px !important;
+  height: 32px !important;
+}
+
+.layer-side-panel__body {
+  gap: 11px !important;
+  padding: 10px 0 0 !important;
+  overflow: hidden !important;
+}
+
+.layer-side-panel__section {
+  gap: 5px !important;
+}
+
+.layer-side-panel__section-title {
+  font-size: 11px !important;
+}
+
+.layer-side-panel__section-hint,
+.basemap-region-group__title {
+  font-size: 9px !important;
+}
+
+.layer-side-panel .terrain-toolbox,
+.layer-side-panel .snow-toolbox,
+.layer-side-panel .shadow-toolbox,
+.layer-side-panel .pathway-toolbox,
+.layer-side-panel__photo-row {
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 8px !important;
+}
+
+.layer-side-panel .basemap-toolbox-options {
+  gap: 7px !important;
+}
+
+.basemap-region-group {
+  gap: 4px !important;
+}
+
+.basemap-region-group__grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 8px !important;
+}
+
+.layer-side-panel .basemap-region-group__grid>.toolbox-option-row {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  min-width: 0 !important;
+  gap: 3px !important;
+}
+
+.layer-side-panel .pathway-toolbox>.toolbox-option-row,
+.layer-side-panel .shadow-toolbox>.toolbox-option-row {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  min-width: 0 !important;
+  gap: 3px !important;
+}
+
+.layer-side-panel .terrain-toolbox .btn.terrain-toolbox__toggle,
+.layer-side-panel .snow-toolbox .btn.snow-toolbox__toggle,
+.layer-side-panel .shadow-toolbox .btn.shadow-toolbox__toggle,
+.layer-side-panel .pathway-toolbox .btn.pathway-toolbox__toggle,
+.layer-side-panel .basemap-toolbox-options .btn.basemap-toolbox__toggle,
+.layer-side-panel .photos-toolbox-toggle {
+  height: 48px !important;
+  min-height: 48px !important;
+  padding: 0 !important;
+  gap: 3px !important;
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 8px !important;
+  box-shadow: none !important;
+}
+
+.layer-side-panel .terrain-toolbox .btn.terrain-toolbox__toggle:hover,
+.layer-side-panel .snow-toolbox .btn.snow-toolbox__toggle:hover,
+.layer-side-panel .shadow-toolbox .btn.shadow-toolbox__toggle:hover,
+.layer-side-panel .pathway-toolbox .btn.pathway-toolbox__toggle:hover,
+.layer-side-panel .basemap-toolbox-options .btn.basemap-toolbox__toggle:hover,
+.layer-side-panel .photos-toolbox-toggle:hover,
+.layer-side-panel .terrain-toolbox .btn.terrain-toolbox__toggle.active,
+.layer-side-panel .snow-toolbox .btn.snow-toolbox__toggle.active,
+.layer-side-panel .shadow-toolbox .btn.shadow-toolbox__toggle.active,
+.layer-side-panel .pathway-toolbox .btn.pathway-toolbox__toggle.active,
+.layer-side-panel .pathway-toolbox .btn.pathway-toolbox__toggle[data-pathway-id="heatmap"].active,
+.layer-side-panel .basemap-toolbox-options .btn.basemap-toolbox__toggle.active,
+.layer-side-panel .photos-toolbox-toggle.active {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  transform: none !important;
+  animation: none !important;
+}
+
+.layer-side-panel .btn.terrain-toolbox__toggle::after,
+.layer-side-panel .btn.snow-toolbox__toggle::after,
+.layer-side-panel .btn.shadow-toolbox__toggle::after,
+.layer-side-panel .btn.pathway-toolbox__toggle::after,
+.layer-side-panel .btn.basemap-toolbox__toggle::after,
+.layer-side-panel .btn.photos-toolbox-toggle::after {
+  font-size: 9px !important;
+  line-height: 1 !important;
+}
+
+.layer-side-panel .terrain-toolbox .btn.terrain-toolbox__toggle.active::after,
+.layer-side-panel .snow-toolbox .btn.snow-toolbox__toggle.active::after,
+.layer-side-panel .shadow-toolbox .btn.shadow-toolbox__toggle.active::after,
+.layer-side-panel .pathway-toolbox .btn.pathway-toolbox__toggle.active::after,
+.layer-side-panel .basemap-toolbox-options .btn.basemap-toolbox__toggle.active::after,
+.layer-side-panel .photos-toolbox-toggle.active::after {
+  color: #78d990 !important;
+}
+
+.layer-side-panel .terrain-toolbox .btn.terrain-toolbox__toggle img,
+.layer-side-panel .snow-toolbox .btn.snow-toolbox__toggle img,
+.layer-side-panel .shadow-toolbox .btn.shadow-toolbox__toggle img,
+.layer-side-panel .pathway-toolbox .btn.pathway-toolbox__toggle img:not(.pathway-badge),
+.layer-side-panel .basemap-toolbox-options .btn.basemap-toolbox__toggle img:not(.basemap-badge),
+.layer-side-panel .photos-toolbox-toggle img,
+.layer-side-panel .basemap-placeholder {
+  width: 28px !important;
+  height: 28px !important;
+  flex: 0 0 28px !important;
+  border-radius: 6px !important;
+}
+
+.layer-side-panel .pathway-toolbox .btn.pathway-toolbox__toggle[data-pathway-id="heatmap"] img:not(.pathway-badge),
+.layer-side-panel .pathway-toolbox .btn.pathway-toolbox__toggle[data-pathway-id="routes"] img:not(.pathway-badge),
+.layer-side-panel .pathway-toolbox .btn.pathway-toolbox__toggle[data-pathway-id="ski-rando"] img:not(.pathway-badge) {
+  width: 28px !important;
+  height: 28px !important;
+  flex: 0 0 28px !important;
+}
+
+.layer-side-panel .basemap-sub-menu,
+.layer-side-panel .pathway-sub-menu,
+.layer-side-panel .shadow-sub-menu {
+  width: auto !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  gap: 5px !important;
+  background: transparent !important;
+}
+
+.layer-side-panel .basemap-region-group__grid .basemap-sub-menu {
+  justify-content: center !important;
+}
+
+.layer-side-panel .sub-thumb-btn,
+.layer-side-panel .lidar-action-btn {
+  width: 24px !important;
+  height: 24px !important;
+  min-width: 24px !important;
+  border-radius: 6px !important;
+  background: transparent !important;
+}
+
+.layer-side-panel .sub-thumb-btn img,
+.layer-side-panel .lidar-action-btn img {
+  width: 18px !important;
+  height: 18px !important;
+  border-radius: 4px !important;
 }
 
 .analytical-legend-container {
@@ -5477,6 +6120,318 @@ input[type="file"].hidden-file-input {
 @keyframes wikimedia-spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+/* Layer panel polish: keep options visually open, not framed tiles. */
+body.layer-side-panel-enabled {
+  --app-header-height: clamp(50px, 6vh, 64px);
+  --layer-side-panel-width: min(390px, calc(100vw - 12px));
+  --layer-side-panel-edge: 4px;
+  --layer-side-panel-open-gap: 28px;
+  --layer-side-panel-outer-width: calc(var(--layer-side-panel-width) + 30px);
+  --layer-side-panel-control-inset: 16px;
+  --layer-side-panel-control-shift: calc(var(--layer-side-panel-outer-width) + var(--layer-side-panel-edge) + var(--layer-side-panel-open-gap) - var(--layer-side-panel-control-inset));
+  --layer-side-panel-analytics-offset: calc(var(--layer-side-panel-outer-width) + var(--layer-side-panel-edge) + var(--layer-side-panel-open-gap));
+}
+
+body.layer-side-panel-enabled .basemap-toolbox.layer-side-panel {
+  top: calc(var(--app-header-height) + var(--layer-side-panel-edge)) !important;
+  right: var(--layer-side-panel-edge) !important;
+  bottom: auto !important;
+  height: auto !important;
+  max-height: calc(100vh - var(--app-header-height) - var(--layer-side-panel-edge) - var(--layer-side-panel-edge)) !important;
+  width: var(--layer-side-panel-width) !important;
+  padding: calc(10px + env(safe-area-inset-top, 0px)) 14px calc(8px + env(safe-area-inset-bottom, 0px)) !important;
+  border-radius: 16px !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+}
+
+body.layer-side-panel-enabled .layer-side-panel__header {
+  padding-bottom: 8px !important;
+}
+
+body.layer-side-panel-enabled .layer-side-panel__body {
+  gap: 7px !important;
+  padding-top: 8px !important;
+  overflow: hidden !important;
+}
+
+body.layer-side-panel-enabled .layer-side-panel__section,
+body.layer-side-panel-enabled .basemap-region-group {
+  gap: 3px !important;
+}
+
+body.layer-side-panel-enabled .layer-side-panel .basemap-toolbox-options {
+  gap: 5px !important;
+}
+
+body.layer-side-panel-enabled .layer-side-panel .toolbox-option-row,
+body.layer-side-panel-enabled .layer-side-panel .basemap-region-group__grid,
+body.layer-side-panel-enabled .layer-side-panel__photo-row {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+}
+
+body.layer-side-panel-enabled .layer-side-panel .terrain-toolbox .btn.terrain-toolbox__toggle,
+body.layer-side-panel-enabled .layer-side-panel .snow-toolbox .btn.snow-toolbox__toggle,
+body.layer-side-panel-enabled .layer-side-panel .shadow-toolbox .btn.shadow-toolbox__toggle,
+body.layer-side-panel-enabled .layer-side-panel .pathway-toolbox .btn.pathway-toolbox__toggle,
+body.layer-side-panel-enabled .layer-side-panel .basemap-toolbox-options .btn.basemap-toolbox__toggle,
+body.layer-side-panel-enabled .layer-side-panel .photos-toolbox-toggle,
+body.layer-side-panel-enabled .layer-side-panel .terrain-toolbox .btn.terrain-toolbox__toggle:hover,
+body.layer-side-panel-enabled .layer-side-panel .snow-toolbox .btn.snow-toolbox__toggle:hover,
+body.layer-side-panel-enabled .layer-side-panel .shadow-toolbox .btn.shadow-toolbox__toggle:hover,
+body.layer-side-panel-enabled .layer-side-panel .pathway-toolbox .btn.pathway-toolbox__toggle:hover,
+body.layer-side-panel-enabled .layer-side-panel .basemap-toolbox-options .btn.basemap-toolbox__toggle:hover,
+body.layer-side-panel-enabled .layer-side-panel .photos-toolbox-toggle:hover,
+body.layer-side-panel-enabled .layer-side-panel .terrain-toolbox .btn.terrain-toolbox__toggle:focus-visible,
+body.layer-side-panel-enabled .layer-side-panel .snow-toolbox .btn.snow-toolbox__toggle:focus-visible,
+body.layer-side-panel-enabled .layer-side-panel .shadow-toolbox .btn.shadow-toolbox__toggle:focus-visible,
+body.layer-side-panel-enabled .layer-side-panel .pathway-toolbox .btn.pathway-toolbox__toggle:focus-visible,
+body.layer-side-panel-enabled .layer-side-panel .basemap-toolbox-options .btn.basemap-toolbox__toggle:focus-visible,
+body.layer-side-panel-enabled .layer-side-panel .photos-toolbox-toggle:focus-visible,
+body.layer-side-panel-enabled .layer-side-panel .terrain-toolbox .btn.terrain-toolbox__toggle.active,
+body.layer-side-panel-enabled .layer-side-panel .snow-toolbox .btn.snow-toolbox__toggle.active,
+body.layer-side-panel-enabled .layer-side-panel .shadow-toolbox .btn.shadow-toolbox__toggle.active,
+body.layer-side-panel-enabled .layer-side-panel .pathway-toolbox .btn.pathway-toolbox__toggle.active,
+body.layer-side-panel-enabled .layer-side-panel .pathway-toolbox .btn.pathway-toolbox__toggle[data-pathway-id="heatmap"].active,
+body.layer-side-panel-enabled .layer-side-panel .basemap-toolbox-options .btn.basemap-toolbox__toggle.active,
+body.layer-side-panel-enabled .layer-side-panel .photos-toolbox-toggle.active {
+  background: transparent !important;
+  background-image: none !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  outline: 0 !important;
+  transform: none !important;
+  animation: none !important;
+}
+
+body.layer-side-panel-enabled .layer-side-panel .terrain-toolbox .btn.terrain-toolbox__toggle,
+body.layer-side-panel-enabled .layer-side-panel .snow-toolbox .btn.snow-toolbox__toggle,
+body.layer-side-panel-enabled .layer-side-panel .shadow-toolbox .btn.shadow-toolbox__toggle,
+body.layer-side-panel-enabled .layer-side-panel .pathway-toolbox .btn.pathway-toolbox__toggle,
+body.layer-side-panel-enabled .layer-side-panel .basemap-toolbox-options .btn.basemap-toolbox__toggle,
+body.layer-side-panel-enabled .layer-side-panel .photos-toolbox-toggle {
+  height: 68px !important;
+  min-height: 68px !important;
+  gap: 3px !important;
+}
+
+body.layer-side-panel-enabled .layer-side-panel .btn.terrain-toolbox__toggle::after,
+body.layer-side-panel-enabled .layer-side-panel .btn.snow-toolbox__toggle::after,
+body.layer-side-panel-enabled .layer-side-panel .btn.shadow-toolbox__toggle::after,
+body.layer-side-panel-enabled .layer-side-panel .btn.pathway-toolbox__toggle::after,
+body.layer-side-panel-enabled .layer-side-panel .btn.basemap-toolbox__toggle::after,
+body.layer-side-panel-enabled .layer-side-panel .btn.photos-toolbox-toggle::after {
+  font-size: 8.5px !important;
+  line-height: 0.95 !important;
+}
+
+body.layer-side-panel-enabled .layer-side-panel .terrain-toolbox,
+body.layer-side-panel-enabled .layer-side-panel .snow-toolbox,
+body.layer-side-panel-enabled .layer-side-panel .shadow-toolbox,
+body.layer-side-panel-enabled .layer-side-panel .pathway-toolbox,
+body.layer-side-panel-enabled .layer-side-panel__photo-row,
+body.layer-side-panel-enabled .layer-side-panel .basemap-region-group__grid {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 6px !important;
+  justify-items: stretch !important;
+  align-items: start !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  box-sizing: border-box !important;
+}
+
+body.layer-side-panel-enabled .layer-side-panel__section-content,
+body.layer-side-panel-enabled .layer-side-panel__options,
+body.layer-side-panel-enabled .layer-side-panel .basemap-toolbox-options,
+body.layer-side-panel-enabled .layer-side-panel .basemap-region-group {
+  width: 100% !important;
+  min-width: 0 !important;
+  box-sizing: border-box !important;
+}
+
+body.layer-side-panel-enabled .layer-side-panel .toolbox-option-row {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: stretch !important;
+  justify-content: flex-start !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  box-sizing: border-box !important;
+}
+
+body.layer-side-panel-enabled .layer-side-panel .terrain-toolbox .btn.terrain-toolbox__toggle img,
+body.layer-side-panel-enabled .layer-side-panel .snow-toolbox .btn.snow-toolbox__toggle img,
+body.layer-side-panel-enabled .layer-side-panel .shadow-toolbox .btn.shadow-toolbox__toggle img,
+body.layer-side-panel-enabled .layer-side-panel .pathway-toolbox .btn.pathway-toolbox__toggle img:not(.pathway-badge),
+body.layer-side-panel-enabled .layer-side-panel .basemap-toolbox-options .btn.basemap-toolbox__toggle img:not(.basemap-badge),
+body.layer-side-panel-enabled .layer-side-panel .photos-toolbox-toggle img,
+body.layer-side-panel-enabled .layer-side-panel .basemap-placeholder {
+  width: 52px !important;
+  height: 52px !important;
+  flex: 0 0 52px !important;
+  border-radius: 9px !important;
+}
+
+body.layer-side-panel-enabled .layer-side-panel .pathway-toolbox .btn.pathway-toolbox__toggle[data-pathway-id="strava-winter"] img:not(.pathway-badge),
+body.layer-side-panel-enabled .layer-side-panel .pathway-toolbox .btn.pathway-toolbox__toggle[data-pathway-id="strava-backcountry-ski"] img:not(.pathway-badge),
+body.layer-side-panel-enabled .layer-side-panel .pathway-toolbox .btn.pathway-toolbox__toggle[data-pathway-id="strava-cycling"] img:not(.pathway-badge),
+body.layer-side-panel-enabled .layer-side-panel .pathway-toolbox .btn.pathway-toolbox__toggle[data-pathway-id="strava-run"] img:not(.pathway-badge),
+body.layer-side-panel-enabled .layer-side-panel .pathway-toolbox .btn.pathway-toolbox__toggle[data-pathway-id="peaks"] img:not(.pathway-badge),
+body.layer-side-panel-enabled .layer-side-panel .pathway-toolbox .btn.pathway-toolbox__toggle[data-pathway-id="wikimedia-photos"] img:not(.pathway-badge),
+body.layer-side-panel-enabled .layer-side-panel .basemap-toolbox-options .btn.basemap-toolbox__toggle[data-basemap-id="lidar-forest"] img:not(.basemap-badge) {
+  filter: brightness(0) invert(1) drop-shadow(0 1px 2px rgba(0, 0, 0, 0.38)) !important;
+  object-fit: contain !important;
+  opacity: 0.94 !important;
+}
+
+body.layer-side-panel-enabled .layer-side-panel .terrain-toolbox .btn.terrain-toolbox__toggle.active,
+body.layer-side-panel-enabled .layer-side-panel .snow-toolbox .btn.snow-toolbox__toggle.active,
+body.layer-side-panel-enabled .layer-side-panel .shadow-toolbox .btn.shadow-toolbox__toggle.active,
+body.layer-side-panel-enabled .layer-side-panel .pathway-toolbox .btn.pathway-toolbox__toggle.active,
+body.layer-side-panel-enabled .layer-side-panel .basemap-toolbox-options .btn.basemap-toolbox__toggle.active,
+body.layer-side-panel-enabled .layer-side-panel .photos-toolbox-toggle.active {
+  border-radius: 12px !important;
+  box-shadow: inset 0 0 0 2px rgba(103, 224, 132, 0.94), 0 0 0 1px rgba(103, 224, 132, 0.2) !important;
+}
+
+.basemap-toolbox-toggle {
+  isolation: isolate;
+  position: relative;
+}
+
+.layers-stack-icon {
+  --layer-stack-fill: rgba(255, 255, 255, 0.18);
+  --layer-stack-stroke: rgba(255, 255, 255, 0.94);
+  display: block;
+  position: relative;
+  width: 27px;
+  height: 27px;
+}
+
+.layers-stack-icon__svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.layers-stack-icon__layer polygon {
+  fill: var(--layer-stack-fill);
+  stroke: var(--layer-stack-stroke);
+  stroke-width: 1.9;
+  stroke-linejoin: round;
+  stroke-miterlimit: 10;
+  vector-effect: non-scaling-stroke;
+}
+
+.layers-stack-icon__layer {
+  transform-box: fill-box;
+  transform-origin: center;
+  will-change: transform;
+}
+
+.layers-stack-icon__layer--top {
+  transform: translateY(0);
+}
+
+.layers-stack-icon__layer--middle {
+  transform: translateY(0);
+}
+
+.layers-stack-icon__layer--bottom {
+  transform: translateY(0);
+}
+
+.basemap-toolbox-toggle:hover .layers-stack-icon__layer--top,
+.basemap-toolbox-toggle:focus-visible .layers-stack-icon__layer--top {
+  animation: layer-stack-expand-top 0.62s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.basemap-toolbox-toggle:hover .layers-stack-icon__layer--middle,
+.basemap-toolbox-toggle:focus-visible .layers-stack-icon__layer--middle {
+  animation: layer-stack-expand-middle 0.62s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.basemap-toolbox-toggle:hover .layers-stack-icon__layer--bottom,
+.basemap-toolbox-toggle:focus-visible .layers-stack-icon__layer--bottom {
+  animation: layer-stack-expand-bottom 0.62s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes layer-stack-expand-top {
+  0%, 100% {
+    transform: translateY(0);
+  }
+
+  42% {
+    transform: translateY(-2.5px);
+  }
+
+  72% {
+    transform: translateY(-1.3px);
+  }
+}
+
+@keyframes layer-stack-expand-middle {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+  }
+
+  42% {
+    transform: translateY(0) scale(0.98);
+  }
+
+  72% {
+    transform: translateY(0) scale(1.01);
+  }
+}
+
+@keyframes layer-stack-expand-bottom {
+  0%, 100% {
+    transform: translateY(0);
+  }
+
+  42% {
+    transform: translateY(2.5px);
+  }
+
+  72% {
+    transform: translateY(1.3px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .basemap-toolbox-toggle:hover .layers-stack-icon__layer,
+  .basemap-toolbox-toggle:focus-visible .layers-stack-icon__layer {
+    animation: none !important;
+  }
+}
+
+body.layer-side-panel-enabled .imagery-panel,
+body.layer-side-panel-enabled .maplibregl-ctrl-top-right,
+body.layer-side-panel-enabled .analytical-legend-container {
+  transition: right 0.28s ease, transform 0.28s ease, opacity 0.28s ease !important;
+}
+
+body.layer-side-panel-enabled .imagery-panel,
+body.layer-side-panel-enabled .maplibregl-ctrl-top-right {
+  z-index: 1100 !important;
+}
+
+@media (min-width: 760px) {
+  body.layer-side-panel-open .imagery-panel,
+  body.layer-side-panel-open .maplibregl-ctrl-top-right {
+    transform: translateX(calc(-1 * var(--layer-side-panel-control-shift))) !important;
+  }
+
+  body.layer-side-panel-open .analytical-legend-container {
+    right: calc(var(--layer-side-panel-analytics-offset) + env(safe-area-inset-right, 0px)) !important;
   }
 }
 

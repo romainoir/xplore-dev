@@ -35,8 +35,8 @@ function createTilePreviewUrl(template, coords = WMTS_PREVIEW_COORDS) {
 export const IMAGERY_OPTIONS = Object.freeze([
     { id: 'shadow-v3', label: 'Shadows', type: 'shadow-layer', linkedLayerIds: ['shadow-v3-coarse'], previewImage: './data/icons_Xmap/shadow.png', defaultOpacity: 1.0, defaultVisible: false },
     { id: 'daylight', label: 'Sunlight Hours', type: 'native-layer', layerId: 'daylight-native', previewImage: './data/icons_Xmap/daylight.png', defaultOpacity: 0.94, defaultVisible: false },
-    { id: 'sunrise-window', label: 'First Sun', type: 'native-layer', layerId: 'sunrise-window-native', previewImage: './data/icons_Xmap/daylight.png', defaultOpacity: 0.86, defaultVisible: false },
-    { id: 'sunset-window', label: 'Last Sun', type: 'native-layer', layerId: 'sunset-window-native', previewImage: './data/icons_Xmap/daylight.png', defaultOpacity: 0.86, defaultVisible: false },
+    { id: 'sunrise-window', label: 'Sunrise', type: 'native-layer', layerId: 'sunrise-window-native', previewImage: './data/icons_Xmap/sunrise-menu.svg', defaultOpacity: 0.86, defaultVisible: false },
+    { id: 'sunset-window', label: 'Sunset', type: 'native-layer', layerId: 'sunset-window-native', previewImage: './data/icons_Xmap/sunset-menu.svg', defaultOpacity: 0.86, defaultVisible: false },
     {
         id: 'contours',
         label: 'Contours',
@@ -63,7 +63,7 @@ export const IMAGERY_OPTIONS = Object.freeze([
     { id: 'strava-cycling', label: 'Strava Cycling', sourceId: 'strava-cycling', layerId: 'strava-cycling', tileTemplate: 'https://atlas.hartakji.com/strava-cycling/{z}/{x}/{y}', tileSize: 256, minZoom: 0, maxZoom: 15, attribution: '<a href="https://www.strava.com">© Strava</a>', defaultVisible: false, defaultOpacity: 1 },
     { id: 'strava-run', label: 'Strava Run', sourceId: 'strava-run', layerId: 'strava-run', tileTemplate: 'https://atlas.hartakji.com/strava-run/{z}/{x}/{y}', tileSize: 256, minZoom: 0, maxZoom: 15, attribution: '<a href="https://www.strava.com">© Strava</a>', defaultVisible: false, defaultOpacity: 1 },
     { id: 'ign-traces-hivernales', label: 'Traces Rando Hivernales', sourceId: 'ign-traces-hivernales', layerId: 'ign-traces-hivernales', tileTemplate: 'https://data.geopf.fr/wmts?layer=TRACES.RANDO.HIVERNALE&style=normal&tilematrixset=PM&Service=WMTS&Request=GetTile&Version=1.0.0&Format=image%2Fpng&TileMatrix={z}&TileCol={x}&TileRow={y}', tileSize: 256, minZoom: 0, maxZoom: 15, attribution: IGN_ATTRIBUTION, defaultVisible: false, defaultOpacity: 1 },
-    { id: 'aspect', label: 'Aspect (Orientation)', type: 'native-layer', layerId: 'aspect-native', previewImage: './data/icons_Xmap/aspect.png', defaultOpacity: 1.0, defaultVisible: false },
+    { id: 'aspect', label: 'Orientation', type: 'native-layer', layerId: 'aspect-native', previewImage: './data/icons_Xmap/aspect.png', defaultOpacity: 1.0, defaultVisible: false },
     { id: 'slope', label: 'Slope', type: 'native-layer', layerId: 'slope-native', previewImage: './data/icons_Xmap/slope.png', defaultOpacity: 1.0, defaultVisible: false },
     { id: 'avalanche', label: 'Avalanche Zones', type: 'native-layer', layerId: 'avalanche-native', previewImage: './data/icons_Xmap/avalanche.png', defaultOpacity: 1.0, defaultVisible: false },
     { id: 'snow', label: 'Snow', type: 'native-layer', layerId: 'snow-native', previewImage: './data/icons_Xmap/snow.png', defaultOpacity: 1.0, defaultVisible: false },
@@ -437,7 +437,8 @@ export function createImageryManager(map, deps = {}) {
             if (control.sliderWrapper) control.sliderWrapper.classList.toggle('active', isActive);
         });
         document.querySelectorAll('.shadow-sub-menu[data-parent-id="daylight"]').forEach(menu => {
-            menu.classList.toggle('visible', sunDurationMenuOpen);
+            const inLayerSidePanel = Boolean(menu.closest('.layer-side-panel'));
+            menu.classList.toggle('visible', inLayerSidePanel || sunDurationMenuOpen);
         });
 
         // Dynamic background for Analysis Toggles

@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Sunset">
+  <defs>
+    <linearGradient id="sunsetSky" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f2a24b"/>
+      <stop offset="0.48" stop-color="#a83f69"/>
+      <stop offset="1" stop-color="#211936"/>
+    </linearGradient>
+    <linearGradient id="sunsetGround" x1="4" y1="58" x2="60" y2="28" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#17172d"/>
+      <stop offset="1" stop-color="#52245e"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="12" fill="url(#sunsetSky)"/>
+  <path d="M5 53L17 33l10 9 11-18 21 30v6H5z" fill="url(#sunsetGround)" opacity="0.92"/>
+  <path d="M21 57a11 11 0 0 1 22 0" fill="#ffba47" opacity="0.96"/>
+  <path d="M10 58h44" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" opacity="0.92"/>
+  <path d="M32 12v30" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round"/>
+  <path d="M24 34l8 8 8-8" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

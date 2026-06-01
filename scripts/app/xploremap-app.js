@@ -1149,14 +1149,111 @@ async function init() {
     photos: { toggle: document.getElementById('photosToolboxToggle'), box: null },
   };
 
+  document.body.classList.add('layer-side-panel-enabled');
+
+  const layersPanel = toolboxes.basemap.box;
+  const layerPanelSections = {};
+  const createLayerPanelSection = (id, title) => {
+    const section = document.createElement('section');
+    section.className = 'layer-side-panel__section';
+    section.dataset.layerSection = id;
+
+    const header = document.createElement('div');
+    header.className = 'layer-side-panel__section-header';
+
+    const heading = document.createElement('h3');
+    heading.className = 'layer-side-panel__section-title';
+    heading.textContent = title;
+    header.appendChild(heading);
+
+    const content = document.createElement('div');
+    content.className = 'layer-side-panel__section-content';
+    section.append(header, content);
+
+    return { section, content };
+  };
+
+  if (layersPanel) {
+    layersPanel.classList.add('layer-side-panel');
+    layersPanel.textContent = '';
+    document.body.appendChild(layersPanel);
+
+    const panelHeader = document.createElement('div');
+    panelHeader.className = 'layer-side-panel__header';
+
+    const panelTitle = document.createElement('div');
+    panelTitle.className = 'layer-side-panel__title';
+    panelTitle.textContent = 'Calques';
+
+    const panelClose = document.createElement('button');
+    panelClose.type = 'button';
+    panelClose.className = 'layer-side-panel__close';
+    panelClose.setAttribute('aria-label', 'Fermer les calques');
+    panelClose.textContent = '×';
+    panelClose.addEventListener('click', () => setToolboxOpen('basemap', false));
+
+    panelHeader.append(panelTitle, panelClose);
+
+    const panelBody = document.createElement('div');
+    panelBody.className = 'layer-side-panel__body';
+    layersPanel.append(panelHeader, panelBody);
+
+    [
+      ['basemap', 'Fond de carte', 'base'],
+      ['pathway', 'Custom overlays', 'custom'],
+      ['heatmaps', 'Heatmaps', 'activity'],
+      ['terrain', 'Terrain analysis', 'relief'],
+      ['winter', 'Snow analysis', 'snow analysis'],
+      ['summer', 'Sun analysis', 'sun analysis'],
+    ].forEach(([id, title, hint]) => {
+      layerPanelSections[id] = createLayerPanelSection(id, title, hint);
+      panelBody.appendChild(layerPanelSections[id].section);
+    });
+
+    ['photos', 'shadow', 'snow', 'terrain', 'pathway'].forEach((name) => {
+      const sourceGroup = toolboxes[name]?.toggle?.closest('.imagery-panel__control-group');
+      if (sourceGroup) sourceGroup.classList.add('layer-side-panel__source-group');
+    });
+
+    toolboxes.basemap.optionsBox = document.createElement('div');
+    toolboxes.basemap.optionsBox.className = 'layer-side-panel__options basemap-toolbox-options';
+    layerPanelSections.basemap.content.appendChild(toolboxes.basemap.optionsBox);
+
+    toolboxes.pathway.heatmapBox = document.createElement('div');
+    toolboxes.pathway.heatmapBox.className = 'layer-side-panel__options pathway-toolbox heatmap-toolbox visible';
+    toolboxes.pathway.heatmapBox.setAttribute('aria-hidden', 'false');
+    layerPanelSections.heatmaps.content.appendChild(toolboxes.pathway.heatmapBox);
+
+    [
+      ['pathway', toolboxes.pathway.box],
+      ['terrain', toolboxes.terrain.box],
+      ['winter', toolboxes.snow.box],
+      ['summer', toolboxes.shadow.box],
+    ].forEach(([sectionId, box]) => {
+      if (!box) return;
+      box.classList.add('layer-side-panel__options', 'visible');
+      box.setAttribute('aria-hidden', 'false');
+      layerPanelSections[sectionId].content.appendChild(box);
+    });
+  }
+
   // ── Generic toolbox open/close helper ──
   const setToolboxOpen = (name, open) => {
     const tb = toolboxes[name];
     if (!tb?.toggle || !tb?.box) return;
+    const sidePanelGroup = ['shadow', 'terrain', 'snow', 'pathway'].includes(name);
+    if (layersPanel && sidePanelGroup) {
+      tb.box.classList.add('visible');
+      tb.box.setAttribute('aria-hidden', 'false');
+      return;
+    }
     tb.box.classList.toggle('visible', open);
     tb.box.setAttribute('aria-hidden', String(!open));
     tb.toggle.setAttribute('aria-expanded', String(open));
     tb.toggle.classList.toggle('active', open);
+    if (name === 'basemap') {
+      document.body.classList.toggle('layer-side-panel-open', open);
+    }
     // Close all OTHER toolboxes when opening one
     if (open) {
       Object.keys(toolboxes).forEach(k => { if (k !== name) setToolboxOpen(k, false); });
@@ -1296,7 +1393,6 @@ async function init() {
       const isSnowToolboxMember = SNOW_TOOLBOX_IDS.includes(option.id);
       const isShadowToolboxMember = SHADOW_TOOLBOX_IDS.includes(option.id);
       if (!isTerrainToolboxMember && !isSnowToolboxMember && !isShadowToolboxMember) return;
-      if (SUN_DURATION_ADDON_IDS.includes(option.id)) return;
 
       const group = LAYER_GROUP_BY_MEMBER_ID.get(option.id);
 
@@ -1346,47 +1442,7 @@ async function init() {
       if (isSnowToolboxMember) targetToolbox = toolboxes.snow.box;
       if (isShadowToolboxMember) targetToolbox = toolboxes.shadow.box;
       let controlContainer = toggleButton;
-      if (targetToolbox && option.id === 'daylight') {
-        const row = document.createElement('div');
-        row.className = 'toolbox-option-row';
-        row.appendChild(toggleButton);
-
-        const subMenu = document.createElement('div');
-        subMenu.className = 'shadow-sub-menu';
-        subMenu.dataset.parentId = option.id;
-        SUN_DURATION_ADDON_IDS.forEach((addonId) => {
-          const addonOption = IMAGERY_OPTIONS.find(o => o.id === addonId);
-          if (!addonOption) return;
-
-          const subButton = document.createElement('button');
-          subButton.type = 'button';
-          subButton.className = 'shadow-sub-option sub-thumb-btn';
-          subButton.dataset.imageryId = addonOption.id;
-          subButton.setAttribute('aria-pressed', 'false');
-          subButton.setAttribute('title', addonOption.label);
-          subButton.setAttribute('aria-label', addonOption.label);
-
-          const label = document.createElement('span');
-          label.textContent = addonId === 'sunrise-window' ? 'Sunrise' : 'Sunset';
-          subButton.appendChild(label);
-
-          subButton.addEventListener('click', (event) => {
-            event.stopPropagation();
-            subButton.blur();
-            const addonState = imagery.imageryState.get(addonOption.id);
-            if (!addonState) return;
-            const active = Boolean(addonState.enabled && addonState.opacity > 0);
-            enableSunDurationAddon(addonOption, !active);
-            refreshImageryAfterToolboxChange();
-          });
-
-          subMenu.appendChild(subButton);
-          imagery.imageryControls.set(addonOption.id, { container: subButton, button: subButton, slider: null, sliderWrapper: null, isGroupMember: false });
-        });
-        row.appendChild(subMenu);
-        targetToolbox.appendChild(row);
-        controlContainer = row;
-      } else if (targetToolbox) {
+      if (targetToolbox) {
         targetToolbox.appendChild(toggleButton);
       }
 
@@ -1416,7 +1472,7 @@ async function init() {
   let reapplyAllPathways = null;
 
   {
-    const basemapBox = toolboxes.basemap.box;
+    const basemapBox = toolboxes.basemap.optionsBox || toolboxes.basemap.box;
     const basemapToggle = toolboxes.basemap.toggle;
 
     // Basemap definitions — order matters for display
@@ -1437,47 +1493,69 @@ async function init() {
 
     const BASEMAP_OPTIONS = [
       {
-        id: 'none',
-        label: 'None',
-        noBasemap: true,
-      },
-      {
-        id: 'color-relief-only',
-        label: 'Color Relief',
-        colorReliefOnly: true,
-      },
-      {
-        id: 'vector', label: 'Xplore Outdoor',
+        id: 'xplore-outdoor-hybrid-2',
+        label: 'Outdoor Relief',
         isStyleSwap: true,
-        subOptions: [
-          { id: 'xplore-outdoor-hybrid-2', label: 'Outdoor Relief WIP', styleUrl: './xplore_outdoor_hybrid-2.json?v=20260525-relief-wip', previewImage: './data/vector-map.svg' },
-          { id: 'xplore-outdoor-hybrid', label: 'Xplore Outdoor', styleUrl: './xplore_outdoor_hybrid.json?v=20260523-color-relief-strong', previewImage: './data/vector-map.svg' },
-        ],
-        previewImage: './data/vector-map.svg',
+        styleUrl: './xplore_outdoor_hybrid-2.json?v=20260525-relief-wip',
+        previewImage: './data/icons_Xmap/relief.png',
+        region: 'world',
       },
       {
-        id: 'satellite', label: 'Satellite',
-        previewImage: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/10/364/526',
-        subOptions: [
-          { id: 'satellite-ign', label: 'IGN Ortho', layerId: 'ign-orthophotos', previewImage: './data/france.png' },
-          { id: 'satellite-eox', label: 'EOX S2', layerId: 'eox-s2', previewImage: './data/worldwide.png' },
-        ],
+        id: 'xplore-outdoor-hybrid',
+        label: 'Xplore Outdoor',
+        isStyleSwap: true,
+        styleUrl: './xplore_outdoor_hybrid.json?v=20260523-color-relief-strong',
+        previewImage: './data/icons_Xmap/outdoor.png',
+        region: 'world',
       },
       {
-        id: 'lidar-hd', label: 'Lidar HD',
-        // Custom handling: tree switches MNT/MNS, leaf toggles forest overlay
+        id: 'world-imagery',
+        label: 'Aerial',
+        layerId: 'eox-s2',
+        tilePreview: true,
+        region: 'world',
+      },
+      {
+        id: 'ign-orthophotos',
+        label: 'Aerial',
+        layerId: 'ign-orthophotos',
+        tilePreview: true,
+        region: 'france',
+      },
+      {
+        id: 'lidar-mnt',
+        label: 'Lidar MNT',
         isLidar: true,
+        lidarMode: 'mnt',
+        region: 'france',
       },
       {
-        id: 'ign-scan', label: 'IGN Scan',
+        id: 'lidar-mns',
+        label: 'Lidar MNS',
+        isLidar: true,
+        lidarMode: 'mns',
+        region: 'france',
+      },
+      {
+        id: 'lidar-forest',
+        label: 'Forest',
+        isLidar: true,
+        lidarMode: 'mnt',
+        lidarForestOverlay: true,
+        previewImage: './data/leaf.png',
+        region: 'france',
+      },
+      {
+        id: 'ign-scan',
+        label: 'IGN Scan',
         layerId: 'ign-scan',
         previewImage: null,
+        region: 'france',
       },
     ];
 
     // Track active basemap
     let activeBasemapId = 'vector';
-    let activeSubOptionId = null;
     let initialStyleLoaded = false;  // Skip setStyle on first activation
 
     // Lidar HD specific state
@@ -1522,6 +1600,13 @@ async function init() {
         const s = imagery.imageryState.get(id);
         if (s) s.enabled = false;
       });
+    };
+
+    const getBasemapPreviewUrl = (bm) => {
+      if (!bm) return null;
+      const option = bm.layerId ? IMAGERY_OPTIONS.find(o => o.id === bm.layerId) : null;
+      if (bm.tilePreview && option?.tileTemplate) return imagery.createTilePreviewUrl(option.tileTemplate);
+      return bm.previewImage || option?.previewImage || (option?.tileTemplate ? imagery.createTilePreviewUrl(option.tileTemplate) : null);
     };
 
     const setNeutralBackgroundVisible = (visible) => {
@@ -1572,28 +1657,25 @@ async function init() {
       });
     };
 
-    const activateBasemap = async (basemapId, subOptionId) => {
+    const activateBasemap = async (basemapId) => {
       deactivateAllBasemapLayers();
       const bm = BASEMAP_OPTIONS.find(b => b.id === basemapId);
       if (!bm) return;
 
-      // Show terrain background + vector fills only for vector basemap
-      const colorReliefOnly = Boolean(bm.colorReliefOnly);
-      setVectorBaseVisible(basemapId === 'vector', {
-        colorReliefVisible: basemapId === 'vector' || colorReliefOnly,
-        colorReliefSolo: colorReliefOnly,
-        hillshadeVisible: basemapId === 'vector',
-        terrainBgVisible: basemapId === 'vector' || colorReliefOnly,
-        terrainRasterVisible: basemapId === 'vector',
+      // Show terrain background + vector fills only for vector basemaps
+      const vectorBasemapActive = Boolean(bm.isStyleSwap);
+      setVectorBaseVisible(vectorBasemapActive, {
+        colorReliefVisible: vectorBasemapActive,
+        colorReliefSolo: false,
+        hillshadeVisible: vectorBasemapActive,
+        terrainBgVisible: vectorBasemapActive,
+        terrainRasterVisible: vectorBasemapActive,
       });
       setNeutralBackgroundVisible(Boolean(bm.noBasemap));
 
-      if (bm.isStyleSwap && bm.subOptions) {
-        // ── Style swap (vector basemap sub-options) ──
-        const sub = subOptionId
-          ? bm.subOptions.find(s => s.id === subOptionId)
-          : bm.subOptions[0];
-        if (!subOptionId) subOptionId = sub?.id;
+      if (bm.isStyleSwap) {
+        // ── Style swap (vector basemap variants) ──
+        const sub = bm;
 
         // Skip style swap on first load — map already has this style from createMap()
         if (initialStyleLoaded) {
@@ -1627,39 +1709,19 @@ async function init() {
         if (osmState) { osmState.enabled = true; osmState.opacity = 1; }
       } else if (bm.activate) {
         bm.activate();
-      } else if (colorReliefOnly) {
-        const reliefState = imagery.imageryState.get('color-relief');
-        if (reliefState) reliefState.enabled = true;
-        const osmState = imagery.imageryState.get('osm-features');
-        if (osmState) { osmState.enabled = false; osmState.opacity = 0; }
-        const fillsState = imagery.imageryState.get('vector-fills');
-        if (fillsState) { fillsState.enabled = false; fillsState.opacity = 0; }
       } else if (bm.isLidar) {
+        lidarMode = bm.lidarMode || lidarMode;
+        lidarForestOverlay = Boolean(bm.lidarForestOverlay);
         activateLidarLayers();
-      } else if (bm.subOptions && subOptionId) {
-        const sub = bm.subOptions.find(s => s.id === subOptionId);
-        if (sub) {
-          if (sub.layerId) {
-            const ls = imagery.imageryState.get(sub.layerId);
-            if (ls) { ls.enabled = true; ls.opacity = 1; }
-          }
-          if (sub.layers) {
-            sub.layers.forEach(l => {
-              const ls = imagery.imageryState.get(l.id);
-              if (ls) { ls.enabled = true; ls.opacity = l.opacity; }
-            });
-          }
-        }
       } else if (bm.layerId) {
         const ls = imagery.imageryState.get(bm.layerId);
         if (ls) { ls.enabled = true; ls.opacity = 1; }
       }
 
       activeBasemapId = basemapId;
-      activeSubOptionId = subOptionId || null;
 
       // Contours: enabled on Vector and Lidar basemaps only
-      const showContours = (basemapId === 'vector' || basemapId === 'lidar-hd');
+      const showContours = Boolean(bm.isStyleSwap || bm.isLidar);
       const contState = imagery.imageryState.get('contours');
       if (contState) { contState.enabled = showContours; contState.opacity = 1; }
 
@@ -1670,7 +1732,7 @@ async function init() {
 
       // Re-apply pathway state so Routes persist across non-vector basemap switches
       // On Vector basemap, overlay is always shown (part of the full map)
-      if (basemapId !== 'vector' && !colorReliefOnly && typeof reapplyAllPathways === 'function') reapplyAllPathways();
+      if (!vectorBasemapActive && typeof reapplyAllPathways === 'function') reapplyAllPathways();
     };
 
     const updateBasemapUI = () => {
@@ -1679,44 +1741,19 @@ async function init() {
         const isActive = btn.dataset.basemapId === activeBasemapId;
         btn.classList.toggle('active', isActive);
       });
-      // Update sub-menus (satellite text sub-options + lidar icon actions)
-      basemapBox.querySelectorAll('.basemap-sub-menu').forEach(sub => {
-        sub.classList.toggle('visible', sub.dataset.parentId === activeBasemapId);
-      });
-      basemapBox.querySelectorAll('.basemap-sub-option:not(.lidar-action-btn)').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.subId === activeSubOptionId);
-      });
-      // Lidar action button states
-      basemapBox.querySelectorAll('.lidar-tree-btn').forEach(btn => {
-        btn.classList.toggle('active', lidarMode === 'mns');
-        btn.setAttribute('title', lidarMode === 'mnt' ? 'Switch to MNS (surface)' : 'Switch to MNT (terrain)');
-      });
-      basemapBox.querySelectorAll('.lidar-leaf-btn').forEach(btn => {
-        btn.classList.toggle('active', lidarForestOverlay);
-      });
       // Update main toggle thumbnail
       if (basemapToggle) {
-        const isNonDefault = activeBasemapId !== 'vector' && activeBasemapId !== 'none';
+        const isNonDefault = activeBasemapId !== 'xplore-outdoor-hybrid-2';
         basemapToggle.classList.toggle('has-active-layer', isNonDefault);
         let thumb = basemapToggle.querySelector('.map-action-btn__thumb');
         if (!thumb) { thumb = document.createElement('div'); thumb.className = 'map-action-btn__thumb'; basemapToggle.prepend(thumb); }
         if (isNonDefault) {
           const bm = BASEMAP_OPTIONS.find(b => b.id === activeBasemapId);
-          let previewUrl = bm?.previewImage || null;
-          if (!previewUrl && bm?.layerId) {
-            const opt = IMAGERY_OPTIONS.find(o => o.id === bm.layerId);
-            previewUrl = opt?.previewImage || (opt?.tileTemplate ? imagery.createTilePreviewUrl(opt.tileTemplate) : null);
-          }
+          let previewUrl = getBasemapPreviewUrl(bm);
           if (!previewUrl && bm?.isLidar) {
             // Show the active lidar variant's preview
             const lidarId = lidarMode === 'mnt' ? 'ign-lidar-hd-mnt-shadow' : 'ign-lidar-hd-mns-shadow';
             const opt = IMAGERY_OPTIONS.find(o => o.id === lidarId);
-            previewUrl = opt?.previewImage || (opt?.tileTemplate ? imagery.createTilePreviewUrl(opt.tileTemplate) : null);
-          }
-          if (!previewUrl && bm?.subOptions) {
-            const sub = bm.subOptions.find(s => s.id === activeSubOptionId) || bm.subOptions[0];
-            const sid = sub.layerId || (sub.layers ? sub.layers[sub.layers.length - 1].id : null);
-            const opt = sid ? IMAGERY_OPTIONS.find(o => o.id === sid) : null;
             previewUrl = opt?.previewImage || (opt?.tileTemplate ? imagery.createTilePreviewUrl(opt.tileTemplate) : null);
           }
           if (previewUrl) { thumb.style.backgroundImage = `url(${previewUrl})`; }
@@ -1730,6 +1767,27 @@ async function init() {
     // Populate basemap toolbox
     if (basemapBox) {
       basemapBox.textContent = '';
+      const basemapRegionGrids = new Map();
+      [
+        ['world', 'World'],
+        ['france', 'France'],
+      ].forEach(([regionId, label]) => {
+        const group = document.createElement('div');
+        group.className = 'basemap-region-group';
+        group.dataset.basemapRegion = regionId;
+
+        const title = document.createElement('div');
+        title.className = 'basemap-region-group__title';
+        title.textContent = label;
+
+        const grid = document.createElement('div');
+        grid.className = 'basemap-region-group__grid';
+
+        group.append(title, grid);
+        basemapBox.appendChild(group);
+        basemapRegionGrids.set(regionId, grid);
+      });
+
       BASEMAP_OPTIONS.forEach(bm => {
         const btn = document.createElement('button');
         btn.type = 'button';
@@ -1739,8 +1797,7 @@ async function init() {
         btn.setAttribute('aria-label', bm.label);
 
         // Try to get a preview image
-        const option = bm.layerId ? IMAGERY_OPTIONS.find(o => o.id === bm.layerId) : null;
-        const previewUrl = bm.previewImage || option?.previewImage || (option?.tileTemplate ? imagery.createTilePreviewUrl(option.tileTemplate) : null);
+        const previewUrl = getBasemapPreviewUrl(bm);
         if (previewUrl) {
           const img = document.createElement('img');
           img.src = previewUrl; img.alt = ''; img.loading = 'lazy'; img.decoding = 'async'; img.draggable = false;
@@ -1748,19 +1805,8 @@ async function init() {
         } else {
           // For Lidar HD, try the MNT shadow layer preview
           if (bm.isLidar) {
-            const so = IMAGERY_OPTIONS.find(o => o.id === 'ign-lidar-hd-mnt-shadow');
-            const url = so?.previewImage || (so?.tileTemplate ? imagery.createTilePreviewUrl(so.tileTemplate) : null);
-            if (url) {
-              const img = document.createElement('img');
-              img.src = url; img.alt = ''; img.loading = 'lazy'; img.decoding = 'async'; img.draggable = false;
-              btn.appendChild(img);
-            }
-          }
-          // For sub-option groups, try first sub-option's layer
-          if (bm.subOptions && !btn.querySelector('img')) {
-            const firstSub = bm.subOptions[0];
-            const sid = firstSub.layerId || (firstSub.layers ? firstSub.layers[firstSub.layers.length - 1].id : null);
-            const so = sid ? IMAGERY_OPTIONS.find(o => o.id === sid) : null;
+            const lidarPreviewId = bm.lidarMode === 'mns' ? 'ign-lidar-hd-mns-shadow' : 'ign-lidar-hd-mnt-shadow';
+            const so = IMAGERY_OPTIONS.find(o => o.id === lidarPreviewId);
             const url = so?.previewImage || (so?.tileTemplate ? imagery.createTilePreviewUrl(so.tileTemplate) : null);
             if (url) {
               const img = document.createElement('img');
@@ -1771,23 +1817,14 @@ async function init() {
           // Fallback: text label
           if (!btn.querySelector('img')) {
             const span = document.createElement('span');
-            span.style.cssText = 'font-size:11px;font-weight:600;color:#fff;text-align:center;line-height:1.1;';
-            span.textContent = bm.label;
+            span.className = `basemap-placeholder basemap-placeholder--${bm.id}`;
+            span.textContent = bm.noBasemap ? 'Off' : 'Map';
             btn.appendChild(span);
           }
         }
 
         btn.addEventListener('click', () => {
-          if (bm.isLidar) {
-            activateBasemap(bm.id, null);
-          } else if (bm.subOptions) {
-            // If clicking a group with sub-options, activate first sub-option by default
-            const defaultSub = bm.subOptions[0];
-            activateBasemap(bm.id, defaultSub.id);
-          } else {
-            activateBasemap(bm.id, null);
-            setToolboxOpen('basemap', false);
-          }
+          activateBasemap(bm.id, null);
         });
 
         // Wrap button + its sub-controls in a horizontal row
@@ -1795,105 +1832,12 @@ async function init() {
         row.className = 'toolbox-option-row';
         row.appendChild(btn);
 
-        // Create Lidar HD action buttons (tree = MNT/MNS toggle, leaf = forest overlay)
-        if (bm.isLidar) {
-          const actionsRow = document.createElement('div');
-          actionsRow.className = 'basemap-sub-menu lidar-actions';
-          actionsRow.dataset.parentId = bm.id;
-
-          // Tree button — toggles MNT ↔ MNS
-          const treeBtn = document.createElement('button');
-          treeBtn.type = 'button';
-          treeBtn.className = 'basemap-sub-option lidar-action-btn lidar-tree-btn';
-          treeBtn.setAttribute('title', 'Switch MNT / MNS');
-          const treeImg = document.createElement('img');
-          treeImg.src = './data/tree.png'; treeImg.alt = 'MNT/MNS'; treeImg.draggable = false;
-          treeBtn.appendChild(treeImg);
-          treeBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            lidarMode = lidarMode === 'mnt' ? 'mns' : 'mnt';
-            activateLidarLayers();
-            imagery.applyImageryState();
-            imagery.updateImageryControlStates();
-            updateBasemapUI();
-          });
-          actionsRow.appendChild(treeBtn);
-
-          // Leaf button — toggles forest inventory overlay
-          const leafBtn = document.createElement('button');
-          leafBtn.type = 'button';
-          leafBtn.className = 'basemap-sub-option lidar-action-btn lidar-leaf-btn';
-          leafBtn.setAttribute('title', 'Toggle Forest Inventory');
-          const leafImg = document.createElement('img');
-          leafImg.src = './data/leaf.png'; leafImg.alt = 'Forest'; leafImg.draggable = false;
-          leafBtn.appendChild(leafImg);
-          leafBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            lidarForestOverlay = !lidarForestOverlay;
-            activateLidarLayers();
-            imagery.applyImageryState();
-            imagery.updateImageryControlStates();
-            updateBasemapUI();
-          });
-          actionsRow.appendChild(leafBtn);
-
-          row.appendChild(actionsRow);
-        }
-
-        // Create sub-option buttons (horizontal) for non-lidar groups
-        if (bm.subOptions) {
-          const subMenu = document.createElement('div');
-          subMenu.className = 'basemap-sub-menu';
-          subMenu.dataset.parentId = bm.id;
-
-          bm.subOptions.forEach(sub => {
-            const subBtn = document.createElement('button');
-            subBtn.type = 'button';
-            subBtn.className = 'basemap-sub-option sub-thumb-btn';
-            subBtn.dataset.subId = sub.id;
-            subBtn.setAttribute('title', sub.label);
-            // Resolve preview image from the sub-option's layer
-            const sid = sub.layerId || (sub.layers ? sub.layers[sub.layers.length - 1].id : null);
-            const subOpt = sid ? IMAGERY_OPTIONS.find(o => o.id === sid) : null;
-            const subPreview = subOpt?.previewImage || (subOpt?.tileTemplate ? imagery.createTilePreviewUrl(subOpt.tileTemplate) : null);
-            if (subPreview) {
-              const img = document.createElement('img');
-              img.src = subPreview; img.alt = sub.label; img.loading = 'lazy'; img.decoding = 'async'; img.draggable = false;
-              subBtn.appendChild(img);
-            } else {
-              const span = document.createElement('span');
-              span.textContent = sub.label;
-              subBtn.appendChild(span);
-            }
-            subBtn.addEventListener('click', (e) => {
-              e.stopPropagation();
-              activateBasemap(bm.id, sub.id);
-              // Update badge on parent button showing active sub-option
-              const parentBtn = basemapBox.querySelector(`[data-basemap-id="${bm.id}"]`);
-              const badgeUrl = sub.previewImage || subOpt?.previewImage || null;
-              if (parentBtn && badgeUrl) {
-                let badge = parentBtn.querySelector('.basemap-badge');
-                if (!badge) {
-                  badge = document.createElement('img');
-                  badge.className = 'basemap-badge';
-                  parentBtn.appendChild(badge);
-                }
-                badge.src = badgeUrl;
-                badge.alt = sub.label;
-              }
-              subMenu.classList.remove('visible');
-            });
-            subMenu.appendChild(subBtn);
-          });
-
-          row.appendChild(subMenu);
-        }
-
-        basemapBox.appendChild(row);
+        const targetGrid = basemapRegionGrids.get(bm.region || 'world') || basemapBox;
+        targetGrid.appendChild(row);
       });
 
       // Initialize: the tuned outdoor relief style is the default vector basemap.
-      activateBasemap('vector', 'xplore-outdoor-hybrid-2');
+      activateBasemap('xplore-outdoor-hybrid-2');
     }
   }
 
@@ -1903,6 +1847,7 @@ async function init() {
 
   {
     const pathwayBox = toolboxes.pathway.box;
+    const heatmapBox = toolboxes.pathway.heatmapBox;
     const pathwayToggle = toolboxes.pathway.toggle;
 
     const PATHWAY_OPTIONS = [
@@ -1910,14 +1855,42 @@ async function init() {
         id: 'routes', label: 'Routes',
         type: 'osm-overlay',
         previewImage: './data/OSM_vector.png',
+        defaultEnabled: true,
       },
       {
-        id: 'heatmap', label: 'Heatmap', previewImage: './data/fire.png',
-        subOptions: [
-          { id: 'strava-backcountry-ski', label: 'Backcountry Ski', layerId: 'strava-backcountry-ski', previewImage: './data/ski.png' },
-          { id: 'strava-cycling', label: 'Cycling', layerId: 'strava-cycling', previewImage: './data/bike.png' },
-          { id: 'strava-run', label: 'Run', layerId: 'strava-run', previewImage: './data/running.png' },
-        ],
+        id: 'peaks', label: 'Summits',
+        type: 'peak-overlay',
+        previewImage: './data/icons_Xmap/peak_principal.png',
+        defaultEnabled: true,
+      },
+      {
+        id: 'wikimedia-photos', label: 'Photos',
+        type: 'wikimedia-overlay',
+        previewImage: './data/icons_Xmap/camera.png',
+      },
+      {
+        id: 'strava-winter', label: 'Ski',
+        layerId: 'strava-winter',
+        previewImage: './data/snowflake.png',
+        groupId: 'heatmap',
+      },
+      {
+        id: 'strava-backcountry-ski', label: 'Backcountry',
+        layerId: 'strava-backcountry-ski',
+        previewImage: './data/ski.png',
+        groupId: 'heatmap',
+      },
+      {
+        id: 'strava-cycling', label: 'Cycling',
+        layerId: 'strava-cycling',
+        previewImage: './data/bike.png',
+        groupId: 'heatmap',
+      },
+      {
+        id: 'strava-run', label: 'Run',
+        layerId: 'strava-run',
+        previewImage: './data/running.png',
+        groupId: 'heatmap',
       },
       {
         id: 'ski-rando', label: 'Ski Rando',
@@ -1928,7 +1901,25 @@ async function init() {
 
     // Track pathway toggle states (routes enabled by default)
     const pathwayState = new Map();
-    PATHWAY_OPTIONS.forEach(p => pathwayState.set(p.id, { enabled: p.id === 'routes', activeSubId: null }));
+    PATHWAY_OPTIONS.forEach(p => pathwayState.set(p.id, { enabled: Boolean(p.defaultEnabled), activeSubId: null }));
+
+    const PEAK_OVERLAY_LAYER_IDS = ['Peak labels', 'Mountain peak labels', 'Volcano peak labels'];
+    const applyPeakOverlayVisibility = (enabled) => {
+      const visibility = enabled ? 'visible' : 'none';
+      PEAK_OVERLAY_LAYER_IDS.forEach((layerId) => {
+        if (!map.getLayer(layerId)) return;
+        try { map.setLayoutProperty(layerId, 'visibility', visibility); } catch (_) { }
+      });
+      if (enabled) {
+        window.xplorePeakLabelMarkers?.update?.();
+      } else {
+        window.xplorePeakLabelMarkers?.clear?.();
+      }
+    };
+    map.on('style.load', () => {
+      const peaksState = pathwayState.get('peaks');
+      window.setTimeout(() => applyPeakOverlayVisibility(peaksState?.enabled ?? true), 180);
+    });
 
     const applyPathwayOption = (optionId) => {
       const opt = PATHWAY_OPTIONS.find(p => p.id === optionId);
@@ -1939,18 +1930,13 @@ async function init() {
         // Toggle OSM overlay (routes/paths)
         const osmState = imagery.imageryState.get('osm-features');
         if (osmState) { osmState.enabled = state.enabled; osmState.opacity = state.enabled ? 1 : 0; }
-      } else if (opt.subOptions) {
-        // Turn off all sub-option layers first
-        opt.subOptions.forEach(sub => {
-          const ls = imagery.imageryState.get(sub.layerId);
-          if (ls) ls.enabled = false;
-        });
-        if (state.enabled && state.activeSubId) {
-          const sub = opt.subOptions.find(s => s.id === state.activeSubId);
-          if (sub) {
-            const ls = imagery.imageryState.get(sub.layerId);
-            if (ls) { ls.enabled = true; ls.opacity = 1; }
-          }
+      } else if (opt.type === 'peak-overlay') {
+        applyPeakOverlayVisibility(state.enabled);
+      } else if (opt.type === 'wikimedia-overlay') {
+        const photoState = imagery.imageryState.get('wikimedia-photos');
+        if (photoState) {
+          photoState.enabled = state.enabled;
+          if (state.enabled && photoState.opacity <= 0) photoState.opacity = 1;
         }
       } else if (opt.layerId) {
         const ls = imagery.imageryState.get(opt.layerId);
@@ -1971,20 +1957,11 @@ async function init() {
     };
 
     const updatePathwayUI = () => {
-      if (!pathwayBox) return;
-      pathwayBox.querySelectorAll('.btn.pathway-toolbox__toggle').forEach(btn => {
+      if (!pathwayBox && !heatmapBox) return;
+      [pathwayBox, heatmapBox].filter(Boolean).forEach(box => box.querySelectorAll('.btn.pathway-toolbox__toggle').forEach(btn => {
         const state = pathwayState.get(btn.dataset.pathwayId);
         btn.classList.toggle('active', state?.enabled ?? false);
-      });
-      // Update sub-menus visibility
-      pathwayBox.querySelectorAll('.pathway-sub-menu').forEach(sub => {
-        const state = pathwayState.get(sub.dataset.parentId);
-        sub.classList.toggle('visible', state?.enabled ?? false);
-      });
-      pathwayBox.querySelectorAll('.pathway-sub-option').forEach(btn => {
-        const parentState = pathwayState.get(btn.dataset.parentId);
-        btn.classList.toggle('active', btn.dataset.subId === parentState?.activeSubId);
-      });
+      }));
       // Main toggle thumbnail
       const anyActive = [...pathwayState.values()].some(s => s.enabled);
       if (pathwayToggle) {
@@ -1998,12 +1975,6 @@ async function init() {
             if (!st.enabled) continue;
             const opt = PATHWAY_OPTIONS.find(p => p.id === id);
             if (opt?.previewImage) { previewUrl = opt.previewImage; break; }
-            if (opt?.subOptions && st.activeSubId) {
-              const sub = opt.subOptions.find(s => s.id === st.activeSubId);
-              const layerOpt = sub?.layerId ? IMAGERY_OPTIONS.find(o => o.id === sub.layerId) : null;
-              previewUrl = layerOpt?.previewImage || (layerOpt?.tileTemplate ? imagery.createTilePreviewUrl(layerOpt.tileTemplate) : null);
-              if (previewUrl) break;
-            }
             if (opt?.layerId) {
               const layerOpt = IMAGERY_OPTIONS.find(o => o.id === opt.layerId);
               previewUrl = layerOpt?.previewImage || (layerOpt?.tileTemplate ? imagery.createTilePreviewUrl(layerOpt.tileTemplate) : null);
@@ -2018,8 +1989,9 @@ async function init() {
       }
     };
 
-    if (pathwayBox) {
-      pathwayBox.textContent = '';
+    if (pathwayBox || heatmapBox) {
+      if (pathwayBox) pathwayBox.textContent = '';
+      if (heatmapBox) heatmapBox.textContent = '';
       PATHWAY_OPTIONS.forEach(opt => {
         const btn = document.createElement('button');
         btn.type = 'button';
@@ -2042,16 +2014,19 @@ async function init() {
         btn.addEventListener('click', () => {
           const state = pathwayState.get(opt.id);
           if (!state) return;
-          state.enabled = !state.enabled;
-          if (state.enabled && opt.subOptions && !state.activeSubId) {
-            state.activeSubId = opt.subOptions[0].id;
+          const nextEnabled = !state.enabled;
+          if (nextEnabled && opt.groupId) {
+            PATHWAY_OPTIONS.forEach(other => {
+              if (other.id === opt.id || other.groupId !== opt.groupId) return;
+              const otherState = pathwayState.get(other.id);
+              if (otherState) otherState.enabled = false;
+              if (other.layerId) {
+                const otherLayerState = imagery.imageryState.get(other.layerId);
+                if (otherLayerState) otherLayerState.enabled = false;
+              }
+            });
           }
-          if (!state.enabled) {
-            state.activeSubId = null;
-            // Remove badge when disabled
-            const badge = btn.querySelector('.pathway-badge');
-            if (badge) badge.remove();
-          }
+          state.enabled = nextEnabled;
           applyPathwayOption(opt.id);
         });
 
@@ -2059,60 +2034,8 @@ async function init() {
         row.className = 'toolbox-option-row';
         row.appendChild(btn);
 
-        // Sub-options
-        if (opt.subOptions) {
-          const subMenu = document.createElement('div');
-          subMenu.className = 'pathway-sub-menu';
-          subMenu.dataset.parentId = opt.id;
-
-          opt.subOptions.forEach(sub => {
-            const subBtn = document.createElement('button');
-            subBtn.type = 'button';
-            subBtn.className = 'pathway-sub-option sub-thumb-btn';
-            subBtn.dataset.subId = sub.id;
-            subBtn.dataset.parentId = opt.id;
-            subBtn.setAttribute('title', sub.label);
-            // Resolve preview image: use sub-option's own previewImage first, then fall back to layer lookup
-            const subOpt = sub.layerId ? IMAGERY_OPTIONS.find(o => o.id === sub.layerId) : null;
-            const subPreview = sub.previewImage || subOpt?.previewImage || (subOpt?.tileTemplate ? imagery.createTilePreviewUrl(subOpt.tileTemplate) : null);
-            if (subPreview) {
-              const img = document.createElement('img');
-              img.src = subPreview; img.alt = sub.label; img.loading = 'lazy'; img.decoding = 'async'; img.draggable = false;
-              subBtn.appendChild(img);
-            } else {
-              const span = document.createElement('span');
-              span.textContent = sub.label;
-              subBtn.appendChild(span);
-            }
-            subBtn.addEventListener('click', (e) => {
-              e.stopPropagation();
-              const parentState = pathwayState.get(opt.id);
-              if (!parentState) return;
-              parentState.enabled = true;
-              parentState.activeSubId = sub.id;
-              applyPathwayOption(opt.id);
-              // Update badge on parent button
-              const parentBtn = pathwayBox.querySelector(`[data-pathway-id="${opt.id}"]`);
-              if (parentBtn && sub.previewImage) {
-                let badge = parentBtn.querySelector('.pathway-badge');
-                if (!badge) {
-                  badge = document.createElement('img');
-                  badge.className = 'pathway-badge';
-                  parentBtn.appendChild(badge);
-                }
-                badge.src = sub.previewImage;
-                badge.alt = sub.label;
-              }
-              // Close the sub-menu after selection
-              subMenu.classList.remove('visible');
-            });
-            subMenu.appendChild(subBtn);
-          });
-
-          row.appendChild(subMenu);
-        }
-
-        pathwayBox.appendChild(row);
+        const targetBox = opt.groupId === 'heatmap' ? heatmapBox : pathwayBox;
+        targetBox?.appendChild(row);
       });
 
       updatePathwayUI();

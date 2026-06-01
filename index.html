@@ -307,12 +307,24 @@
         </div>
       </div>
 
-      <!-- Basemap toolbox -->
+      <!-- Layers side panel -->
       <div class="imagery-panel__control-group">
         <button id="basemapToolboxToggle" class="btn map-action-btn basemap-toolbox-toggle" type="button"
-          aria-expanded="false" aria-controls="basemapToolbox" title="Basemap">
-          <img src="./data/layers.png" alt="" loading="lazy" decoding="async" />
-          <span class="sr-only">Basemap</span>
+          aria-expanded="false" aria-controls="basemapToolbox" title="Calques">
+          <span class="layers-stack-icon" aria-hidden="true">
+            <svg class="layers-stack-icon__svg" viewBox="0 0 24 24" focusable="false">
+              <g class="layers-stack-icon__layer layers-stack-icon__layer--top">
+                <polygon points="21.54 8.18 11.95 13.93 2.36 8.18 11.95 2.42 21.54 8.18" />
+              </g>
+              <g class="layers-stack-icon__layer layers-stack-icon__layer--middle">
+                <polygon points="21.54 12.01 11.95 17.77 2.36 12.01 5.55 10.09 11.95 13.93 18.35 10.09 21.54 12.01" />
+              </g>
+              <g class="layers-stack-icon__layer layers-stack-icon__layer--bottom">
+                <polygon points="21.54 15.85 11.95 21.6 2.36 15.85 5.55 13.93 11.95 17.77 18.35 13.93 21.54 15.85" />
+              </g>
+            </svg>
+          </span>
+          <span class="sr-only">Calques</span>
         </button>
         <div id="basemapToolbox" class="basemap-toolbox" aria-hidden="true">
           <!-- Content populated by JS -->
