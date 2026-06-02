@@ -92,7 +92,7 @@ export function createRoutingOrchestrator(map, deps = {}) {
     const debugNetworkControl = document.getElementById('debugNetworkControl');
 
     // ─── Router setup ───
-    const offlineRouter = new OfflineRouter({ networkUrl: './data/offline-network.geojson' });
+    const offlineRouter = new OfflineRouter({ networkUrl: './data/map/routing/offline-network.geojson' });
     if (typeof offlineRouter.setNodeConnectionToleranceMeters === 'function') {
         offlineRouter.setNodeConnectionToleranceMeters(DEFAULT_NODE_CONNECTION_TOLERANCE_METERS);
     }
@@ -238,7 +238,7 @@ export function createRoutingOrchestrator(map, deps = {}) {
             if (dataset && Array.isArray(dataset?.features) && dataset.features.length > 0) { debugNetworkData = dataset; return debugNetworkData; }
         } catch (e) { console.warn('Failed to access cached offline network data', e); }
         try {
-            const response = await trackOfflineNetworkLoading(fetch('./data/offline-network.geojson', { cache: 'no-store' }));
+            const response = await trackOfflineNetworkLoading(fetch('./data/map/routing/offline-network.geojson', { cache: 'no-store' }));
             if (!response.ok) throw new Error(`Debug network request failed (${response.status})`);
             const fallback = await response.json();
             if (Array.isArray(fallback?.features) && fallback.features.length > 0) { debugNetworkData = fallback; return debugNetworkData; }

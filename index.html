@@ -4,8 +4,8 @@
 <head>
   <meta charset="utf-8" />
   <title>XploreMap v4.19</title>
-  <link rel="icon" type="image/png" href="./data/logos/Xplore.png" />
-  <link rel="apple-touch-icon" href="./data/logos/Xplore.png" />
+  <link rel="icon" type="image/png" href="./data/app/brand/Xplore.png" />
+  <link rel="apple-touch-icon" href="./data/app/brand/Xplore.png" />
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
 
   <!-- MapLibre GL JS - Local fork (terrain analysis support) -->
@@ -70,7 +70,7 @@
   <header class="app-header">
     <div class="app-header__left">
       <div class="app-header__logo">
-        <img src="./data/logos/Xplore.png" alt="Xplore logo" class="app-header__logo-img" />
+        <img src="./data/app/brand/Xplore.png" alt="Xplore logo" class="app-header__logo-img" />
         <span class="app-header__logo-text">Xplore</span>
       </div>
     </div>
@@ -90,11 +90,11 @@
     <div class="ui__row ui__row--directions">
       <button id="directionsToggle" class="btn btn--icon map-action-btn directions-toggle"
         aria-label="Toggle functionality panel" aria-expanded="false" title="Directions & Analysis">
-        <img class="directions-toggle__icon" src="./data/edit.png" alt="" aria-hidden="true" />
+        <img class="directions-toggle__icon" src="./data/app/controls/edit.png" alt="" aria-hidden="true" />
       </button>
       <button id="libraryToggle" class="btn btn--icon map-action-btn library-toggle" aria-label="Toggle Route Library"
         aria-expanded="false" title="Route Library">
-        <img class="library-toggle__icon" src="./data/folder.png" alt="" aria-hidden="true" />
+        <img class="library-toggle__icon" src="./data/app/controls/folder.png" alt="" aria-hidden="true" />
       </button>
 
       <!-- Consolidated Actions Bar -->
@@ -102,11 +102,11 @@
         <!-- Routing modes -->
         <button id="routeModeSnap" class="btn btn--icon btn--icon-only route-mode-btn" type="button"
           data-mode="foot-hiking" aria-pressed="true" aria-label="Snap to trails" title="Snap to trails">
-          <img src="./data/aimant.png" alt="" aria-hidden="true" loading="lazy" decoding="async" />
+          <img src="./data/app/controls/aimant.png" alt="" aria-hidden="true" loading="lazy" decoding="async" />
         </button>
         <button id="routeModeManual" class="btn btn--icon btn--icon-only route-mode-btn" type="button"
           data-mode="manual" aria-pressed="false" aria-label="Manual line" title="Manual line">
-          <img src="./data/line.png" alt="" aria-hidden="true" loading="lazy" decoding="async" />
+          <img src="./data/app/controls/line.png" alt="" aria-hidden="true" loading="lazy" decoding="async" />
         </button>
         <button id="routingModeToggle" class="btn btn--icon btn--icon-only routing-mode-toggle" type="button"
           data-routing-mode="offline" aria-pressed="true" title="Switch to online routing">
@@ -120,23 +120,23 @@
         <!-- Actions -->
         <button id="swapDirectionsButton" class="btn btn--icon btn--icon-only" type="button" aria-label="Swap A and B"
           title="Swap A and B">
-          <img src="./data/swap.png" alt="" aria-hidden="true" loading="lazy" decoding="async" />
+          <img src="./data/app/controls/swap.png" alt="" aria-hidden="true" loading="lazy" decoding="async" />
         </button>
         <button id="undoDirectionsButton" class="btn btn--icon btn--icon-only" type="button" aria-label="Undo"
           title="Undo" disabled>
-          <img src="./data/undo.png" alt="" aria-hidden="true" loading="lazy" decoding="async" />
+          <img src="./data/app/controls/undo.png" alt="" aria-hidden="true" loading="lazy" decoding="async" />
         </button>
         <button id="redoDirectionsButton" class="btn btn--icon btn--icon-only" type="button" aria-label="Redo"
           title="Redo" disabled>
-          <img src="./data/redo.png" alt="" aria-hidden="true" loading="lazy" decoding="async" />
+          <img src="./data/app/controls/redo.png" alt="" aria-hidden="true" loading="lazy" decoding="async" />
         </button>
         <button id="clearDirectionsButton" class="btn btn--icon btn--icon-only" type="button" aria-label="Clear"
           title="Clear">
-          <img src="./data/clear.png" alt="" aria-hidden="true" loading="lazy" decoding="async" />
+          <img src="./data/app/controls/clear.png" alt="" aria-hidden="true" loading="lazy" decoding="async" />
         </button>
         <button id="saveRouteButton" class="btn btn--icon btn--icon-only" type="button" aria-label="Save Route"
           title="Save Route">
-          <img src="./data/diskette.png" alt="" aria-hidden="true" loading="lazy" decoding="async" />
+          <img src="./data/app/controls/diskette.png" alt="" aria-hidden="true" loading="lazy" decoding="async" />
         </button>
 
         <div class="directions-actions-bar__separator"></div>
@@ -181,7 +181,7 @@
         </div>
         <div class="library-actions">
           <button id="libraryImportBtn" class="btn btn--sm" title="Import GPX">
-            <img src="./data/upload.png" alt="Import" width="16" height="16">
+            <img src="./data/app/controls/upload.png" alt="Import" width="16" height="16">
           </button>
           <input type="file" id="libraryGpxInput" accept=".gpx,application/gpx+xml" multiple class="hidden-file-input"
             aria-hidden="true">
@@ -213,22 +213,22 @@
                 aria-hidden="true" data-ready="false"></div>
               <button type="button" class="profile-mode-sidebar__item" data-profile-mode="slope" role="radio"
                 aria-checked="false" title="Pente">
-                <img src="./data/icons_Xmap/pente.png" alt="" aria-hidden="true" />
+                <img src="./data/app/xmap-icons/pente.png" alt="" aria-hidden="true" />
                 <span class="sr-only">Pente</span>
               </button>
               <button type="button" class="profile-mode-sidebar__item" data-profile-mode="surface" role="radio"
                 aria-checked="false" title="Surface">
-                <img src="./data/icons_Xmap/surface.png" alt="" aria-hidden="true" />
+                <img src="./data/app/xmap-icons/surface.png" alt="" aria-hidden="true" />
                 <span class="sr-only">Surface</span>
               </button>
               <button type="button" class="profile-mode-sidebar__item" data-profile-mode="category" role="radio"
                 aria-checked="false" title="Difficulté">
-                <img src="./data/icons_Xmap/difficulty.png" alt="" aria-hidden="true" />
+                <img src="./data/app/xmap-icons/difficulty.png" alt="" aria-hidden="true" />
                 <span class="sr-only">Difficulté</span>
               </button>
               <button type="button" class="profile-mode-sidebar__item" data-profile-mode="poi" role="radio"
                 aria-checked="false" title="POI">
-                <img src="./data/icons_Xmap/POI.png" alt="" aria-hidden="true" />
+                <img src="./data/app/xmap-icons/POI.png" alt="" aria-hidden="true" />
                 <span class="sr-only">POI</span>
               </button>
             </div>
@@ -254,7 +254,7 @@
       <!-- Photos toggle -->
       <div class="imagery-panel__control-group">
         <button id="photosToolboxToggle" class="btn map-action-btn photos-toolbox-toggle" type="button" title="Photos">
-          <img src="./data/icons_Xmap/camera.png" alt="" loading="lazy" decoding="async" />
+          <img src="./data/app/xmap-icons/camera.png" alt="" loading="lazy" decoding="async" />
           <span class="sr-only">Photos</span>
         </button>
       </div>
@@ -263,7 +263,7 @@
       <div class="imagery-panel__control-group">
         <button id="shadowToolboxToggle" class="btn map-action-btn shadow-toolbox-toggle" type="button"
           aria-expanded="false" aria-controls="shadowToolbox" title="Sun Analysis">
-          <img src="./data/sun.png" alt="" loading="lazy" decoding="async" />
+          <img src="./data/app/controls/sun.png" alt="" loading="lazy" decoding="async" />
           <span class="sr-only">Sun Analysis</span>
         </button>
         <div id="shadowToolbox" class="shadow-toolbox" aria-hidden="true">
@@ -275,7 +275,7 @@
       <div class="imagery-panel__control-group">
         <button id="snowToolboxToggle" class="btn map-action-btn snow-toolbox-toggle" type="button"
           aria-expanded="false" aria-controls="snowToolbox" title="Snow Analysis">
-          <img src="./data/snowflake.png" alt="" loading="lazy" decoding="async" />
+          <img src="./data/app/controls/snowflake.png" alt="" loading="lazy" decoding="async" />
           <span class="sr-only">Snow Analysis</span>
         </button>
         <div id="snowToolbox" class="snow-toolbox" aria-hidden="true">
@@ -287,7 +287,7 @@
       <div class="imagery-panel__control-group">
         <button id="terrainToolboxToggle" class="btn map-action-btn terrain-toolbox-toggle" type="button"
           aria-expanded="false" aria-controls="terrainToolbox" title="Terrain Analysis">
-          <img src="./data/terrain.png" alt="" loading="lazy" decoding="async" />
+          <img src="./data/app/controls/terrain.png" alt="" loading="lazy" decoding="async" />
           <span class="sr-only">Terrain Analysis</span>
         </button>
         <div id="terrainToolbox" class="terrain-toolbox" aria-hidden="true">
@@ -299,7 +299,7 @@
       <div class="imagery-panel__control-group">
         <button id="pathwayToolboxToggle" class="btn map-action-btn pathway-toolbox-toggle" type="button"
           aria-expanded="false" aria-controls="pathwayToolbox" title="Pathway Overlays">
-          <img src="./data/footsteps.png" alt="" loading="lazy" decoding="async" />
+          <img src="./data/app/controls/footsteps.png" alt="" loading="lazy" decoding="async" />
           <span class="sr-only">Pathway Overlays</span>
         </button>
         <div id="pathwayToolbox" class="pathway-toolbox" aria-hidden="true">

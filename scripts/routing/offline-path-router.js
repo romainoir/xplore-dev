@@ -793,7 +793,7 @@ export class OfflineRouter {
       debugLogging
     } = options;
 
-    this.networkUrl = networkUrl || './data/offline-network.geojson';
+    this.networkUrl = networkUrl || './data/map/routing/offline-network.geojson';
     const modes = Array.isArray(supportedModes) && supportedModes.length
       ? supportedModes
       : Object.keys(DEFAULT_SPEEDS);

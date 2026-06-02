@@ -1,5 +1,5 @@
 // Utility module for XploreMap POI icons management
-const ICON_BASE_PATH = './data/icons_Xmap/';
+const ICON_BASE_PATH = './data/app/xmap-icons/';
 
 // Day segment colors - matches SEGMENT_COLOR_PALETTE in directions_test.js
 // First color is the default route color, then day 1, day 2, etc.

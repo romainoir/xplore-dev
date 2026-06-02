@@ -41,15 +41,15 @@ import {
 import { LAYER_ICON_PATHS } from '../config/layer-assets.js';
 
 const TRANSPARENT_IMAGE = Object.freeze({ width: 1, height: 1, data: new Uint8Array([0, 0, 0, 0]) });
-const CARTES_SPRITE_URL = new URL('../../data/cartes-sprite/sprite', import.meta.url).href;
+const CARTES_SPRITE_URL = new URL('../../data/vendor/cartes/sprite/sprite', import.meta.url).href;
 const OPENFREEMAP_GLYPHS_URL = 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf';
 const CARTES_ICON_URLS = new Map([
-  ['cartesapp-arete', new URL('../../data/cartes-icons/arete.svg', import.meta.url).href],
-  ['cartesapp-bare_rock', new URL('../../data/cartes-icons/bare_rock.svg', import.meta.url).href],
-  ['cartesapp-cliff', new URL('../../data/cartes-icons/cliff.svg', import.meta.url).href],
-  ['cartesapp-scree', new URL('../../data/cartes-icons/scree.svg', import.meta.url).href],
-  ['cartesapp-stone', new URL('../../data/cartes-icons/stone.svg', import.meta.url).href],
-  ['cartesapp-triangle', new URL('../../data/cartes-icons/triangle.svg', import.meta.url).href],
+  ['cartesapp-arete', new URL('../../data/vendor/cartes/icons/arete.svg', import.meta.url).href],
+  ['cartesapp-bare_rock', new URL('../../data/vendor/cartes/icons/bare_rock.svg', import.meta.url).href],
+  ['cartesapp-cliff', new URL('../../data/vendor/cartes/icons/cliff.svg', import.meta.url).href],
+  ['cartesapp-scree', new URL('../../data/vendor/cartes/icons/scree.svg', import.meta.url).href],
+  ['cartesapp-stone', new URL('../../data/vendor/cartes/icons/stone.svg', import.meta.url).href],
+  ['cartesapp-triangle', new URL('../../data/vendor/cartes/icons/triangle.svg', import.meta.url).href],
 ]);
 const CARTES_STYLE_IDS = new Set(['xplore-outdoor-hybrid', 'xplore-outdoor-hybrid-2']);
 const CARTES_ICON_SIZE_OVERRIDES = new Map([
@@ -101,7 +101,7 @@ function getCartesIconUrl(id) {
   if (!id.startsWith('cartesapp-')) return '';
   const iconName = id.slice('cartesapp-'.length);
   if (!/^[a-z0-9_-]+$/i.test(iconName)) return '';
-  return new URL(`../../data/cartes-icons/${iconName}.svg`, import.meta.url).href;
+  return new URL(`../../data/vendor/cartes/icons/${iconName}.svg`, import.meta.url).href;
 }
 
 function getCartesIconSize(id) {

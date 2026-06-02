@@ -3,7 +3,8 @@
 Date: 2026-06-02
 
 This document records the current repository layout before any destructive cleanup.
-No files are deleted or moved in this pass.
+No project assets are deleted in this pass. Data assets have been reorganized with
+`git mv` so the runtime no longer depends on a mixed top-level `data/` folder.
 
 ## Runtime Surface
 
@@ -19,20 +20,19 @@ These paths are part of the current app runtime:
 
 ## Data Assets
 
-Current top-level `data/` folders:
+Current `data/` folders:
 
-- `data/cartes-icons/`: imported SVG icon catalog from cartes.app/OpenFreeMap style work.
-- `data/cartes-sprite/`: generated sprite JSON/PNG files referenced by local styles.
-- `data/icons_Xmap/`: app UI and layer-panel icons.
-- `data/hiker/`: hiker animation frames.
-- `data/logos/`: app logo and branded media.
+- `data/vendor/cartes/icons/`: imported SVG icon catalog from cartes.app/OpenFreeMap style work.
+- `data/vendor/cartes/sprite/`: generated sprite JSON/PNG files referenced by local styles.
+- `data/app/controls/`: toolbar, routing, and map-control icons.
+- `data/app/layer-icons/`: layer-panel icons that do not come from the Xmap icon set.
+- `data/app/xmap-icons/`: app UI and layer-panel icons.
+- `data/app/animation/hiker/`: hiker animation frames.
+- `data/app/brand/`: app logo and branded media.
+- `data/map/routing/`: offline routing data.
+- `data/archive/legacy-assets/`: assets kept for reference or later classification.
 
-Current top-level `data/` files mix several roles:
-
-- Toolbar/UI assets: `edit.png`, `folder.png`, `upload.png`, `downloads.png`, `undo.png`, `redo.png`, `clear.png`, `diskette.png`, `layers.png`, `terrain.png`, `footsteps.png`, `sun.png`, `snowflake.png`.
-- Layer-panel assets: `OSM_vector.png`, `backcountry.png`, `bike.png`, `contour.png`, `france.png`, `leaf.png`, `running.png`, `ski.png`, `worldwide.png`.
-- Routing/offline data: `offline-network.geojson`.
-- Legacy or candidate assets to classify later: `route.png`, `style.png`, `randonneur.png`, `walk.png`, `webcam.png`, `tent.png`, `tree.png`, `vector-map.svg`, `contours.svg`.
+Only `data/README.md` should remain at `data/` top level.
 
 ## MapLibre Copies
 
@@ -63,8 +63,8 @@ Most of this size is from embedded `node_modules`.
 
 ## Current Git State After Previous Commit
 
-After commit `61e9204 Refine layer panel overlays and contours`, root-level tracked app changes are clean.
-Remaining dirty entries are nested repositories:
+After commit `8f946e1 Document cleanup inventory and layer assets`, root-level tracked
+app changes were clean. Remaining dirty entries were nested repositories:
 
 - `maplibre-gl-js`
 - `maplibre-gl-js-shadow-backup`
@@ -74,7 +74,7 @@ Remaining dirty entries are nested repositories:
 For now:
 
 - Do not delete files.
-- Do not move runtime assets until all direct path references are centralized or updated.
+- Runtime asset moves must update all direct path references in the same commit.
 - Do not modify nested MapLibre repositories unless that is the explicit task.
 - Prefer documentation, manifests, and small runtime-safe refactors.
 
@@ -85,5 +85,4 @@ Recommended future decisions:
 - Choose one canonical MapLibre source folder.
 - Decide whether `maplibre-gl-js-shadow-backup` should become an archive outside the app repo.
 - Decide whether `maplibre-gl-js-5.18.0` is still needed.
-- Move top-level `data/*.png` assets into semantic folders only after path references are centralized.
 - Add a generated unused-asset report before removing any asset.

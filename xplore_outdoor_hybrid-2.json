@@ -217,7 +217,7 @@
       "attribution": "<a href=\"https://mapterhorn.com/attribution\">© Mapterhorn</a>"
     }
   },
-  "sprite": "http://localhost:8080/data/cartes-sprite/sprite",
+  "sprite": "./data/vendor/cartes/sprite/sprite",
   "glyphs": "https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf",
   "layers": [
     {

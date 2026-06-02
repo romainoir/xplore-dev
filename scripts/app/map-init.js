@@ -8,18 +8,18 @@ import {
 import { initializeGeocoder } from '../map/geocoder-control.js';
 
 const XPLORE_OUTDOOR_STYLE_URL = './xplore_outdoor_hybrid-2.json?v=20260525-relief-wip';
-const CARTES_SPRITE_URL = new URL('../../data/cartes-sprite/sprite', import.meta.url).href;
+const CARTES_SPRITE_URL = new URL('../../data/vendor/cartes/sprite/sprite', import.meta.url).href;
 const DPR_STORAGE_KEY = 'xplore_dpr_enabled';
 const OPTIONAL_STYLE_LAYER_IDS = new Set(['Peak labels', 'Mountain peak labels', 'Volcano peak labels']);
 
 // ─── UI icon images data-icon-id → src ───
 const UI_ICON_SOURCES = Object.freeze({
     'view-toggle': './data/2d_3d.png',
-    'gpx-import': './data/upload.png',
-    'gpx-export': './data/downloads.png',
-    'routing-offline': './data/no-wifi.png',
-    'routing-online': './data/wifi.png',
-    'debug-network': './data/debugg.png'
+    'gpx-import': './data/app/controls/upload.png',
+    'gpx-export': './data/app/controls/downloads.png',
+    'routing-offline': './data/app/controls/no-wifi.png',
+    'routing-online': './data/app/controls/wifi.png',
+    'debug-network': './data/app/controls/debugg.png'
 });
 
 export const ROUTING_ICON_OFFLINE = UI_ICON_SOURCES['routing-offline'];
@@ -240,7 +240,7 @@ export async function createMap() {
     // Preload splash
     maplibrePreload(map, {
         text: 'Xplore',
-        logoSrc: './data/logos/xplore.mp4',
+        logoSrc: './data/app/brand/xplore.mp4',
         logoAlt: 'Xplore',
         minDuration: 7000,
         background: '#05090f'

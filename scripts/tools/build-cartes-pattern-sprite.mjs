@@ -11,19 +11,19 @@ const CHROME_PATH = process.env.CHROME_PATH || '/Applications/Google Chrome.app/
 const TEXTURES = Object.freeze([
   {
     id: 'cartesapp-bare_rock',
-    path: 'data/cartes-icons/bare_rock.svg',
+    path: 'data/vendor/cartes/icons/bare_rock.svg',
     width: 24,
     height: 24
   },
   {
     id: 'cartesapp-scree',
-    path: 'data/cartes-icons/scree.svg',
+    path: 'data/vendor/cartes/icons/scree.svg',
     width: 20,
     height: 20
   },
   {
     id: 'cartesapp-unknown_leaf',
-    path: 'data/cartes-icons/unknown_leaf.svg',
+    path: 'data/vendor/cartes/icons/unknown_leaf.svg',
     width: 20,
     height: 20,
     aliases: [

@@ -296,19 +296,19 @@ export class RouteLibraryUI {
         </div>
         <div class="route-actions" style="position: relative; z-index: 1;">
                 <button class="btn btn--icon-only btn--sm action-show" data-id="${route.id}" title="Display on Map">
-                    <img src="./data/eye.png" width="20" height="20" alt="Show">
+                    <img src="./data/app/controls/eye.png" width="20" height="20" alt="Show">
                 </button>
                 <button class="btn btn--icon-only btn--sm action-play" data-id="${route.id}" title="Play Route">
-                    <img src="./data/play-button.png" width="20" height="20" alt="Play">
+                    <img src="./data/app/controls/play-button.png" width="20" height="20" alt="Play">
                 </button>
                 <button class="btn btn--icon-only btn--sm action-load" data-id="${route.id}" title="Edit Route">
-                    <img src="./data/edit.png" width="16" height="16" alt="Edit">
+                    <img src="./data/app/controls/edit.png" width="16" height="16" alt="Edit">
                 </button>
                 <button class="btn btn--icon-only btn--sm action-export" data-id="${route.id}" title="Export GPX">
-                    <img src="./data/downloads.png" width="16" height="16" alt="Export">
+                    <img src="./data/app/controls/downloads.png" width="16" height="16" alt="Export">
                 </button>
                 <button class="btn btn--icon-only btn--sm action-delete" data-id="${route.id}" title="Delete">
-                    <img src="./data/clear.png" width="14" height="14" alt="Delete">
+                    <img src="./data/app/controls/clear.png" width="14" height="14" alt="Delete">
                 </button>
         </div>
       </div>

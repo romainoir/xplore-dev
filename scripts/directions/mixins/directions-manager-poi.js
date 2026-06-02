@@ -682,7 +682,7 @@ export class DirectionsManagerPoiMixin {
       photoBtn.setAttribute('aria-label', 'Afficher les photos');
 
       photoBtn.innerHTML = `
-        <img src="./data/icons_Xmap/camera.png" alt="" aria-hidden="true" style="width: 20px; height: 20px;" />
+        <img src="./data/app/xmap-icons/camera.png" alt="" aria-hidden="true" style="width: 20px; height: 20px;" />
         <span class="sr-only">Afficher les photos</span>
       `;
 

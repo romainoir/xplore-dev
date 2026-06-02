@@ -15,7 +15,7 @@ import {
 const DEFAULT_PHOTON_ENDPOINT = 'https://photon.komoot.io/api/';
 const NOMINATIM_SEARCH_ENDPOINT = 'https://nominatim.openstreetmap.org/search';
 const NOMINATIM_LOOKUP_ENDPOINT = 'https://nominatim.openstreetmap.org/lookup';
-const SEARCH_ICON_BASE_URL = new URL('../../data/icons_Xmap/', import.meta.url).href;
+const SEARCH_ICON_BASE_URL = new URL('../../data/app/xmap-icons/', import.meta.url).href;
 const DEFAULT_LIMIT = 12;
 const PHOTON_FETCH_LIMIT = 18;
 const PHOTON_OUTDOOR_LIMIT = 10;

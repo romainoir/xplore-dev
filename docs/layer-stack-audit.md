@@ -92,7 +92,7 @@ Approximate final order is bottom to top. Some layers move again after style cha
 
 | style | file | layers | sources | sprite | glyphs | buckets |
 | --- | --- | --- | --- | --- | --- | --- |
-| Xplore Outdoor Hybrid | xplore_outdoor_hybrid.json | 148 | openmaptiles | ./data/cartes-sprite/sprite | https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf | background:2, fills:23, underlay:24, overlay/symbol:40, overlay:59 |
+| Xplore Outdoor Hybrid | xplore_outdoor_hybrid.json | 148 | openmaptiles | ./data/vendor/cartes/sprite/sprite | https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf | background:2, fills:23, underlay:24, overlay/symbol:40, overlay:59 |
 | Cartes Outdoor local | cartes_outdoor.json | 150 | openmaptiles, landcover, bathymetry | (injected by app if Cartes) | https://cartes.app/fonts/glyphs/{fontstack}/{range}.pbf | background:2, fills:28, underlay:21, overlay/symbol:40, overlay:59 |
 | Liberty Local / Xplore | Xplore.json | 65 | openmaptiles, mapterhorn, ign_plan | https://api.maptiler.com/maps/openstreetmap/sprite | https://api.maptiler.com/fonts/{fontstack}/{range}.pbf?key=get_your_own_OpIi9ZULNHzrESv6T2vL | background:1, fills:14, underlay:11, overlay:26, overlay/symbol:13 |
 | OSM Liberty | osm_liberty.json | 196 | openmaptiles, ne2_shaded | https://tiles.openfreemap.org/sprites/ofm_f384/ofm | https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf | background:1, fills:39, underlay:4, overlay:107, overlay/symbol:45 |
