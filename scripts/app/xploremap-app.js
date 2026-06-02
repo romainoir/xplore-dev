@@ -38,6 +38,7 @@ import {
   VIEW_MODES,
   DEFAULT_3D_ORIENTATION,
 } from '../config/map-config.js';
+import { LAYER_ICON_PATHS } from '../config/layer-assets.js';
 
 const TRANSPARENT_IMAGE = Object.freeze({ width: 1, height: 1, data: new Uint8Array([0, 0, 0, 0]) });
 const CARTES_SPRITE_URL = new URL('../../data/cartes-sprite/sprite', import.meta.url).href;
@@ -1544,7 +1545,7 @@ async function init() {
         label: 'Outdoor',
         isStyleSwap: true,
         styleUrl: './xplore_outdoor_hybrid-2.json?v=20260525-relief-wip',
-        previewImage: './data/icons_Xmap/relief.png',
+        previewImage: LAYER_ICON_PATHS.outdoorRelief,
         region: 'world',
       },
       {
@@ -1552,7 +1553,7 @@ async function init() {
         label: 'Xplore',
         isStyleSwap: true,
         styleUrl: './xplore_outdoor_hybrid.json?v=20260523-color-relief-strong',
-        previewImage: './data/icons_Xmap/outdoor.png',
+        previewImage: LAYER_ICON_PATHS.xploreOutdoor,
         region: 'world',
       },
       {
@@ -1596,7 +1597,7 @@ async function init() {
         isLidar: true,
         lidarMode: 'mnt',
         lidarForestOverlay: true,
-        previewImage: './data/leaf.png',
+        previewImage: LAYER_ICON_PATHS.lidarForest,
         region: 'france',
       },
     ];
@@ -1898,46 +1899,46 @@ async function init() {
       {
         id: 'routes', label: 'Roads',
         type: 'osm-overlay',
-        previewImage: './data/OSM_vector.png',
+        previewImage: LAYER_ICON_PATHS.routes,
         defaultEnabled: true,
       },
       {
         id: 'peaks', label: 'POIs',
         type: 'peak-overlay',
-        previewImage: './data/icons_Xmap/peak_principal.png',
+        previewImage: LAYER_ICON_PATHS.pois,
       },
       {
         id: 'wikimedia-photos', label: 'Photos',
         type: 'wikimedia-overlay',
-        previewImage: './data/icons_Xmap/camera.png',
+        previewImage: LAYER_ICON_PATHS.photos,
       },
       {
         id: 'ski-rando', label: 'Backcountry',
         layerId: 'ign-traces-hivernales',
-        previewImage: './data/backcountry.png',
+        previewImage: LAYER_ICON_PATHS.backcountry,
       },
       {
         id: 'strava-run', label: 'Run',
         layerId: 'strava-run',
-        previewImage: './data/running.png',
+        previewImage: LAYER_ICON_PATHS.heatmapRun,
         groupId: 'heatmap',
       },
       {
         id: 'strava-backcountry-ski', label: 'Backcountry',
         layerId: 'strava-backcountry-ski',
-        previewImage: './data/backcountry.png',
+        previewImage: LAYER_ICON_PATHS.heatmapBackcountry,
         groupId: 'heatmap',
       },
       {
         id: 'strava-cycling', label: 'Cycling',
         layerId: 'strava-cycling',
-        previewImage: './data/bike.png',
+        previewImage: LAYER_ICON_PATHS.heatmapCycling,
         groupId: 'heatmap',
       },
       {
         id: 'strava-winter', label: 'Ski',
         layerId: 'strava-winter',
-        previewImage: './data/ski.png',
+        previewImage: LAYER_ICON_PATHS.heatmapSki,
         groupId: 'heatmap',
       },
     ];

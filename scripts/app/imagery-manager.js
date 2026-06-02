@@ -6,6 +6,7 @@
 import {
     TILE_FADE_DURATION,
 } from '../config/map-config.js';
+import { LAYER_ICON_PATHS } from '../config/layer-assets.js';
 import { setWikimediaPhotosEnabled } from '../map/wikimedia-photos.js';
 
 // ─── Attribution constants ───
@@ -34,16 +35,16 @@ function createTilePreviewUrl(template, coords = WMTS_PREVIEW_COORDS) {
 
 // ─── IMAGERY_OPTIONS ───
 export const IMAGERY_OPTIONS = Object.freeze([
-    { id: 'shadow-v3', label: 'Shadows', type: 'shadow-layer', linkedLayerIds: ['shadow-v3-coarse'], previewImage: './data/icons_Xmap/shadow.png', defaultOpacity: 1.0, defaultVisible: false },
-    { id: 'daylight', label: 'Duration', type: 'native-layer', layerId: 'daylight-native', previewImage: './data/icons_Xmap/daylight.png', defaultOpacity: 0.94, defaultVisible: false },
-    { id: 'sunrise-window', label: 'Sunrise', type: 'native-layer', layerId: 'sunrise-window-native', previewImage: './data/icons_Xmap/sunrise-menu.svg', defaultOpacity: 0.86, defaultVisible: false },
-    { id: 'sunset-window', label: 'Sunset', type: 'native-layer', layerId: 'sunset-window-native', previewImage: './data/icons_Xmap/sunset-menu.svg', defaultOpacity: 0.86, defaultVisible: false },
+    { id: 'shadow-v3', label: 'Shadows', type: 'shadow-layer', linkedLayerIds: ['shadow-v3-coarse'], previewImage: LAYER_ICON_PATHS.shadow, defaultOpacity: 1.0, defaultVisible: false },
+    { id: 'daylight', label: 'Duration', type: 'native-layer', layerId: 'daylight-native', previewImage: LAYER_ICON_PATHS.daylight, defaultOpacity: 0.94, defaultVisible: false },
+    { id: 'sunrise-window', label: 'Sunrise', type: 'native-layer', layerId: 'sunrise-window-native', previewImage: LAYER_ICON_PATHS.sunrise, defaultOpacity: 0.86, defaultVisible: false },
+    { id: 'sunset-window', label: 'Sunset', type: 'native-layer', layerId: 'sunset-window-native', previewImage: LAYER_ICON_PATHS.sunset, defaultOpacity: 0.86, defaultVisible: false },
     {
         id: 'contours',
         label: 'Contours',
         type: 'native-layer',
         layerId: 'contours-native',
-        previewImage: './data/contour.png',
+        previewImage: LAYER_ICON_PATHS.contours,
         defaultVisible: true,
         defaultOpacity: 1.0,
         multiplier: 1.0,
@@ -55,8 +56,8 @@ export const IMAGERY_OPTIONS = Object.freeze([
             14: [10, 10]
         }
     },
-    { id: 'osm-features', label: 'OSM Features', type: 'osm-overlay', previewImage: './data/OSM_vector.png', defaultOpacity: 1, defaultVisible: true },
-    { id: 'wikimedia-photos', label: 'Wikimedia Photos', type: 'wikimedia', previewImage: './data/icons_Xmap/camera.png', defaultVisible: false, defaultOpacity: 1, linkedLayerIds: ['wikimedia-photos-base', 'wikimedia-thumbnails-small', 'wikimedia-thumbnails-large'] },
+    { id: 'osm-features', label: 'OSM Features', type: 'osm-overlay', previewImage: LAYER_ICON_PATHS.routes, defaultOpacity: 1, defaultVisible: true },
+    { id: 'wikimedia-photos', label: 'Wikimedia Photos', type: 'wikimedia', previewImage: LAYER_ICON_PATHS.photos, defaultVisible: false, defaultOpacity: 1, linkedLayerIds: ['wikimedia-photos-base', 'wikimedia-thumbnails-small', 'wikimedia-thumbnails-large'] },
     { id: 'color-relief', label: 'Color Relief', type: 'color-relief', layerId: COLOR_RELIEF_LAYER_ID, defaultVisible: true, defaultOpacity: 0.4, hiddenControl: true },
     { id: 'strava-heatmap-all', label: 'Strava Heatmap (All)', sourceId: 'strava-heatmap-all', layerId: 'strava-heatmap-all', tileTemplate: 'https://atlas.hartakji.com/strava-heatmap-all/{z}/{x}/{y}', tileSize: 256, minZoom: 0, maxZoom: 15, attribution: '<a href="https://www.strava.com">© Strava</a>', defaultVisible: false, defaultOpacity: 1 },
     { id: 'strava-winter', label: 'Strava Winter', sourceId: 'strava-winter', layerId: 'strava-winter', tileTemplate: 'https://atlas.hartakji.com/strava-winter/{z}/{x}/{y}', tileSize: 256, minZoom: 0, maxZoom: 15, attribution: '<a href="https://www.strava.com">© Strava</a>', defaultVisible: false, defaultOpacity: 1 },
@@ -64,16 +65,16 @@ export const IMAGERY_OPTIONS = Object.freeze([
     { id: 'strava-cycling', label: 'Strava Cycling', sourceId: 'strava-cycling', layerId: 'strava-cycling', tileTemplate: 'https://atlas.hartakji.com/strava-cycling/{z}/{x}/{y}', tileSize: 256, minZoom: 0, maxZoom: 15, attribution: '<a href="https://www.strava.com">© Strava</a>', defaultVisible: false, defaultOpacity: 1 },
     { id: 'strava-run', label: 'Strava Run', sourceId: 'strava-run', layerId: 'strava-run', tileTemplate: 'https://atlas.hartakji.com/strava-run/{z}/{x}/{y}', tileSize: 256, minZoom: 0, maxZoom: 15, attribution: '<a href="https://www.strava.com">© Strava</a>', defaultVisible: false, defaultOpacity: 1 },
     { id: 'ign-traces-hivernales', label: 'Traces Rando Hivernales', sourceId: 'ign-traces-hivernales', layerId: 'ign-traces-hivernales', tileTemplate: 'https://data.geopf.fr/wmts?layer=TRACES.RANDO.HIVERNALE&style=normal&tilematrixset=PM&Service=WMTS&Request=GetTile&Version=1.0.0&Format=image%2Fpng&TileMatrix={z}&TileCol={x}&TileRow={y}', tileSize: 256, minZoom: 0, maxZoom: 15, attribution: IGN_ATTRIBUTION, defaultVisible: false, defaultOpacity: 1 },
-    { id: 'aspect', label: 'Orientation', type: 'native-layer', layerId: 'aspect-native', previewImage: './data/icons_Xmap/aspect.png', defaultOpacity: 1.0, defaultVisible: false },
-    { id: 'slope', label: 'Slope', type: 'native-layer', layerId: 'slope-native', previewImage: './data/icons_Xmap/slope.png', defaultOpacity: 1.0, defaultVisible: false },
-    { id: 'avalanche', label: 'Avalanche Zones', type: 'native-layer', layerId: 'avalanche-native', previewImage: './data/icons_Xmap/avalanche.png', defaultOpacity: 1.0, defaultVisible: false },
-    { id: 'snow', label: 'Snow AI (WIP)', type: 'native-layer', layerId: 'snow-native', previewImage: './data/icons_Xmap/snow.png', defaultOpacity: 1.0, defaultVisible: false },
+    { id: 'aspect', label: 'Orientation', type: 'native-layer', layerId: 'aspect-native', previewImage: LAYER_ICON_PATHS.orientation, defaultOpacity: 1.0, defaultVisible: false },
+    { id: 'slope', label: 'Slope', type: 'native-layer', layerId: 'slope-native', previewImage: LAYER_ICON_PATHS.slope, defaultOpacity: 1.0, defaultVisible: false },
+    { id: 'avalanche', label: 'Avalanche Zones', type: 'native-layer', layerId: 'avalanche-native', previewImage: LAYER_ICON_PATHS.avalanche, defaultOpacity: 1.0, defaultVisible: false },
+    { id: 'snow', label: 'Snow AI (WIP)', type: 'native-layer', layerId: 'snow-native', previewImage: LAYER_ICON_PATHS.snow, defaultOpacity: 1.0, defaultVisible: false },
     { id: 'snow-depth', label: 'Snow Depth', sourceId: 'snow-depth', layerId: 'snow-depth', tileTemplate: 'https://p20.cosmos-project.ch/BfOlLXvmGpviW0YojaYiRqsT9NHEYdn88fpHZlr_map/gmaps/sd20alps@epsg3857/{z}/{x}/{y}.png', tileSize: 256, minZoom: 0, maxZoom: 12, attribution: '© Data from Exolab', defaultVisible: false, defaultOpacity: 1 },
     { id: 'ign-scan', label: 'IGN Scan (Topo)', sourceId: 'ign-scan', layerId: 'ign-scan', tileTemplate: 'https://data.geopf.fr/private/wmts?apikey=ign_scan_ws&layer=GEOGRAPHICALGRIDSYSTEMS.MAPS&style=normal&tilematrixset=PM&Service=WMTS&Request=GetTile&Version=1.0.0&Format=image%2Fjpeg&TileMatrix={z}&TileCol={x}&TileRow={y}', tileSize: 256, minZoom: 0, maxZoom: 15, attribution: IGN_ATTRIBUTION, defaultVisible: false, defaultOpacity: 1 },
     { id: 'ign-cosia', label: 'IGN Kosia 2021-2023', sourceId: 'ign-cosia', layerId: 'ign-cosia', tileTemplate: createIgnTileTemplate('IGNF_COSIA_2021-2023', 'image/png'), tileSize: 256, attribution: IGN_ATTRIBUTION, defaultVisible: false, defaultOpacity: 1 },
     { id: 'ign-forest-inventory', label: 'IGN Forest Inventory', sourceId: 'ign-forest-inventory', layerId: 'ign-forest-inventory', tileTemplate: createIgnTileTemplate('LANDCOVER.FORESTINVENTORY.V2', 'image/png'), tileSize: 256, attribution: IGN_ATTRIBUTION, defaultVisible: false, defaultOpacity: 1 },
-    { id: 'ign-orthophotos', label: 'IGN Orthophotos', sourceId: 'ign-orthophotos', layerId: 'ign-orthophotos', tileTemplate: createIgnTileTemplate('ORTHOIMAGERY.ORTHOPHOTOS.BDORTHO', 'image/jpeg'), tileSize: 256, attribution: IGN_ATTRIBUTION, defaultVisible: false, defaultOpacity: 1, previewImage: './data/france.png' },
-    { id: 'eox-s2', label: 'World Imagery', sourceId: 'world-imagery', layerId: 'world-imagery', tileTemplate: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', tileSize: 256, attribution: '© Esri', defaultVisible: false, defaultOpacity: 1, previewImage: './data/worldwide.png' },
+    { id: 'ign-orthophotos', label: 'IGN Orthophotos', sourceId: 'ign-orthophotos', layerId: 'ign-orthophotos', tileTemplate: createIgnTileTemplate('ORTHOIMAGERY.ORTHOPHOTOS.BDORTHO', 'image/jpeg'), tileSize: 256, attribution: IGN_ATTRIBUTION, defaultVisible: false, defaultOpacity: 1, previewImage: LAYER_ICON_PATHS.franceAerial },
+    { id: 'eox-s2', label: 'World Imagery', sourceId: 'world-imagery', layerId: 'world-imagery', tileTemplate: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', tileSize: 256, attribution: '© Esri', defaultVisible: false, defaultOpacity: 1, previewImage: LAYER_ICON_PATHS.worldAerial },
     { id: 'ign-lidar-hd-mns-shadow', label: 'MNS', sourceId: 'ign-lidar-hd-mns-shadow', layerId: 'ign-lidar-hd-mns-shadow', tileTemplate: createIgnTileTemplate('IGNF_LIDAR-HD_MNS_ELEVATION.ELEVATIONGRIDCOVERAGE.SHADOW', 'image/png'), tileSize: 256, attribution: IGN_ATTRIBUTION, defaultVisible: false, defaultOpacity: 1 },
     { id: 'ign-lidar-hd-mnt-shadow', label: 'MNT', sourceId: 'ign-lidar-hd-mnt-shadow', layerId: 'ign-lidar-hd-mnt-shadow', tileTemplate: createIgnTileTemplate('IGNF_LIDAR-HD_MNT_ELEVATION.ELEVATIONGRIDCOVERAGE.SHADOW', 'image/png'), tileSize: 256, attribution: IGN_ATTRIBUTION, defaultVisible: false, defaultOpacity: 1 },
     { id: 'white-background', label: 'White Background', type: 'background', layerId: 'background', hiddenControl: true, defaultVisible: false, paint: { 'background-color': '#ffffff' } },
