@@ -217,7 +217,7 @@
 <tr><td>03</td><td>basemap raster group</td><td>IMAGERY_OPTIONS basemap ids</td><td>IGN Scan, orthophotos, satellite, COSIA, Lidar MNT/MNS, forest inventory</td><td>Same order path as imagery overlays, but treated as basemap by id list.</td></tr>
 <tr><td>04</td><td>style underlay bucket</td><td>current vector style</td><td>Non-fill, non-overlay style layers</td><td>Bucket is heuristic. Some land/area layers can be misbucketed depending on source-layer names.</td></tr>
 <tr><td>05</td><td>style fills bucket</td><td>current vector style</td><td>park/landuse/landcover/water/aeroway fills below hillshade</td><td>Fill bucket plus raster basemaps can overlap; hidden by basemap switch, but source of complexity.</td></tr>
-<tr><td>06</td><td>hillshade2, hillshade, terrain-derivative-cache</td><td>overlay-manager</td><td>Relief shading and derivative cache</td><td>Xplore.json already has a hillshade id, which collides with the generated hillshade id.</td></tr>
+<tr><td>06</td><td>hillshade2, hillshade, terrain-derivative-cache</td><td>overlay-manager</td><td>Relief shading and derivative cache</td><td>styles/map-styles/Xplore.json already has a hillshade id, which collides with the generated hillshade id.</td></tr>
 <tr><td>07</td><td>terrain native analysis</td><td>overlay-manager + IMAGERY_OPTIONS</td><td>normalmap, snow-native, aspect, slope, avalanche, shadow-v3, daylight windows</td><td>Several are custom/native layers sharing DEM sources; their relative order is hardcoded separately.</td></tr>
 <tr><td>08</td><td>raster overlays</td><td>IMAGERY_OPTIONS overlay ids</td><td>Strava, winter traces, snow-depth</td><td>The ordering is user reorderable, but constrained by basemap/overlay buckets.</td></tr>
 <tr><td>09</td><td>style overlay bucket</td><td>current vector style</td><td>roads, paths, rails, buildings, boundaries, waterways, non-symbol overlays</td><td>Moved above analysis; can cover slope/aspect/shadow more than expected.</td></tr>
@@ -243,7 +243,7 @@
 <tr><td>01</td><td>terrain-bg</td><td>background</td><td>overlay-manager</td><td>always / None white</td><td>Generated background; receives incoming style background paint.</td></tr>
 <tr><td>02</td><td>terrain</td><td>raster</td><td>terrainSource</td><td>vector base</td><td>Added after terrain-bg. Hidden when vector base hidden.</td></tr>
 <tr><td>06</td><td>hillshade2</td><td>hillshade</td><td>reliefDem</td><td>vector base</td><td>Second relief shade layer.</td></tr>
-<tr><td>06</td><td>hillshade</td><td>hillshade</td><td>hillshadeSource</td><td>vector base</td><td>Potential ID collision with Xplore.json hillshade.</td></tr>
+<tr><td>06</td><td>hillshade</td><td>hillshade</td><td>hillshadeSource</td><td>vector base</td><td>Potential ID collision with styles/map-styles/Xplore.json hillshade.</td></tr>
 <tr><td>06</td><td>terrain-derivative-cache</td><td>hillshade</td><td>terrainSource</td><td>cache</td><td>Visible but transparent; used by shader/derivatives.</td></tr>
 <tr><td>07</td><td>normalmap</td><td>hillshade/native</td><td>hillshadeSource</td><td>hidden/native</td><td>Native analysis carrier.</td></tr>
 <tr><td>07</td><td>snow-native</td><td>hillshade/native</td><td>hillshadeSource</td><td>snow toolbox</td><td>Snow native analysis layer.</td></tr>
@@ -312,11 +312,11 @@
 <tr><th>style</th><th>file</th><th>layers</th><th>sources</th><th>sprite</th><th>glyphs</th><th>buckets</th></tr>
 </thead>
 <tbody>
-<tr><td>Xplore Outdoor Hybrid</td><td>xplore_outdoor_hybrid.json</td><td>148</td><td>openmaptiles</td><td>./data/vendor/cartes/sprite/sprite</td><td>https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf</td><td>background:2, fills:23, underlay:24, overlay/symbol:40, overlay:59</td></tr>
-<tr><td>Cartes Outdoor local</td><td>cartes_outdoor.json</td><td>150</td><td>openmaptiles, landcover, bathymetry</td><td>(injected by app if Cartes)</td><td>https://cartes.app/fonts/glyphs/{fontstack}/{range}.pbf</td><td>background:2, fills:28, underlay:21, overlay/symbol:40, overlay:59</td></tr>
-<tr><td>Liberty Local / Xplore</td><td>Xplore.json</td><td>65</td><td>openmaptiles, mapterhorn, ign_plan</td><td>https://api.maptiler.com/maps/openstreetmap/sprite</td><td>https://api.maptiler.com/fonts/{fontstack}/{range}.pbf?key=get_your_own_OpIi9ZULNHzrESv6T2vL</td><td>background:1, fills:14, underlay:11, overlay:26, overlay/symbol:13</td></tr>
-<tr><td>OSM Liberty</td><td>osm_liberty.json</td><td>196</td><td>openmaptiles, ne2_shaded</td><td>https://tiles.openfreemap.org/sprites/ofm_f384/ofm</td><td>https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf</td><td>background:1, fills:39, underlay:4, overlay:107, overlay/symbol:45</td></tr>
-<tr><td>Terrain Stadia local</td><td>terrain_vector_on_stadia.json</td><td>81</td><td>stamen-omt, global_landcover_v1, stamen_null, terrarium</td><td>https://tiles.stadiamaps.com/styles/stamen-terrain/sprite</td><td>https://tiles.stadiamaps.com/fonts/{fontstack}/{range}.pbf</td><td>background:1, underlay:11, fills:11, overlay:40, overlay/symbol:18</td></tr>
+<tr><td>Xplore Outdoor Hybrid</td><td>styles/map-styles/xplore_outdoor_hybrid.json</td><td>148</td><td>openmaptiles</td><td>/data/vendor/cartes/sprite/sprite</td><td>https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf</td><td>background:2, fills:23, underlay:24, overlay/symbol:40, overlay:59</td></tr>
+<tr><td>Cartes Outdoor local</td><td>styles/map-styles/cartes_outdoor.json</td><td>150</td><td>openmaptiles, landcover, bathymetry</td><td>(injected by app if Cartes)</td><td>https://cartes.app/fonts/glyphs/{fontstack}/{range}.pbf</td><td>background:2, fills:28, underlay:21, overlay/symbol:40, overlay:59</td></tr>
+<tr><td>Liberty Local / Xplore</td><td>styles/map-styles/Xplore.json</td><td>65</td><td>openmaptiles, mapterhorn, ign_plan</td><td>https://api.maptiler.com/maps/openstreetmap/sprite</td><td>https://api.maptiler.com/fonts/{fontstack}/{range}.pbf?key=get_your_own_OpIi9ZULNHzrESv6T2vL</td><td>background:1, fills:14, underlay:11, overlay:26, overlay/symbol:13</td></tr>
+<tr><td>OSM Liberty</td><td>styles/map-styles/osm_liberty.json</td><td>196</td><td>openmaptiles, ne2_shaded</td><td>https://tiles.openfreemap.org/sprites/ofm_f384/ofm</td><td>https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf</td><td>background:1, fills:39, underlay:4, overlay:107, overlay/symbol:45</td></tr>
+<tr><td>Terrain Stadia local</td><td>styles/map-styles/terrain_vector_on_stadia.json</td><td>81</td><td>stamen-omt, global_landcover_v1, stamen_null, terrarium</td><td>https://tiles.stadiamaps.com/styles/stamen-terrain/sprite</td><td>https://tiles.stadiamaps.com/fonts/{fontstack}/{range}.pbf</td><td>background:1, underlay:11, fills:11, overlay:40, overlay/symbol:18</td></tr>
 </tbody>
 </table>
 </div>
@@ -330,7 +330,7 @@
 <tr><th>issue</th><th>why it matters</th></tr>
 </thead>
 <tbody>
-<tr><td>hillshade id collision</td><td>Xplore.json contains a hillshade layer id while overlay-manager also owns hillshade. The generated layer can be skipped, leaving a style-owned hillshade with different source/paint.</td></tr>
+<tr><td>hillshade id collision</td><td>styles/map-styles/Xplore.json contains a hillshade layer id while overlay-manager also owns hillshade. The generated layer can be skipped, leaving a style-owned hillshade with different source/paint.</td></tr>
 <tr><td>white-background legacy option</td><td>IMAGERY_OPTIONS still references layerId background, but backgrounds are stripped and replaced by terrain-bg. This is likely dead after the new None basemap.</td></tr>
 <tr><td>two contour systems</td><td>The 3D terrain shader renders contours from imageryState.contours, while contour-2d.js creates contour-line-minor/major/label. They need one owner and one ordering policy.</td></tr>
 <tr><td>route order list incomplete</td><td>route-line-manual, route-line-manual-bg, route-pois*, and drag-preview-line are created but not listed in ROUTE_LAYER_ORDER_TOP_TO_BOTTOM.</td></tr>
@@ -515,7 +515,7 @@
       <details open class="style-detail">
         <summary>
           <span>Xplore Outdoor Hybrid</span>
-          <small>xplore_outdoor_hybrid.json · 148 layers · background:2, fills:23, underlay:24, overlay/symbol:40, overlay:59</small>
+          <small>styles/map-styles/xplore_outdoor_hybrid.json · 148 layers · background:2, fills:23, underlay:24, overlay/symbol:40, overlay:59</small>
         </summary>
         <div class="table-wrap wide">
 <table>
@@ -680,7 +680,7 @@
       <details  class="style-detail">
         <summary>
           <span>Cartes Outdoor local</span>
-          <small>cartes_outdoor.json · 150 layers · background:2, fills:28, underlay:21, overlay/symbol:40, overlay:59</small>
+          <small>styles/map-styles/cartes_outdoor.json · 150 layers · background:2, fills:28, underlay:21, overlay/symbol:40, overlay:59</small>
         </summary>
         <div class="table-wrap wide">
 <table>
@@ -847,7 +847,7 @@
       <details  class="style-detail">
         <summary>
           <span>Liberty Local / Xplore</span>
-          <small>Xplore.json · 65 layers · background:1, fills:14, underlay:11, overlay:26, overlay/symbol:13</small>
+          <small>styles/map-styles/Xplore.json · 65 layers · background:1, fills:14, underlay:11, overlay:26, overlay/symbol:13</small>
         </summary>
         <div class="table-wrap wide">
 <table>
@@ -929,7 +929,7 @@
       <details  class="style-detail">
         <summary>
           <span>OSM Liberty</span>
-          <small>osm_liberty.json · 196 layers · background:1, fills:39, underlay:4, overlay:107, overlay/symbol:45</small>
+          <small>styles/map-styles/osm_liberty.json · 196 layers · background:1, fills:39, underlay:4, overlay:107, overlay/symbol:45</small>
         </summary>
         <div class="table-wrap wide">
 <table>
@@ -1142,7 +1142,7 @@
       <details  class="style-detail">
         <summary>
           <span>Terrain Stadia local</span>
-          <small>terrain_vector_on_stadia.json · 81 layers · background:1, underlay:11, fills:11, overlay:40, overlay/symbol:18</small>
+          <small>styles/map-styles/terrain_vector_on_stadia.json · 81 layers · background:1, underlay:11, fills:11, overlay:40, overlay/symbol:18</small>
         </summary>
         <div class="table-wrap wide">
 <table>

@@ -6,7 +6,7 @@ Base commit: `63328d4` (`Refine Shadow V3 and daylight overlays`)
 
 Local changes tracked in this pass:
 
-- Added landcover edge tint layers in `xplore_outdoor_hybrid.json` so landcover color bleeds under relief/contours without changing the terrain shader.
+- Added landcover edge tint layers in `styles/map-styles/xplore_outdoor_hybrid.json` so landcover color bleeds under relief/contours without changing the terrain shader.
 - Replaced Cartes tree pattern SVGs with top-down canopy/conifer patterns:
   `data/vendor/cartes/icons/unknown_leaf.svg`,
   `data/vendor/cartes/icons/broadleaved.svg`,

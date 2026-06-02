@@ -7,27 +7,27 @@ const outPath = path.join(root, 'docs/style-consolidation-comparison.html');
 const styles = [
   {
     name: 'Xplore Outdoor Hybrid',
-    file: 'xplore_outdoor_hybrid.json',
+    file: 'styles/map-styles/xplore_outdoor_hybrid.json',
     role: 'New candidate style: Cartes Outdoor readability, Xplore soft landcover edges, no Cartes server URLs.',
   },
   {
     name: 'Cartes Outdoor local',
-    file: 'cartes_outdoor.json',
+    file: 'styles/map-styles/cartes_outdoor.json',
     role: 'Best outdoor starting point: natural textures, POI icons, outdoor labels, compact enough to edit.',
   },
   {
     name: 'Xplore / Alpine Topo',
-    file: 'Xplore.json',
+    file: 'styles/map-styles/Xplore.json',
     role: 'Most concise custom topo style: useful palette, IGN path experiment, hillshade integration.',
   },
   {
     name: 'OSM Liberty local',
-    file: 'osm_liberty.json',
+    file: 'styles/map-styles/osm_liberty.json',
     role: 'Full OpenMapTiles reference: good coverage, but too verbose for hand styling.',
   },
   {
     name: 'Terrain Stadia',
-    file: 'terrain_vector_on_stadia.json',
+    file: 'styles/map-styles/terrain_vector_on_stadia.json',
     role: 'Good terrain structure and global landcover idea, but external provider and less outdoor detail.',
   },
 ];
@@ -361,7 +361,7 @@ const html = `<!doctype html>
       <thead><tr><th>Source id</th><th>URL</th><th>Purpose</th><th>Status</th></tr></thead>
       <tbody>
         ${rows([
-          ['<code>openmaptiles</code>', '<code>pmtiles://https://tuiles.enliberte.fr/planet.pmtiles</code>', 'Core basemap: roads, landcover, water, buildings, labels, POIs.', '<span class="ok">already in cartes_outdoor.json</span>'],
+          ['<code>openmaptiles</code>', '<code>pmtiles://https://tuiles.enliberte.fr/planet.pmtiles</code>', 'Core basemap: roads, landcover, water, buildings, labels, POIs.', '<span class="ok">already in styles/map-styles/cartes_outdoor.json</span>'],
           ['<code>overture_base</code>', `<code>${escapeHtml(overtureBase.url)}</code>`, 'Optional broad land_cover, land_use, bathymetry and water supplement.', '<span class="warn">needs new layers</span>'],
           ['<code>landcover</code> Cartes', '<code>https://serveur.cartes.app/zxy/h3-landcover/{z}/{x}/{y}.mvt</code>', 'Cartes h3 natural cover. Good visual detail, but keeps Cartes data dependency.', '<span class="warn">decide keep/remove</span>'],
           ['<code>bathymetry</code> Cartes', '<code>https://serveur.cartes.app/zxy/bathymetry/{z}/{x}/{y}.mvt</code>', 'Bathymetry. Can likely be replaced by Overture bathymetry.', '<span class="warn">candidate for removal</span>'],

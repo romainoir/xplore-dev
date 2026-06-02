@@ -45,7 +45,7 @@ const TEXTURES = Object.freeze([
 async function loadPuppeteer() {
   const puppeteerPath = path.resolve(
     ROOT,
-    'maplibre-gl-js-5.24.0/node_modules/puppeteer/lib/cjs/puppeteer/puppeteer.js'
+    'vendor/maplibre/maplibre-gl-js-5.24.0/node_modules/puppeteer/lib/cjs/puppeteer/puppeteer.js'
   );
   const module = await import(pathToFileURL(puppeteerPath).href);
   return module.default || module;

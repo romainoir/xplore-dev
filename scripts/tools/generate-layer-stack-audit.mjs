@@ -6,11 +6,11 @@ const mdOutPath = path.join(root, 'docs/layer-stack-audit.md');
 const htmlOutPath = path.join(root, 'docs/layer-stack-audit.html');
 
 const styleFiles = [
-  ['Xplore Outdoor Hybrid', 'xplore_outdoor_hybrid.json'],
-  ['Cartes Outdoor local', 'cartes_outdoor.json'],
-  ['Liberty Local / Xplore', 'Xplore.json'],
-  ['OSM Liberty', 'osm_liberty.json'],
-  ['Terrain Stadia local', 'terrain_vector_on_stadia.json'],
+  ['Xplore Outdoor Hybrid', 'styles/map-styles/xplore_outdoor_hybrid.json'],
+  ['Cartes Outdoor local', 'styles/map-styles/cartes_outdoor.json'],
+  ['Liberty Local / Xplore', 'styles/map-styles/Xplore.json'],
+  ['OSM Liberty', 'styles/map-styles/osm_liberty.json'],
+  ['Terrain Stadia local', 'styles/map-styles/terrain_vector_on_stadia.json'],
 ];
 
 const fillSourceLayers = ['park', 'landuse', 'landcover', 'water', 'aeroway'];
@@ -136,7 +136,7 @@ const runtimeZones = [
   { zone: '03', layer: 'basemap raster group', source: 'IMAGERY_OPTIONS basemap ids', role: 'IGN Scan, orthophotos, satellite, COSIA, Lidar MNT/MNS, forest inventory', risk: 'Same order path as imagery overlays, but treated as basemap by id list.' },
   { zone: '04', layer: 'style underlay bucket', source: 'current vector style', role: 'Non-fill, non-overlay style layers', risk: 'Bucket is heuristic. Some land/area layers can be misbucketed depending on source-layer names.' },
   { zone: '05', layer: 'style fills bucket', source: 'current vector style', role: 'park/landuse/landcover/water/aeroway fills below hillshade', risk: 'Fill bucket plus raster basemaps can overlap; hidden by basemap switch, but source of complexity.' },
-  { zone: '06', layer: 'hillshade2, hillshade, terrain-derivative-cache', source: 'overlay-manager', role: 'Relief shading and derivative cache', risk: 'Xplore.json already has a hillshade id, which collides with the generated hillshade id.' },
+  { zone: '06', layer: 'hillshade2, hillshade, terrain-derivative-cache', source: 'overlay-manager', role: 'Relief shading and derivative cache', risk: 'styles/map-styles/Xplore.json already has a hillshade id, which collides with the generated hillshade id.' },
   { zone: '07', layer: 'terrain native analysis', source: 'overlay-manager + IMAGERY_OPTIONS', role: 'normalmap, snow-native, aspect, slope, avalanche, shadow-v3, daylight windows', risk: 'Several are custom/native layers sharing DEM sources; their relative order is hardcoded separately.' },
   { zone: '08', layer: 'raster overlays', source: 'IMAGERY_OPTIONS overlay ids', role: 'Strava, winter traces, snow-depth', risk: 'The ordering is user reorderable, but constrained by basemap/overlay buckets.' },
   { zone: '09', layer: 'style overlay bucket', source: 'current vector style', role: 'roads, paths, rails, buildings, boundaries, waterways, non-symbol overlays', risk: 'Moved above analysis; can cover slope/aspect/shadow more than expected.' },
@@ -152,7 +152,7 @@ const dynamicLayers = [
   ['01', 'terrain-bg', 'background', 'overlay-manager', 'always / None white', 'Generated background; receives incoming style background paint.'],
   ['02', 'terrain', 'raster', 'terrainSource', 'vector base', 'Added after terrain-bg. Hidden when vector base hidden.'],
   ['06', 'hillshade2', 'hillshade', 'reliefDem', 'vector base', 'Second relief shade layer.'],
-  ['06', 'hillshade', 'hillshade', 'hillshadeSource', 'vector base', 'Potential ID collision with Xplore.json hillshade.'],
+  ['06', 'hillshade', 'hillshade', 'hillshadeSource', 'vector base', 'Potential ID collision with styles/map-styles/Xplore.json hillshade.'],
   ['06', 'terrain-derivative-cache', 'hillshade', 'terrainSource', 'cache', 'Visible but transparent; used by shader/derivatives.'],
   ['07', 'normalmap', 'hillshade/native', 'hillshadeSource', 'hidden/native', 'Native analysis carrier.'],
   ['07', 'snow-native', 'hillshade/native', 'hillshadeSource', 'snow toolbox', 'Snow native analysis layer.'],
@@ -251,7 +251,7 @@ const collisions = [...allLayerOccurrences.entries()]
 
 const cartesRows = styleTables.get('Cartes Outdoor local') || [];
 const issueRows = [
-  { issue: 'hillshade id collision', 'why it matters': 'Xplore.json contains a hillshade layer id while overlay-manager also owns hillshade. The generated layer can be skipped, leaving a style-owned hillshade with different source/paint.' },
+  { issue: 'hillshade id collision', 'why it matters': 'styles/map-styles/Xplore.json contains a hillshade layer id while overlay-manager also owns hillshade. The generated layer can be skipped, leaving a style-owned hillshade with different source/paint.' },
   { issue: 'white-background legacy option', 'why it matters': 'IMAGERY_OPTIONS still references layerId background, but backgrounds are stripped and replaced by terrain-bg. This is likely dead after the new None basemap.' },
   { issue: 'two contour systems', 'why it matters': 'The 3D terrain shader renders contours from imageryState.contours, while contour-2d.js creates contour-line-minor/major/label. They need one owner and one ordering policy.' },
   { issue: 'route order list incomplete', 'why it matters': 'route-line-manual, route-line-manual-bg, route-pois*, and drag-preview-line are created but not listed in ROUTE_LAYER_ORDER_TOP_TO_BOTTOM.' },

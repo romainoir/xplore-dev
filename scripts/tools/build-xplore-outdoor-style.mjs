@@ -2,13 +2,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const root = process.cwd();
-const inputPath = path.join(root, 'cartes_outdoor.json');
-const labelInputPath = path.join(root, 'cartes_base.json');
-const outputPath = path.join(root, 'xplore_outdoor_hybrid.json');
+const inputPath = path.join(root, 'styles/map-styles/cartes_outdoor.json');
+const labelInputPath = path.join(root, 'styles/map-styles/cartes_base.json');
+const outputPath = path.join(root, 'styles/map-styles/xplore_outdoor_hybrid.json');
 
 const OPENMAPTILES_PM_TILES = 'pmtiles://https://tuiles.enliberte.fr/planet.pmtiles';
 const OPENFREEMAP_GLYPHS = 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf';
-const LOCAL_CARTES_SPRITE = './data/vendor/cartes/sprite/sprite';
+const LOCAL_CARTES_SPRITE = '/data/vendor/cartes/sprite/sprite';
 const REMOVED_SOURCE_LAYER_IDS = new Set(['Grass-Bare-Snow', 'Bare-Snow', 'Snow', 'Crops', 'Tree', 'water-depth']);
 const KEPT_CARTES_SYMBOL_IDS = new Set(['Cliff Symbols', 'Arete Symbols', 'Oneway', 'Cycle highways icons']);
 

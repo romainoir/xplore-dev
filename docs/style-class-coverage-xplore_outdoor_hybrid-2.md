@@ -1,6 +1,6 @@
 # Style Class Coverage Audit
 
-Style: `xplore_outdoor_hybrid-2.json`
+Style: `styles/map-styles/xplore_outdoor_hybrid-2.json`
 Vector source: `openmaptiles`
 PMTiles: `https://tuiles.enliberte.fr/planet.pmtiles`
 

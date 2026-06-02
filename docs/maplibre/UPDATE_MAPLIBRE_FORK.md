@@ -5,9 +5,9 @@ Last checked: 2026-04-30.
 The app currently runs a local MapLibre GL JS 5.24 fork:
 
 - Runtime bundle: `scripts/map/maplibre-gl-dev.js`
-- Active fork source: `maplibre-gl-js-5.24.0/`
-- Legacy fork source kept for comparison: `maplibre-gl-js-5.18.0/`
-- Main app CSS: `maplibre-gl-js-5.24.0/src/css/maplibre-gl.css`
+- Active fork source: `vendor/maplibre/maplibre-gl-js-5.24.0/`
+- Legacy fork source kept for comparison: `archive/maplibre/maplibre-gl-js-5.18.0/`
+- Main app CSS: `vendor/maplibre/maplibre-gl-js-5.24.0/src/css/maplibre-gl.css`
 - Shadow PoC: `docs/shadow-poc/shadow_debug_poc.html`
 
 The custom shadow/daylight work is not a plugin. It is patched directly into the MapLibre renderer, style layer system, shaders, and generated dev bundle. Do not replace the fork with upstream MapLibre and expect shadows to keep working.
@@ -47,37 +47,37 @@ Sources:
 
 These are the known fork integration points. An LLM should inspect these first before trying to compile:
 
-- `maplibre-gl-js-5.24.0/src/style/create_style_layer.ts`
-- `maplibre-gl-js-5.24.0/src/style/style.ts`
-- `maplibre-gl-js-5.24.0/src/style/style_layer/typed_style_layer.ts`
-- `maplibre-gl-js-5.24.0/src/style/style_layer/shadow_style_layer.ts`
-- `maplibre-gl-js-5.24.0/src/style/style_layer/daylight_style_layer.ts`
-- `maplibre-gl-js-5.24.0/src/style/style_layer/shadow_style_layer_properties.g.ts`
-- `maplibre-gl-js-5.24.0/src/style/style_layer/daylight_style_layer_properties.g.ts`
-- `maplibre-gl-js-5.24.0/src/webgl/draw/draw_shadow.ts`
-- `maplibre-gl-js-5.24.0/src/webgl/draw/draw_daylight.ts`
-- `maplibre-gl-js-5.24.0/src/webgl/draw/draw_terrain.ts`
-- `maplibre-gl-js-5.24.0/src/webgl/draw/draw_hillshade.ts`
-- `maplibre-gl-js-5.24.0/src/render/terrain.ts`
-- `maplibre-gl-js-5.24.0/src/render/painter.ts`
-- `maplibre-gl-js-5.24.0/src/ui/map.ts`
-- `maplibre-gl-js-5.24.0/src/webgl/program/program_uniforms.ts`
-- `maplibre-gl-js-5.24.0/src/webgl/program/hillshade_program.ts`
-- `maplibre-gl-js-5.24.0/src/webgl/program/terrain_program.ts`
-- `maplibre-gl-js-5.24.0/src/webgl/program/shadow_program.ts`
-- `maplibre-gl-js-5.24.0/src/webgl/program/shadow_prepare_program.ts`
-- `maplibre-gl-js-5.24.0/src/webgl/program/daylight_program.ts`
-- `maplibre-gl-js-5.24.0/src/webgl/program/horizon_program.ts`
-- `maplibre-gl-js-5.24.0/src/shaders/shaders.ts`
-- `maplibre-gl-js-5.24.0/src/shaders/glsl/hillshade*.glsl`
-- `maplibre-gl-js-5.24.0/src/shaders/glsl/shadow*.glsl`
-- `maplibre-gl-js-5.24.0/src/shaders/glsl/daylight*.glsl`
-- `maplibre-gl-js-5.24.0/src/shaders/glsl/horizon_prepare.fragment.glsl`
-- Generated shader files: `maplibre-gl-js-5.24.0/src/shaders/glsl/*.g.ts` after `npm run codegen`
+- `vendor/maplibre/maplibre-gl-js-5.24.0/src/style/create_style_layer.ts`
+- `vendor/maplibre/maplibre-gl-js-5.24.0/src/style/style.ts`
+- `vendor/maplibre/maplibre-gl-js-5.24.0/src/style/style_layer/typed_style_layer.ts`
+- `vendor/maplibre/maplibre-gl-js-5.24.0/src/style/style_layer/shadow_style_layer.ts`
+- `vendor/maplibre/maplibre-gl-js-5.24.0/src/style/style_layer/daylight_style_layer.ts`
+- `vendor/maplibre/maplibre-gl-js-5.24.0/src/style/style_layer/shadow_style_layer_properties.g.ts`
+- `vendor/maplibre/maplibre-gl-js-5.24.0/src/style/style_layer/daylight_style_layer_properties.g.ts`
+- `vendor/maplibre/maplibre-gl-js-5.24.0/src/webgl/draw/draw_shadow.ts`
+- `vendor/maplibre/maplibre-gl-js-5.24.0/src/webgl/draw/draw_daylight.ts`
+- `vendor/maplibre/maplibre-gl-js-5.24.0/src/webgl/draw/draw_terrain.ts`
+- `vendor/maplibre/maplibre-gl-js-5.24.0/src/webgl/draw/draw_hillshade.ts`
+- `vendor/maplibre/maplibre-gl-js-5.24.0/src/render/terrain.ts`
+- `vendor/maplibre/maplibre-gl-js-5.24.0/src/render/painter.ts`
+- `vendor/maplibre/maplibre-gl-js-5.24.0/src/ui/map.ts`
+- `vendor/maplibre/maplibre-gl-js-5.24.0/src/webgl/program/program_uniforms.ts`
+- `vendor/maplibre/maplibre-gl-js-5.24.0/src/webgl/program/hillshade_program.ts`
+- `vendor/maplibre/maplibre-gl-js-5.24.0/src/webgl/program/terrain_program.ts`
+- `vendor/maplibre/maplibre-gl-js-5.24.0/src/webgl/program/shadow_program.ts`
+- `vendor/maplibre/maplibre-gl-js-5.24.0/src/webgl/program/shadow_prepare_program.ts`
+- `vendor/maplibre/maplibre-gl-js-5.24.0/src/webgl/program/daylight_program.ts`
+- `vendor/maplibre/maplibre-gl-js-5.24.0/src/webgl/program/horizon_program.ts`
+- `vendor/maplibre/maplibre-gl-js-5.24.0/src/shaders/shaders.ts`
+- `vendor/maplibre/maplibre-gl-js-5.24.0/src/shaders/glsl/hillshade*.glsl`
+- `vendor/maplibre/maplibre-gl-js-5.24.0/src/shaders/glsl/shadow*.glsl`
+- `vendor/maplibre/maplibre-gl-js-5.24.0/src/shaders/glsl/daylight*.glsl`
+- `vendor/maplibre/maplibre-gl-js-5.24.0/src/shaders/glsl/horizon_prepare.fragment.glsl`
+- Generated shader files: `vendor/maplibre/maplibre-gl-js-5.24.0/src/shaders/glsl/*.g.ts` after `npm run codegen`
 - Built runtime copied into the app: `scripts/map/maplibre-gl-dev.js`
 - Built source map copied into the app: `scripts/map/maplibre-gl-dev.js.map`
 
-Use `rg "shadow-coarse|daylight-native|ShadowStyleLayer|drawGlobalShadow|drawDaylight|horizonPrepare|aspect-native|slope-native|avalanche-native|snow-native|queryTerrainElevation" maplibre-gl-js-5.24.0/src scripts/map/maplibre-gl-dev.js` to find all active patch points.
+Use `rg "shadow-coarse|daylight-native|ShadowStyleLayer|drawGlobalShadow|drawDaylight|horizonPrepare|aspect-native|slope-native|avalanche-native|snow-native|queryTerrainElevation" vendor/maplibre/maplibre-gl-js-5.24.0/src scripts/map/maplibre-gl-dev.js` to find all active patch points.
 
 ## Custom Shader Port Checklist
 
@@ -121,7 +121,7 @@ MapLibre 5.24 projection caveat:
 
    ```bash
    git clone --depth=1 --branch v5.24.0 https://github.com/maplibre/maplibre-gl-js.git /tmp/maplibre-gl-js-v5.24.0
-   cp -R /tmp/maplibre-gl-js-v5.24.0 ./maplibre-gl-js-5.24.0
+   cp -R /tmp/maplibre-gl-js-v5.24.0 ./vendor/maplibre/maplibre-gl-js-5.24.0
    ```
 
 3. Port the custom shadow/daylight files.
@@ -136,7 +136,7 @@ MapLibre 5.24 projection caveat:
 4. Build the new fork.
 
    ```bash
-   cd maplibre-gl-js-5.24.0
+   cd vendor/maplibre/maplibre-gl-js-5.24.0
    npm ci
    npm run codegen
    npm run build-dev
@@ -146,8 +146,8 @@ MapLibre 5.24 projection caveat:
 5. Copy the validated build into the app.
 
    ```bash
-   cp maplibre-gl-js-5.24.0/dist/maplibre-gl-dev.js scripts/map/maplibre-gl-dev.js
-   cp maplibre-gl-js-5.24.0/dist/maplibre-gl-dev.js.map scripts/map/maplibre-gl-dev.js.map
+   cp vendor/maplibre/maplibre-gl-js-5.24.0/dist/maplibre-gl-dev.js scripts/map/maplibre-gl-dev.js
+   cp vendor/maplibre/maplibre-gl-js-5.24.0/dist/maplibre-gl-dev.js.map scripts/map/maplibre-gl-dev.js.map
    ```
 
    Then update CSS references:
@@ -155,7 +155,7 @@ MapLibre 5.24 projection caveat:
    - `index.html`
    - `docs/shadow-poc/shadow_debug_poc.html`
 
-   Replace any old CSS references with `maplibre-gl-js-5.24.0/src/css/maplibre-gl.css`.
+   Replace any old CSS references with `vendor/maplibre/maplibre-gl-js-5.24.0/src/css/maplibre-gl.css`.
 
 6. Static verification.
 
@@ -193,7 +193,7 @@ MapLibre 5.24 projection caveat:
    - `Update app to MapLibre 5.24 bundle`
    - `Remove old MapLibre 5.18 fork after validation`
 
-   Do not remove `maplibre-gl-js-5.18.0/` until Safari validation is done.
+   Do not remove `archive/maplibre/maplibre-gl-js-5.18.0/` until Safari validation is done.
 
 ## LLM Handoff Prompt
 

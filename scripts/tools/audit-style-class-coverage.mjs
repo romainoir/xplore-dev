@@ -25,7 +25,7 @@ const { PMTiles, FetchSource } = loadDependency('pmtiles');
 const { VectorTile } = loadDependency('@mapbox/vector-tile');
 const Protobuf = loadDependency('pbf');
 
-const DEFAULT_STYLE = 'xplore_outdoor_hybrid-2.json';
+const DEFAULT_STYLE = 'styles/map-styles/xplore_outdoor_hybrid-2.json';
 const DEFAULT_SAMPLES = [
   { name: 'world-z4', z: 4, bbox: [-180, -85, 180, 85] },
   { name: 'alps-z10', z: 10, bbox: [5, 43.5, 12.5, 47.8] },

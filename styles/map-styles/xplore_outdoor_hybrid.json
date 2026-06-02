@@ -16080,5 +16080,5 @@
     "xplore:goal": "Cartes Outdoor readability without Cartes server data dependencies",
     "xplore:primary-vector-source": "pmtiles://https://tuiles.enliberte.fr/planet.pmtiles"
   },
-  "sprite": "./data/vendor/cartes/sprite/sprite"
+  "sprite": "/data/vendor/cartes/sprite/sprite"
 }

@@ -7,7 +7,7 @@ import {
 } from '../config/map-config.js';
 import { initializeGeocoder } from '../map/geocoder-control.js';
 
-const XPLORE_OUTDOOR_STYLE_URL = './xplore_outdoor_hybrid-2.json?v=20260525-relief-wip';
+const XPLORE_OUTDOOR_STYLE_URL = './styles/map-styles/xplore_outdoor_hybrid-2.json?v=20260525-relief-wip';
 const CARTES_SPRITE_URL = new URL('../../data/vendor/cartes/sprite/sprite', import.meta.url).href;
 const DPR_STORAGE_KEY = 'xplore_dpr_enabled';
 const OPTIONAL_STYLE_LAYER_IDS = new Set(['Peak labels', 'Mountain peak labels', 'Volcano peak labels']);

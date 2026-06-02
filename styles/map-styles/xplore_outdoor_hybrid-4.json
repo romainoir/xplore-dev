@@ -228,7 +228,7 @@
       "tileSize": 512
     }
   },
-  "sprite": "./data/vendor/cartes/sprite/sprite",
+  "sprite": "/data/vendor/cartes/sprite/sprite",
   "glyphs": "https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf",
   "layers": [
     {

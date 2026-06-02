@@ -13,7 +13,7 @@ Approximate final order is bottom to top. Some layers move again after style cha
 | 03 | basemap raster group | IMAGERY_OPTIONS basemap ids | IGN Scan, orthophotos, satellite, COSIA, Lidar MNT/MNS, forest inventory | Same order path as imagery overlays, but treated as basemap by id list. |
 | 04 | style underlay bucket | current vector style | Non-fill, non-overlay style layers | Bucket is heuristic. Some land/area layers can be misbucketed depending on source-layer names. |
 | 05 | style fills bucket | current vector style | park/landuse/landcover/water/aeroway fills below hillshade | Fill bucket plus raster basemaps can overlap; hidden by basemap switch, but source of complexity. |
-| 06 | hillshade2, hillshade, terrain-derivative-cache | overlay-manager | Relief shading and derivative cache | Xplore.json already has a hillshade id, which collides with the generated hillshade id. |
+| 06 | hillshade2, hillshade, terrain-derivative-cache | overlay-manager | Relief shading and derivative cache | styles/map-styles/Xplore.json already has a hillshade id, which collides with the generated hillshade id. |
 | 07 | terrain native analysis | overlay-manager + IMAGERY_OPTIONS | normalmap, snow-native, aspect, slope, avalanche, shadow-v3, daylight windows | Several are custom/native layers sharing DEM sources; their relative order is hardcoded separately. |
 | 08 | raster overlays | IMAGERY_OPTIONS overlay ids | Strava, winter traces, snow-depth | The ordering is user reorderable, but constrained by basemap/overlay buckets. |
 | 09 | style overlay bucket | current vector style | roads, paths, rails, buildings, boundaries, waterways, non-symbol overlays | Moved above analysis; can cover slope/aspect/shadow more than expected. |
@@ -31,7 +31,7 @@ Approximate final order is bottom to top. Some layers move again after style cha
 | 01 | terrain-bg | background | overlay-manager | always / None white | Generated background; receives incoming style background paint. |
 | 02 | terrain | raster | terrainSource | vector base | Added after terrain-bg. Hidden when vector base hidden. |
 | 06 | hillshade2 | hillshade | reliefDem | vector base | Second relief shade layer. |
-| 06 | hillshade | hillshade | hillshadeSource | vector base | Potential ID collision with Xplore.json hillshade. |
+| 06 | hillshade | hillshade | hillshadeSource | vector base | Potential ID collision with styles/map-styles/Xplore.json hillshade. |
 | 06 | terrain-derivative-cache | hillshade | terrainSource | cache | Visible but transparent; used by shader/derivatives. |
 | 07 | normalmap | hillshade/native | hillshadeSource | hidden/native | Native analysis carrier. |
 | 07 | snow-native | hillshade/native | hillshadeSource | snow toolbox | Snow native analysis layer. |
@@ -92,17 +92,17 @@ Approximate final order is bottom to top. Some layers move again after style cha
 
 | style | file | layers | sources | sprite | glyphs | buckets |
 | --- | --- | --- | --- | --- | --- | --- |
-| Xplore Outdoor Hybrid | xplore_outdoor_hybrid.json | 148 | openmaptiles | ./data/vendor/cartes/sprite/sprite | https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf | background:2, fills:23, underlay:24, overlay/symbol:40, overlay:59 |
-| Cartes Outdoor local | cartes_outdoor.json | 150 | openmaptiles, landcover, bathymetry | (injected by app if Cartes) | https://cartes.app/fonts/glyphs/{fontstack}/{range}.pbf | background:2, fills:28, underlay:21, overlay/symbol:40, overlay:59 |
-| Liberty Local / Xplore | Xplore.json | 65 | openmaptiles, mapterhorn, ign_plan | https://api.maptiler.com/maps/openstreetmap/sprite | https://api.maptiler.com/fonts/{fontstack}/{range}.pbf?key=get_your_own_OpIi9ZULNHzrESv6T2vL | background:1, fills:14, underlay:11, overlay:26, overlay/symbol:13 |
-| OSM Liberty | osm_liberty.json | 196 | openmaptiles, ne2_shaded | https://tiles.openfreemap.org/sprites/ofm_f384/ofm | https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf | background:1, fills:39, underlay:4, overlay:107, overlay/symbol:45 |
-| Terrain Stadia local | terrain_vector_on_stadia.json | 81 | stamen-omt, global_landcover_v1, stamen_null, terrarium | https://tiles.stadiamaps.com/styles/stamen-terrain/sprite | https://tiles.stadiamaps.com/fonts/{fontstack}/{range}.pbf | background:1, underlay:11, fills:11, overlay:40, overlay/symbol:18 |
+| Xplore Outdoor Hybrid | styles/map-styles/xplore_outdoor_hybrid.json | 148 | openmaptiles | /data/vendor/cartes/sprite/sprite | https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf | background:2, fills:23, underlay:24, overlay/symbol:40, overlay:59 |
+| Cartes Outdoor local | styles/map-styles/cartes_outdoor.json | 150 | openmaptiles, landcover, bathymetry | (injected by app if Cartes) | https://cartes.app/fonts/glyphs/{fontstack}/{range}.pbf | background:2, fills:28, underlay:21, overlay/symbol:40, overlay:59 |
+| Liberty Local / Xplore | styles/map-styles/Xplore.json | 65 | openmaptiles, mapterhorn, ign_plan | https://api.maptiler.com/maps/openstreetmap/sprite | https://api.maptiler.com/fonts/{fontstack}/{range}.pbf?key=get_your_own_OpIi9ZULNHzrESv6T2vL | background:1, fills:14, underlay:11, overlay:26, overlay/symbol:13 |
+| OSM Liberty | styles/map-styles/osm_liberty.json | 196 | openmaptiles, ne2_shaded | https://tiles.openfreemap.org/sprites/ofm_f384/ofm | https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf | background:1, fills:39, underlay:4, overlay:107, overlay/symbol:45 |
+| Terrain Stadia local | styles/map-styles/terrain_vector_on_stadia.json | 81 | stamen-omt, global_landcover_v1, stamen_null, terrarium | https://tiles.stadiamaps.com/styles/stamen-terrain/sprite | https://tiles.stadiamaps.com/fonts/{fontstack}/{range}.pbf | background:1, underlay:11, fills:11, overlay:40, overlay/symbol:18 |
 
 ## Potential Redundancy / Placement Issues
 
 | issue | why it matters |
 | --- | --- |
-| hillshade id collision | Xplore.json contains a hillshade layer id while overlay-manager also owns hillshade. The generated layer can be skipped, leaving a style-owned hillshade with different source/paint. |
+| hillshade id collision | styles/map-styles/Xplore.json contains a hillshade layer id while overlay-manager also owns hillshade. The generated layer can be skipped, leaving a style-owned hillshade with different source/paint. |
 | white-background legacy option | IMAGERY_OPTIONS still references layerId background, but backgrounds are stripped and replaced by terrain-bg. This is likely dead after the new None basemap. |
 | two contour systems | The 3D terrain shader renders contours from imageryState.contours, while contour-2d.js creates contour-line-minor/major/label. They need one owner and one ordering policy. |
 | route order list incomplete | route-line-manual, route-line-manual-bg, route-pois*, and drag-preview-line are created but not listed in ROUTE_LAYER_ORDER_TOP_TO_BOTTOM. |

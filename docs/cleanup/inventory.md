@@ -2,9 +2,10 @@
 
 Date: 2026-06-02
 
-This document records the current repository layout before any destructive cleanup.
-No project assets are deleted in this pass. Data assets have been reorganized with
-`git mv` so the runtime no longer depends on a mixed top-level `data/` folder.
+This document records the current repository layout after the non-destructive
+cleanup pass. No project assets are deleted in this pass. Assets and references
+have been reorganized with `git mv` so the runtime no longer depends on mixed
+top-level data, style, vendor, and experiment folders.
 
 ## Runtime Surface
 
@@ -15,8 +16,9 @@ These paths are part of the current app runtime:
 - `scripts/map/`: local MapLibre bundle, contour integration, photo/peak map helpers.
 - `scripts/config/`: shared runtime configuration.
 - `styles/main.css`: current app stylesheet.
+- `styles/map-styles/`: local style documents loaded by the basemap switcher.
 - `data/`: runtime assets, sprites, icons, offline routing data.
-- `xplore_outdoor_hybrid*.json`: local style documents loaded by the basemap switcher.
+- `vendor/maplibre/maplibre-gl-js-5.24.0/`: active MapLibre source fork.
 
 ## Data Assets
 
@@ -36,38 +38,40 @@ Only `data/README.md` should remain at `data/` top level.
 
 ## MapLibre Copies
 
-There are multiple large MapLibre copies. They should not be deleted until the build/runtime path is fully documented.
+There are multiple large MapLibre copies. They are now grouped by role and should
+not be deleted until the build/runtime path is fully documented.
 
-- `maplibre-gl-js-5.24.0/`: active source fork for the current terrain/shadow/contour work.
+- `vendor/maplibre/maplibre-gl-js-5.24.0/`: active source fork for the current terrain/shadow/contour work.
 - `scripts/map/maplibre-gl-dev.js`: runtime bundle currently loaded by `index.html`.
-- `maplibre-gl-js/`: nested Git repository, currently dirty. Role needs confirmation before cleanup.
-- `maplibre-gl-js-shadow-backup/`: nested Git repository, currently dirty. Looks like a backup candidate.
-- `maplibre-gl-js-5.18.0/`: older copied fork/reference. Role needs confirmation.
+- `archive/maplibre/maplibre-gl-js-5.18.0/`: older copied fork/reference. Role needs confirmation.
+- `archive/maplibre/nested-repos/maplibre-gl-js/`: nested Git repository, currently dirty. Role needs confirmation before cleanup.
+- `archive/maplibre/nested-repos/maplibre-gl-js-shadow-backup/`: nested Git repository, currently dirty. Looks like a backup candidate.
 
 Approximate sizes observed on 2026-06-02:
 
-- `maplibre-gl-js`: 789M
-- `maplibre-gl-js-shadow-backup`: 789M
-- `maplibre-gl-js-5.24.0`: 693M
-- `maplibre-gl-js-5.18.0`: 688M
+- `archive/maplibre/nested-repos/maplibre-gl-js`: 789M
+- `archive/maplibre/nested-repos/maplibre-gl-js-shadow-backup`: 789M
+- `vendor/maplibre/maplibre-gl-js-5.24.0`: 693M
+- `archive/maplibre/maplibre-gl-js-5.18.0`: 688M
 
 Most of this size is from embedded `node_modules`.
 
 ## Reference And Experiment Folders
 
-- `references/maplibre-contour/`: local reference copy for maplibre-contour.
+- `archive/references/maplibre-contour/`: local reference copy for maplibre-contour.
+- `archive/manual-tests/`: standalone manual test/demo pages.
+- `archive/legacy-libs/`: older local library bundles used by archived tests.
+- `fixtures/gpx/`: sample GPX files.
 - `docs/shadow-poc/`: historical shadow proof-of-concept notes.
 - `docs/maplibre/`: MapLibre-related documentation.
-- `testing/`: small test support folder.
-- `untitled folder/`: unclassified folder. Candidate for archive/quarantine later, not touched now.
 
 ## Current Git State After Previous Commit
 
-After commit `8f946e1 Document cleanup inventory and layer assets`, root-level tracked
-app changes were clean. Remaining dirty entries were nested repositories:
+After commit `a8a96fc Organize data assets by role`, root-level tracked app changes
+were clean. Remaining dirty entries were nested repositories:
 
-- `maplibre-gl-js`
-- `maplibre-gl-js-shadow-backup`
+- `archive/maplibre/nested-repos/maplibre-gl-js`
+- `archive/maplibre/nested-repos/maplibre-gl-js-shadow-backup`
 
 ## Safe Cleanup Policy
 
@@ -82,7 +86,6 @@ For now:
 
 Recommended future decisions:
 
-- Choose one canonical MapLibre source folder.
-- Decide whether `maplibre-gl-js-shadow-backup` should become an archive outside the app repo.
-- Decide whether `maplibre-gl-js-5.18.0` is still needed.
+- Decide whether archived nested MapLibre repositories should stay in the app repo.
+- Decide whether `archive/maplibre/maplibre-gl-js-5.18.0` is still needed.
 - Add a generated unused-asset report before removing any asset.

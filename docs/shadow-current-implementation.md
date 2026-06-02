@@ -1,7 +1,7 @@
 # Xplore Terrain Shadows: Current Implementation And Improvement Notes
 
 This document describes the current custom MapLibre terrain shadow pipeline in
-`maplibre-gl-js-5.24.0` and the app-side controller in `scripts/app`.
+`vendor/maplibre/maplibre-gl-js-5.24.0` and the app-side controller in `scripts/app`.
 
 The goal is fast, map-native terrain cast shadows over MapLibre terrain, with
 time/date control, daylight/sunrise/sunset layers, and acceptable performance in
@@ -42,21 +42,21 @@ is likely why blue-tinted near-shadow areas do not look materially more refined.
 
 Core atlas and terrain rendering:
 
-- `maplibre-gl-js-5.24.0/src/webgl/draw/draw_terrain.ts`
-- `maplibre-gl-js-5.24.0/src/webgl/draw/draw_shadow.ts`
-- `maplibre-gl-js-5.24.0/src/render/painter.ts`
-- `maplibre-gl-js-5.24.0/src/render/terrain.ts`
+- `vendor/maplibre/maplibre-gl-js-5.24.0/src/webgl/draw/draw_terrain.ts`
+- `vendor/maplibre/maplibre-gl-js-5.24.0/src/webgl/draw/draw_shadow.ts`
+- `vendor/maplibre/maplibre-gl-js-5.24.0/src/render/painter.ts`
+- `vendor/maplibre/maplibre-gl-js-5.24.0/src/render/terrain.ts`
 
 Shaders:
 
-- `maplibre-gl-js-5.24.0/src/shaders/glsl/shadow_global.fragment.glsl`
-- `maplibre-gl-js-5.24.0/src/shaders/glsl/terrain.vertex.glsl`
-- `maplibre-gl-js-5.24.0/src/shaders/glsl/terrain.fragment.glsl`
+- `vendor/maplibre/maplibre-gl-js-5.24.0/src/shaders/glsl/shadow_global.fragment.glsl`
+- `vendor/maplibre/maplibre-gl-js-5.24.0/src/shaders/glsl/terrain.vertex.glsl`
+- `vendor/maplibre/maplibre-gl-js-5.24.0/src/shaders/glsl/terrain.fragment.glsl`
 
 Uniform setup:
 
-- `maplibre-gl-js-5.24.0/src/webgl/program/shadow_program.ts`
-- `maplibre-gl-js-5.24.0/src/webgl/program/terrain_program.ts`
+- `vendor/maplibre/maplibre-gl-js-5.24.0/src/webgl/program/shadow_program.ts`
+- `vendor/maplibre/maplibre-gl-js-5.24.0/src/webgl/program/terrain_program.ts`
 
 App-side scheduling and sun profile:
 

@@ -215,20 +215,9 @@
       "tileSize": 256,
       "maxzoom": 15,
       "attribution": "<a href=\"https://mapterhorn.com/attribution\">© Mapterhorn</a>"
-    },
-    "eox": {
-      "type": "raster",
-      "tiles": [
-        "https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2023_3857/default/g/{z}/{y}/{x}.jpg",
-        ""
-      ],
-      "minzoom": 0,
-      "maxzoom": 14,
-      "scheme": "xyz",
-      "tileSize": 512
     }
   },
-  "sprite": "./data/vendor/cartes/sprite/sprite",
+  "sprite": "/data/vendor/cartes/sprite/sprite",
   "glyphs": "https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf",
   "layers": [
     {
@@ -264,8 +253,7 @@
           "bare_rock",
           "hsl(29, 18%, 64%)",
           "hsl(29, 18%, 64%)"
-        ],
-        "fill-opacity": 1
+        ]
       }
     },
     {
@@ -292,8 +280,7 @@
           "needleleaved",
           "hsl(100, 22%, 29%)",
           "hsl(84, 22%, 35%)"
-        ],
-        "fill-opacity": 1
+        ]
       }
     },
     {
@@ -311,7 +298,7 @@
       "layout": {"visibility": "visible"},
       "paint": {
         "fill-color": "rgba(32, 135, 45, 1)",
-        "fill-opacity": 1,
+        "fill-opacity": 0.54,
         "fill-antialias": false
       }
     },
@@ -330,7 +317,7 @@
       "layout": {"visibility": "visible"},
       "paint": {
         "fill-color": "rgba(95, 100, 58, 1)",
-        "fill-opacity": 1,
+        "fill-opacity": 0.54,
         "fill-antialias": false
       }
     },
@@ -352,8 +339,8 @@
       ],
       "layout": {"visibility": "visible"},
       "paint": {
-        "fill-color": "rgba(101, 121, 90, 1)",
-        "fill-opacity": 1,
+        "fill-color": "rgba(76, 127, 48, 1)",
+        "fill-opacity": 0.54,
         "fill-antialias": false
       }
     },
@@ -370,7 +357,7 @@
       "minzoom": 9,
       "filter": ["==", "class", "farmland"],
       "layout": {"visibility": "visible"},
-      "paint": {"fill-color": "rgba(193, 185, 86, 1)", "fill-opacity": 1}
+      "paint": {"fill-color": "rgba(193, 185, 86, 1)"}
     },
     {
       "id": "Wetland (medium scale)",
@@ -404,11 +391,7 @@
       "minzoom": 9,
       "filter": ["all", ["==", "class", "sand"], ["==", "subclass", "beach"]],
       "layout": {"visibility": "visible"},
-      "paint": {
-        "fill-color": "#c7b98f",
-        "fill-antialias": false,
-        "fill-opacity": 1
-      }
+      "paint": {"fill-color": "#c7b98f", "fill-antialias": false}
     },
     {
       "id": "Sand",
@@ -423,11 +406,7 @@
       "minzoom": 9,
       "filter": ["all", ["==", "class", "sand"], ["!=", "subclass", "beach"]],
       "layout": {"visibility": "visible"},
-      "paint": {
-        "fill-color": "#c7b98f",
-        "fill-antialias": false,
-        "fill-opacity": 1
-      }
+      "paint": {"fill-color": "#c7b98f", "fill-antialias": false}
     },
     {
       "id": "Wood symbols",
@@ -447,7 +426,7 @@
       ],
       "layout": {"visibility": "visible"},
       "paint": {
-        "fill-opacity": 0.7,
+        "fill-opacity": 0.14,
         "fill-pattern": [
           "step",
           ["zoom"],
@@ -515,53 +494,6 @@
       "paint": {"fill-opacity": 0.32, "fill-pattern": "cartesapp-scree"}
     },
     {
-      "id": "River",
-      "type": "line",
-      "metadata": {
-        "mapbox:group": "xplore-06-waterway-lines",
-        "xplore:layer-group": "06 openmaptiles / waterway / lines",
-        "group": "06 openmaptiles / waterway / lines"
-      },
-      "source": "openmaptiles",
-      "source-layer": "waterway",
-      "filter": ["all", ["!=", "brunnel", "tunnel"]],
-      "layout": {"line-cap": "round", "visibility": "none"},
-      "paint": {
-        "line-color": "#6da0a0",
-        "line-width": {"stops": [[3, 1], [7, 1], [8, 0.5], [12, 0.5], [20, 6]]},
-        "line-opacity": [
-          "case",
-          [
-            "all",
-            ["==", ["get", "class"], "canal"],
-            ["==", ["get", "layer"], -1]
-          ],
-          0.4,
-          1
-        ]
-      }
-    },
-    {
-      "id": "Glacier",
-      "type": "fill",
-      "metadata": {
-        "mapbox:group": "xplore-03-landcover-fills",
-        "xplore:layer-group": "03 openmaptiles / landcover / fills",
-        "group": "03 openmaptiles / landcover / fills"
-      },
-      "source": "openmaptiles",
-      "source-layer": "landcover",
-      "minzoom": 9,
-      "maxzoom": 24,
-      "filter": ["==", "class", "ice"],
-      "layout": {"visibility": "none"},
-      "paint": {
-        "fill-color": "#d7e9ef",
-        "fill-opacity": {"stops": [[0, 0.9], [10, 1]]},
-        "fill-antialias": true
-      }
-    },
-    {
       "id": "color-relief",
       "type": "color-relief",
       "metadata": {
@@ -601,6 +533,53 @@
           "#f4fbfb"
         ],
         "resampling": "linear"
+      }
+    },
+    {
+      "id": "River",
+      "type": "line",
+      "metadata": {
+        "mapbox:group": "xplore-06-waterway-lines",
+        "xplore:layer-group": "06 openmaptiles / waterway / lines",
+        "group": "06 openmaptiles / waterway / lines"
+      },
+      "source": "openmaptiles",
+      "source-layer": "waterway",
+      "filter": ["all", ["!=", "brunnel", "tunnel"]],
+      "layout": {"line-cap": "round", "visibility": "visible"},
+      "paint": {
+        "line-color": "#6da0a0",
+        "line-width": {"stops": [[3, 1], [7, 1], [8, 0.5], [12, 0.5], [20, 6]]},
+        "line-opacity": [
+          "case",
+          [
+            "all",
+            ["==", ["get", "class"], "canal"],
+            ["==", ["get", "layer"], -1]
+          ],
+          0.4,
+          1
+        ]
+      }
+    },
+    {
+      "id": "Glacier",
+      "type": "fill",
+      "metadata": {
+        "mapbox:group": "xplore-03-landcover-fills",
+        "xplore:layer-group": "03 openmaptiles / landcover / fills",
+        "group": "03 openmaptiles / landcover / fills"
+      },
+      "source": "openmaptiles",
+      "source-layer": "landcover",
+      "minzoom": 9,
+      "maxzoom": 24,
+      "filter": ["==", "class", "ice"],
+      "layout": {"visibility": "visible"},
+      "paint": {
+        "fill-color": "#d7e9ef",
+        "fill-opacity": {"stops": [[0, 0.98], [10, 0.84]]},
+        "fill-antialias": true
       }
     },
     {
@@ -818,36 +797,22 @@
       "paint": {"fill-color": "hsl(39, 13%, 80%)", "fill-opacity": 1}
     },
     {
-      "id": "Cliff and Ridge Line",
-      "type": "line",
+      "id": "hillshade",
+      "type": "hillshade",
       "metadata": {
-        "mapbox:group": "xplore-07-mountain-peak-lines",
-        "xplore:layer-group": "07 openmaptiles / mountain_peak / lines",
-        "group": "07 openmaptiles / mountain_peak / lines"
+        "mapbox:group": "xplore-08-dem-overlays",
+        "xplore:layer-group": "08 DEM / relief overlays",
+        "group": "08 DEM / relief overlays"
       },
-      "source": "openmaptiles",
-      "source-layer": "mountain_peak",
-      "minzoom": 12,
-      "filter": ["in", ["get", "class"], ["literal", ["cliff", "ridge"]]],
-      "layout": {
-        "line-cap": "round",
-        "line-join": "round",
-        "visibility": "visible"
-      },
+      "source": "hillshadeSource",
+      "layout": {"visibility": "visible"},
       "paint": {
-        "line-width": [
-          "interpolate",
-          ["linear"],
-          ["zoom"],
-          12,
-          0.75,
-          14,
-          1.5,
-          16,
-          3
-        ],
-        "line-color": "#6f5c4a",
-        "line-opacity": 0.42
+        "hillshade-illumination-anchor": "map",
+        "hillshade-method": "standard",
+        "hillshade-highlight-color": "rgba(255,255,255,0)",
+        "hillshade-accent-color": "rgba(0,0,0,0)",
+        "hillshade-exaggeration": 0.8,
+        "hillshade-shadow-color": "rgba(0,0,0,0.66)"
       }
     },
     {
@@ -914,8 +879,8 @@
       },
       "source": "openmaptiles",
       "source-layer": "landcover",
-      "minzoom": 10,
-      "maxzoom": 19,
+      "minzoom": 7,
+      "maxzoom": 18,
       "filter": [
         "in",
         ["get", "class"],
@@ -927,7 +892,7 @@
       "layout": {
         "line-cap": "round",
         "line-join": "round",
-        "visibility": "visible"
+        "visibility": "none"
       },
       "paint": {
         "line-blur": [
@@ -996,92 +961,6 @@
           16,
           17,
           6.4
-        ]
-      }
-    },
-    {
-      "id": "Landcover edge tint inner",
-      "type": "line",
-      "metadata": {
-        "mapbox:group": "xplore-03-landcover-glow-halo",
-        "xplore:layer-group": "03 openmaptiles / landcover / glow + halo",
-        "group": "03 openmaptiles / landcover / glow + halo"
-      },
-      "source": "openmaptiles",
-      "source-layer": "landcover",
-      "minzoom": 9,
-      "filter": [
-        "in",
-        ["get", "class"],
-        [
-          "literal",
-          ["wood", "grass", "farmland", "rock", "sand", "ice", "wetland"]
-        ]
-      ],
-      "layout": {
-        "line-cap": "round",
-        "line-join": "round",
-        "visibility": "visible"
-      },
-      "paint": {
-        "line-color": [
-          "case",
-          ["==", ["get", "class"], "wood"],
-          [
-            "match",
-            ["get", "leaf_type"],
-            "needleleaved",
-            "hsl(100, 22%, 29%)",
-            "hsl(84, 22%, 35%)"
-          ],
-          ["==", ["get", "class"], "grass"],
-          "hsl(75, 18%, 43%)",
-          ["==", ["get", "class"], "farmland"],
-          "#928b66",
-          ["==", ["get", "class"], "rock"],
-          "hsl(29, 14%, 48%)",
-          ["==", ["get", "class"], "sand"],
-          "#ad9d70",
-          ["==", ["get", "class"], "wetland"],
-          "#527c78",
-          ["==", ["get", "class"], "ice"],
-          "#a9cbd5",
-          "rgba(94, 84, 67, 0.56)"
-        ],
-        "line-opacity": [
-          "interpolate",
-          ["linear"],
-          ["zoom"],
-          9,
-          0,
-          11,
-          0.09,
-          14,
-          0.14,
-          16,
-          0.08
-        ],
-        "line-width": [
-          "interpolate",
-          ["linear"],
-          ["zoom"],
-          9,
-          4,
-          12,
-          8,
-          16,
-          19.200000000000003
-        ],
-        "line-blur": [
-          "interpolate",
-          ["linear"],
-          ["zoom"],
-          9,
-          2.2,
-          12,
-          4.4,
-          16,
-          8.8
         ]
       }
     },
@@ -1172,22 +1051,36 @@
       }
     },
     {
-      "id": "hillshade",
-      "type": "hillshade",
+      "id": "Cliff and Ridge Line",
+      "type": "line",
       "metadata": {
-        "mapbox:group": "xplore-08-dem-overlays",
-        "xplore:layer-group": "08 DEM / relief overlays",
-        "group": "08 DEM / relief overlays"
+        "mapbox:group": "xplore-07-mountain-peak-lines",
+        "xplore:layer-group": "07 openmaptiles / mountain_peak / lines",
+        "group": "07 openmaptiles / mountain_peak / lines"
       },
-      "source": "hillshadeSource",
-      "layout": {"visibility": "visible"},
+      "source": "openmaptiles",
+      "source-layer": "mountain_peak",
+      "minzoom": 12,
+      "filter": ["in", ["get", "class"], ["literal", ["cliff", "ridge"]]],
+      "layout": {
+        "line-cap": "round",
+        "line-join": "round",
+        "visibility": "visible"
+      },
       "paint": {
-        "hillshade-illumination-anchor": "map",
-        "hillshade-method": "standard",
-        "hillshade-highlight-color": "rgba(255,255,255,0)",
-        "hillshade-accent-color": "rgba(0,0,0,0)",
-        "hillshade-exaggeration": 0.8,
-        "hillshade-shadow-color": "rgba(0,0,0,0.66)"
+        "line-width": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          12,
+          0.75,
+          14,
+          1.5,
+          16,
+          3
+        ],
+        "line-color": "#6f5c4a",
+        "line-opacity": 0.42
       }
     },
     {
@@ -1231,7 +1124,7 @@
       "layout": {
         "line-cap": "round",
         "line-join": "round",
-        "visibility": "visible"
+        "visibility": "none"
       },
       "paint": {
         "line-blur": [
@@ -1302,6 +1195,92 @@
           12.8,
           20,
           6.4
+        ]
+      }
+    },
+    {
+      "id": "Landcover edge tint inner",
+      "type": "line",
+      "metadata": {
+        "mapbox:group": "xplore-03-landcover-glow-halo",
+        "xplore:layer-group": "03 openmaptiles / landcover / glow + halo",
+        "group": "03 openmaptiles / landcover / glow + halo"
+      },
+      "source": "openmaptiles",
+      "source-layer": "landcover",
+      "minzoom": 9,
+      "filter": [
+        "in",
+        ["get", "class"],
+        [
+          "literal",
+          ["wood", "grass", "farmland", "rock", "sand", "ice", "wetland"]
+        ]
+      ],
+      "layout": {
+        "line-cap": "round",
+        "line-join": "round",
+        "visibility": "none"
+      },
+      "paint": {
+        "line-color": [
+          "case",
+          ["==", ["get", "class"], "wood"],
+          [
+            "match",
+            ["get", "leaf_type"],
+            "needleleaved",
+            "hsl(100, 22%, 29%)",
+            "hsl(84, 22%, 35%)"
+          ],
+          ["==", ["get", "class"], "grass"],
+          "hsl(75, 18%, 43%)",
+          ["==", ["get", "class"], "farmland"],
+          "#928b66",
+          ["==", ["get", "class"], "rock"],
+          "hsl(29, 14%, 48%)",
+          ["==", ["get", "class"], "sand"],
+          "#ad9d70",
+          ["==", ["get", "class"], "wetland"],
+          "#527c78",
+          ["==", ["get", "class"], "ice"],
+          "#a9cbd5",
+          "rgba(94, 84, 67, 0.56)"
+        ],
+        "line-opacity": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          9,
+          0,
+          11,
+          0.09,
+          14,
+          0.14,
+          16,
+          0.08
+        ],
+        "line-width": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          9,
+          4,
+          12,
+          8,
+          16,
+          19.200000000000003
+        ],
+        "line-blur": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          9,
+          2.2,
+          12,
+          4.4,
+          16,
+          8.8
         ]
       }
     },
@@ -1587,130 +1566,6 @@
           4,
           20,
           30
-        ]
-      }
-    },
-    {
-      "id": "Minor road",
-      "type": "line",
-      "metadata": {
-        "mapbox:group": "xplore-09-transport-roads-rails",
-        "xplore:layer-group": "09 openmaptiles / transportation / roads + rails",
-        "group": "09 openmaptiles / transportation / roads + rails"
-      },
-      "source": "openmaptiles",
-      "source-layer": "transportation",
-      "minzoom": 10,
-      "filter": [
-        "all",
-        [
-          "any",
-          ["!", ["has", "brunnel"]],
-          ["==", ["get", "brunnel"], "bridge"],
-          ["==", ["get", "brunnel"], "ford"]
-        ],
-        [
-          "any",
-          ["!", ["has", "class"]],
-          [
-            "in",
-            ["get", "class"],
-            [
-              "literal",
-              [
-                "tertiary",
-                "minor",
-                "bus_guideway",
-                "busway",
-                "raceway",
-                "raceway_construction",
-                "courtyard",
-                "storage_tank",
-                "service"
-              ]
-            ]
-          ]
-        ]
-      ],
-      "layout": {
-        "line-cap": "round",
-        "line-join": "round",
-        "visibility": "visible"
-      },
-      "paint": {
-        "line-color": [
-          "match",
-          ["get", "class"],
-          "motorway",
-          "hsl(0, 25%, 65%)",
-          "trunk",
-          "hsl(0, 20%, 70%)",
-          "primary",
-          "hsl(15, 20%, 80%)",
-          "secondary",
-          "hsl(30, 25%, 80%)",
-          "tertiary",
-          "hsl(50, 30%, 80%)",
-          "hsl(0, 0%, 85%)"
-        ],
-        "line-opacity": [
-          "case",
-          [
-            "any",
-            ["==", ["get", "access"], "private"],
-            [
-              "all",
-              ["==", ["get", "access"], "no"],
-              [
-                "in",
-                ["get", "class"],
-                ["literal", ["path", "track", "service"]]
-              ],
-              [
-                "!",
-                [
-                  "any",
-                  ["in", ["get", "foot"], ["literal", ["yes", "designated"]]],
-                  [
-                    "in",
-                    ["get", "bicycle"],
-                    ["literal", ["yes", "designated"]]
-                  ],
-                  ["in", ["get", "horse"], ["literal", ["yes", "designated"]]],
-                  ["in", ["get", "psv"], ["literal", ["yes", "designated"]]]
-                ]
-              ]
-            ]
-          ],
-          0.6,
-          1
-        ],
-        "line-width": [
-          "interpolate",
-          ["linear"],
-          ["zoom"],
-          11,
-          ["match", ["get", "class"], ["tertiary"], 0.5, 0],
-          16,
-          [
-            "match",
-            ["get", "class"],
-            ["tertiary"],
-            5,
-            ["service", "track"],
-            4,
-            4
-          ],
-          20,
-          [
-            "match",
-            ["get", "class"],
-            ["tertiary"],
-            18,
-            ["service", "track"],
-            16,
-            16
-          ]
         ]
       }
     },
@@ -2735,6 +2590,130 @@
           ],
           ["literal", [0.8, 4]],
           ["literal", [2, 4]]
+        ]
+      }
+    },
+    {
+      "id": "Minor road",
+      "type": "line",
+      "metadata": {
+        "mapbox:group": "xplore-09-transport-roads-rails",
+        "xplore:layer-group": "09 openmaptiles / transportation / roads + rails",
+        "group": "09 openmaptiles / transportation / roads + rails"
+      },
+      "source": "openmaptiles",
+      "source-layer": "transportation",
+      "minzoom": 10,
+      "filter": [
+        "all",
+        [
+          "any",
+          ["!", ["has", "brunnel"]],
+          ["==", ["get", "brunnel"], "bridge"],
+          ["==", ["get", "brunnel"], "ford"]
+        ],
+        [
+          "any",
+          ["!", ["has", "class"]],
+          [
+            "in",
+            ["get", "class"],
+            [
+              "literal",
+              [
+                "tertiary",
+                "minor",
+                "bus_guideway",
+                "busway",
+                "raceway",
+                "raceway_construction",
+                "courtyard",
+                "storage_tank",
+                "service"
+              ]
+            ]
+          ]
+        ]
+      ],
+      "layout": {
+        "line-cap": "round",
+        "line-join": "round",
+        "visibility": "visible"
+      },
+      "paint": {
+        "line-color": [
+          "match",
+          ["get", "class"],
+          "motorway",
+          "hsl(0, 25%, 65%)",
+          "trunk",
+          "hsl(0, 20%, 70%)",
+          "primary",
+          "hsl(15, 20%, 80%)",
+          "secondary",
+          "hsl(30, 25%, 80%)",
+          "tertiary",
+          "hsl(50, 30%, 80%)",
+          "hsl(0, 0%, 85%)"
+        ],
+        "line-opacity": [
+          "case",
+          [
+            "any",
+            ["==", ["get", "access"], "private"],
+            [
+              "all",
+              ["==", ["get", "access"], "no"],
+              [
+                "in",
+                ["get", "class"],
+                ["literal", ["path", "track", "service"]]
+              ],
+              [
+                "!",
+                [
+                  "any",
+                  ["in", ["get", "foot"], ["literal", ["yes", "designated"]]],
+                  [
+                    "in",
+                    ["get", "bicycle"],
+                    ["literal", ["yes", "designated"]]
+                  ],
+                  ["in", ["get", "horse"], ["literal", ["yes", "designated"]]],
+                  ["in", ["get", "psv"], ["literal", ["yes", "designated"]]]
+                ]
+              ]
+            ]
+          ],
+          0.6,
+          1
+        ],
+        "line-width": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          11,
+          ["match", ["get", "class"], ["tertiary"], 0.5, 0],
+          16,
+          [
+            "match",
+            ["get", "class"],
+            ["tertiary"],
+            5,
+            ["service", "track"],
+            4,
+            4
+          ],
+          20,
+          [
+            "match",
+            ["get", "class"],
+            ["tertiary"],
+            18,
+            ["service", "track"],
+            16,
+            16
+          ]
         ]
       }
     },
@@ -5278,122 +5257,6 @@
       }
     },
     {
-      "id": "Cablecar-copy",
-      "type": "line",
-      "metadata": {
-        "mapbox:group": "xplore-13-aerial-transport",
-        "xplore:layer-group": "13 openmaptiles / transportation / aerial transport",
-        "group": "13 openmaptiles / transportation / aerial transport"
-      },
-      "source": "openmaptiles",
-      "source-layer": "transportation",
-      "minzoom": 13,
-      "filter": ["==", "class", "aerialway"],
-      "layout": {
-        "line-cap": "round",
-        "line-join": "round",
-        "visibility": "none"
-      },
-      "paint": {
-        "line-blur": 0.45,
-        "line-color": "hsla(0, 0%, 100%, 0.9)",
-        "line-width": {"base": 1, "stops": [[13, 2.2], [16, 3], [19, 4.8]]}
-      }
-    },
-    {
-      "id": "bridge3D",
-      "type": "fill-extrusion",
-      "metadata": {
-        "mapbox:group": "xplore-10-building",
-        "xplore:layer-group": "10 openmaptiles / building",
-        "group": "10 openmaptiles / building"
-      },
-      "source": "openmaptiles",
-      "source-layer": "transportation",
-      "minzoom": 15,
-      "filter": ["all", ["==", "brunnel", "bridge"]],
-      "layout": {"visibility": "visible"},
-      "paint": {
-        "fill-extrusion-base": {
-          "property": "render_min_height",
-          "type": "interval",
-          "stops": [[{"zoom": 6, "value": 0}, 0], [{"zoom": 10, "value": 0}, 0]]
-        },
-        "fill-extrusion-color": [
-          "string",
-          ["get", "colour"],
-          "hsl(34, 18%, 65%)"
-        ],
-        "fill-extrusion-height": {
-          "type": "identity",
-          "property": "render_height"
-        },
-        "fill-extrusion-opacity": [
-          "interpolate",
-          ["linear"],
-          ["zoom"],
-          16,
-          0.4,
-          17,
-          0.8
-        ]
-      }
-    },
-    {
-      "id": "cablecar 3D-copy",
-      "type": "fill-extrusion",
-      "metadata": {
-        "mapbox:group": "xplore-10-building",
-        "xplore:layer-group": "10 openmaptiles / building",
-        "group": "10 openmaptiles / building"
-      },
-      "source": "openmaptiles",
-      "source-layer": "transportation",
-      "minzoom": 15,
-      "filter": ["all", ["!has", "hide_3d"], ["==", "class", "aerialway"]],
-      "layout": {"visibility": "none"},
-      "paint": {
-        "fill-extrusion-base": {
-          "type": "identity",
-          "property": "render_min_height"
-        },
-        "fill-extrusion-color": [
-          "string",
-          ["get", "colour"],
-          "hsl(34, 18%, 65%)"
-        ],
-        "fill-extrusion-height": {
-          "type": "identity",
-          "property": "render_height"
-        },
-        "fill-extrusion-opacity": [
-          "interpolate",
-          ["linear"],
-          ["zoom"],
-          16,
-          0.4,
-          17,
-          0.8
-        ]
-      }
-    },
-    {
-      "id": "cablecar3D",
-      "type": "fill-extrusion",
-      "source": "openmaptiles",
-      "source-layer": "transportation",
-      "filter": ["all", ["==", "class", "aerialway"]],
-      "layout": {"visibility": "none"},
-      "paint": {
-        "fill-extrusion-color": "rgba(185, 43, 43, 1)",
-        "fill-extrusion-translate-anchor": "map",
-        "fill-extrusion-height": 50,
-        "fill-extrusion-vertical-gradient": true,
-        "fill-extrusion-base": 45,
-        "fill-extrusion-translate": [20, 10]
-      }
-    },
-    {
       "id": "Cablecar",
       "type": "line",
       "metadata": {
@@ -5405,15 +5268,11 @@
       "source-layer": "transportation",
       "minzoom": 13,
       "filter": ["==", "class", "aerialway"],
-      "layout": {
-        "line-cap": "round",
-        "line-join": "round",
-        "visibility": "visible"
-      },
+      "layout": {"line-cap": "round", "visibility": "visible"},
       "paint": {
-        "line-blur": 0.45,
-        "line-color": "hsla(0, 0%, 100%, 0.9)",
-        "line-width": {"base": 1, "stops": [[13, 2.2], [16, 3], [19, 4.8]]}
+        "line-blur": 1.1,
+        "line-color": "hsl(0,0%,100%)",
+        "line-width": {"base": 1, "stops": [[13, 3.2], [19, 6.4]]}
       }
     },
     {
@@ -5434,9 +5293,9 @@
         "visibility": "visible"
       },
       "paint": {
-        "line-color": "hsla(0, 0%, 24%, 0.85)",
-        "line-width": {"base": 1, "stops": [[13, 0.7], [16, 1.15], [19, 1.75]]},
-        "line-dasharray": [3, 2]
+        "line-color": "hsl(0,0%,64%)",
+        "line-width": {"base": 1, "stops": [[13, 1], [19, 2]]},
+        "line-dasharray": [2, 2]
       }
     },
     {
