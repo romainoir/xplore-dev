@@ -107,32 +107,39 @@ export function createViewModeController(map, options = {}) {
     const shouldKeepAnalysisTerrain = !is3D && analysisTerrainRequired;
 
     isInternalChange = true;
-    if (is3D) {
-      map.setTerrain({ source: terrainSourceId, exaggeration: defaultExaggeration });
-      terrainEnabled = true;
-      currentExaggeration = defaultExaggeration;
-    } else if (shouldKeepAnalysisTerrain) {
-      map.setTerrain({ source: terrainSourceId, exaggeration: ANALYSIS_TERRAIN_EXAGGERATION });
-      terrainEnabled = true;
-      currentExaggeration = ANALYSIS_TERRAIN_EXAGGERATION;
-    } else {
-      map.setTerrain(null);
-      terrainEnabled = false;
-      currentExaggeration = 0;
+    try {
+      if (is3D) {
+        map.setTerrain({ source: terrainSourceId, exaggeration: defaultExaggeration });
+        terrainEnabled = true;
+        currentExaggeration = defaultExaggeration;
+      } else if (shouldKeepAnalysisTerrain) {
+        map.setTerrain({ source: terrainSourceId, exaggeration: ANALYSIS_TERRAIN_EXAGGERATION });
+        terrainEnabled = true;
+        currentExaggeration = ANALYSIS_TERRAIN_EXAGGERATION;
+      } else {
+        map.setTerrain(null);
+        terrainEnabled = false;
+        currentExaggeration = 0;
+      }
+    } finally {
+      isInternalChange = false;
     }
-    isInternalChange = false;
   }
 
-  // Listen for external terrain changes (e.g. from MapLibre TerrainControl)
+  // Style swaps can carry their own terrain block. Keep the app mode authoritative:
+  // only the 2D/3D toggle changes currentMode.
   map.on('terrain', (e) => {
     if (isInternalChange) return;
-
-    const targetMode = terrainOptionsAreRaised(e.terrain) ? VIEW_MODES.THREED : VIEW_MODES.TWOD;
-
-    if (targetMode !== currentMode) {
-      // Sync our internal mode and trigger the rest of the transition (camera, sky, etc)
-      applyMode(targetMode, { animate: true, syncTerrain: false });
+    if (currentMode === VIEW_MODES.TWOD && terrainOptionsAreRaised(e.terrain)) {
+      map.setPitch(0);
+      map.setBearing(0);
     }
+    if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+      window.requestAnimationFrame(() => applyTerrainForCurrentMode());
+    } else {
+      applyTerrainForCurrentMode();
+    }
+    updateToggleButton();
   });
 
   // Track last simulation date for glare effect updates

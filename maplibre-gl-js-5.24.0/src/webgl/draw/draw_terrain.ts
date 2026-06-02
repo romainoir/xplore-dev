@@ -779,6 +779,7 @@ function getNeutralDerivativeTexture(painter: Painter): WebGLTexture | null {
 
 function drawTerrain(painter: Painter, terrain: Terrain, tiles: Array<Tile>, renderOptions: RenderOptions) {
     const { isRenderingGlobe } = renderOptions;
+    const shouldDrawShaderContours = renderOptions.terrainDrawsContours !== false;
     const context = painter.context;
     const gl = context.gl;
     const tr = painter.transform;
@@ -900,6 +901,7 @@ function drawTerrain(painter: Painter, terrain: Terrain, tiles: Array<Tile>, ren
             gl.bindTexture(gl.TEXTURE_2D, (terrainData as any).texture);
         }
         const uniformValues = terrainUniformValues(eleDelta, fogMatrix, painter.style.sky, tr.pitch, isRenderingGlobe, tr.zoom, painter, tile);
+        if (!shouldDrawShaderContours) uniformValues['u_contour_enabled'] = 0.0;
         uniformValues['u_tile_zoom'] = tile.tileID.canonical.z;
         uniformValues['u_dem_derivative'] = 12;
         uniformValues['u_dem_derivative_available'] = derivativeTexture ? 1.0 : 0.0;

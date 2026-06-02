@@ -2,7 +2,7 @@
  * @file wikimedia-photos.js
  * @description Wikimedia Commons geotagged photos layer for XploreMap.
  * Displays small photo markers on the map that show location of Wikimedia photos.
- * Photos are fetched when zoom >= 12 and displayed as interactive markers.
+ * Photos are fetched when zoom >= 8 and displayed as interactive markers.
  */
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -12,8 +12,8 @@
 const WIKIMEDIA_SOURCE_ID = 'wikimedia-photos';
 
 /** Minimum zoom level to fetch photos and show thumbnails */
-const MIN_ZOOM_FOR_PHOTOS = 12;
-const MIN_ZOOM_FOR_THUMBNAILS = 12;
+const MIN_ZOOM_FOR_PHOTOS = 8;
+const MIN_ZOOM_FOR_THUMBNAILS = 8;
 
 /** All layer IDs for Wikimedia photos */
 const WIKIMEDIA_LAYERS = [
@@ -23,11 +23,21 @@ const WIKIMEDIA_LAYERS = [
 ];
 
 
-/** Maximum number of photos to fetch per request */
-const FETCH_LIMIT = 100;
+/** Default and maximum number of photos to fetch per request. */
+const DEFAULT_FETCH_LIMIT = 100;
+const MAX_FETCH_LIMIT = 500;
+
+/** Wikimedia rejects large geosearch bounding boxes; keep each request local. */
+const MAX_FETCH_SPAN_DEGREES = 0.18;
+const MAX_FETCH_AREAS_PER_REFRESH = 9;
+const MAX_FETCHED_AREAS = 80;
 
 /** Thumbnail sprite size (diameter in pixels) */
 const THUMBNAIL_SPRITE_SIZE = 56;
+
+/** Limit canvas thumbnail work so photo refreshes do not saturate the main thread/network. */
+const THUMBNAIL_LOAD_CONCURRENCY = 8;
+const MAX_THUMBNAILS_QUEUED_PER_UPDATE = 40;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // State
@@ -35,12 +45,17 @@ const THUMBNAIL_SPRITE_SIZE = 56;
 
 let map = null;
 let isInitialized = false;
+let wikimediaPhotosEnabled = false;
 let activePopup = null;
 let idleDebounceTimer = null;
 
 let thumbnailGeneration = 0;
 let lastSelectedIds = new Set();
 const loadedImages = new Set();
+const thumbnailQueueIds = new Set();
+const activeThumbnailIds = new Set();
+const thumbnailQueue = [];
+let activeThumbnailLoads = 0;
 
 // ── Spatial Cache State ──
 /** Accumulated photo features keyed by pageId — never refetched */
@@ -48,6 +63,8 @@ const cachedFeatures = new Map();
 
 /** The expanded LngLatBounds of the last successful fetch */
 let lastFetchBounds = null;
+let hasSyncedPhotoSource = false;
+const fetchedAreas = [];
 
 /** AbortController for the in-flight API request */
 let fetchAbortController = null;
@@ -56,12 +73,48 @@ let fetchAbortController = null;
 const FETCH_BOUNDS_PADDING = 0.5;
 
 /** Prune cache when it exceeds this many features */
-const MAX_CACHED_FEATURES = 500;
+const MAX_CACHED_FEATURES = 3000;
 
+const photoStats = {
+    fetchRequests: 0,
+    fetchAborts: 0,
+    fetchFailures: 0,
+    featuresFetched: 0,
+    cacheHits: 0,
+    cacheMisses: 0,
+    sourceUpdates: 0,
+    thumbnailQueued: 0,
+    thumbnailLoaded: 0,
+    thumbnailFailures: 0,
+    thumbnailQueuePeak: 0,
+    thumbnailActive: 0,
+};
 
+function publishPhotoStats() {
+    if (typeof window === 'undefined') return;
+    window.xploreWikimediaPhotoStats = {
+        ...photoStats,
+        cachedFeatures: cachedFeatures.size,
+        fetchedAreas: fetchedAreas.length,
+        saturatedAreas: fetchedAreas.filter(area => area.saturated).length,
+        loadedImages: loadedImages.size,
+        queuedImages: thumbnailQueue.length,
+        queuedImageIds: thumbnailQueueIds.size,
+        activeImageIds: activeThumbnailIds.size,
+    };
+}
 
+function debugLog(...args) {
+    if (typeof window !== 'undefined' && window.XploreDebug) {
+        console.log('[WikimediaPhotos]', ...args);
+    }
+}
 
-
+function clearThumbnailQueue() {
+    thumbnailQueue.length = 0;
+    thumbnailQueueIds.clear();
+    publishPhotoStats();
+}
 
 /**
  * Creates a circular thumbnail image with a border using Canvas.
@@ -122,6 +175,57 @@ function createCircularThumbnailImage(url) {
         img.src = objectUrl;
     }));
 }
+
+function queueThumbnailImage(mapInstance, item) {
+    if (!mapInstance || !item?.imageId || !item?.url) return;
+    if (loadedImages.has(item.imageId) || thumbnailQueueIds.has(item.imageId) || activeThumbnailIds.has(item.imageId)) return;
+    if (mapInstance.hasImage(item.imageId)) {
+        loadedImages.add(item.imageId);
+        return;
+    }
+
+    thumbnailQueueIds.add(item.imageId);
+    thumbnailQueue.push(item);
+    photoStats.thumbnailQueued++;
+    photoStats.thumbnailQueuePeak = Math.max(photoStats.thumbnailQueuePeak, thumbnailQueue.length);
+    publishPhotoStats();
+    drainThumbnailQueue(mapInstance);
+}
+
+function drainThumbnailQueue(mapInstance) {
+    if (!mapInstance || !isWikimediaPhotosVisible()) return;
+
+    while (activeThumbnailLoads < THUMBNAIL_LOAD_CONCURRENCY && thumbnailQueue.length > 0) {
+        const item = thumbnailQueue.shift();
+        thumbnailQueueIds.delete(item.imageId);
+        activeThumbnailIds.add(item.imageId);
+        activeThumbnailLoads++;
+        photoStats.thumbnailActive = activeThumbnailLoads;
+        publishPhotoStats();
+
+        createCircularThumbnailImage(item.url)
+            .then(imgData => {
+                if (!imgData || !mapInstance.getStyle() || !isWikimediaPhotosVisible()) return;
+                if (!mapInstance.hasImage(item.imageId)) {
+                    mapInstance.addImage(item.imageId, imgData);
+                }
+                loadedImages.add(item.imageId);
+                photoStats.thumbnailLoaded++;
+                scheduleThumbnailUpdate(mapInstance);
+            })
+            .catch(() => {
+                photoStats.thumbnailFailures++;
+            })
+            .finally(() => {
+                activeThumbnailIds.delete(item.imageId);
+                activeThumbnailLoads--;
+                photoStats.thumbnailActive = activeThumbnailLoads;
+                publishPhotoStats();
+                drainThumbnailQueue(mapInstance);
+            });
+    }
+}
+
 /** Max screen distance (px) from a POI for a photo to earn a thumbnail */
 const POI_PROXIMITY_PX = 150;
 const POI_PROXIMITY_SQ = POI_PROXIMITY_PX * POI_PROXIMITY_PX;
@@ -277,11 +381,12 @@ async function updateThumbnailImages(mapInstance) {
             const hasInMap = mapInstance.hasImage(imageId);
 
             if (hasInMap) {
+                loadedImages.add(imageId);
                 if (targetLarge.has(pid)) stillActiveLarge.add(pid);
                 else stillActiveSmall.add(pid);
             } else {
-                const hasInQueue = loadedImages.has(imageId);
-                if (!hasInQueue) {
+                const isQueued = thumbnailQueueIds.has(imageId) || activeThumbnailIds.has(imageId);
+                if (!isQueued) {
                     const cached = cachedFeatures.get(Number(pid)) || cachedFeatures.get(String(pid));
                     let url = cached?.properties?.thumbnailUrl;
                     if (!url) {
@@ -311,22 +416,12 @@ async function updateThumbnailImages(mapInstance) {
             try { mapInstance.moveLayer('wikimedia-thumbnails-small'); } catch (e) { }
         }
 
-        // 4. Load all queued images in parallel (browser limits concurrent connections per host)
+        // 4. Load a bounded set of thumbnails so map movement does not flood the network/main thread.
         if (queue.length > 0) {
-            queue.forEach(item => {
-                if (loadedImages.has(item.imageId)) return;
-                loadedImages.add(item.imageId);
-                createCircularThumbnailImage(item.url)
-                    .then(imgData => {
-                        if (imgData && mapInstance.getStyle()) {
-                            mapInstance.addImage(item.imageId, imgData);
-                            scheduleThumbnailUpdate(mapInstance);
-                        }
-                    })
-                    .catch(err => {
-                        loadedImages.delete(item.imageId);
-                    });
-            });
+            queue
+                .sort((a, b) => Number(targetLarge.has(b.pid)) - Number(targetLarge.has(a.pid)))
+                .slice(0, MAX_THUMBNAILS_QUEUED_PER_UPDATE)
+                .forEach(item => queueThumbnailImage(mapInstance, item));
         }
     } catch (e) {
         console.error('[WikimediaPhotos] simple update fail:', e);
@@ -346,6 +441,7 @@ function scheduleThumbnailUpdate(mapInstance) {
 
 function clearThumbnailImages() {
     loadedImages.clear();
+    clearThumbnailQueue();
     lastSelectedIds.clear();
 }
 // ─────────────────────────────────────────────────────────────────────────────
@@ -357,79 +453,82 @@ const photoMetadataCache = new Map();
 
 /**
  * Fetch geotagged photos from Wikimedia Commons within bounds.
- * Uses list=geosearch for coordinates, then imageinfo batches for
- * CORS-compatible CDN thumbnail URLs (upload.wikimedia.org).
- * The Special:FilePath redirect does NOT support CORS, so we must
- * use imageinfo to get direct CDN URLs for canvas sprite generation.
+ * Uses generator=geosearch with imageinfo so coordinates and CORS-compatible
+ * CDN thumbnails come back in one API request.
  */
-export async function fetchWikimediaPhotosInBounds(bounds, signal) {
+export async function fetchWikimediaPhotosInBounds(bounds, signal, limit = DEFAULT_FETCH_LIMIT) {
     const sw = bounds.getSouthWest();
     const ne = bounds.getNorthEast();
+    const requestLimit = Math.max(1, Math.min(MAX_FETCH_LIMIT, Math.round(Number(limit) || MAX_FETCH_LIMIT)));
 
-    const baseUrl = 'https://commons.wikimedia.org/w/api.php?action=query&format=json&origin=*';
-    const searchUrl = `${baseUrl}&list=geosearch&gsbbox=${ne.lat}|${sw.lng}|${sw.lat}|${ne.lng}&gsnamespace=6&gslimit=${FETCH_LIMIT}`;
+    const url = new URL('https://commons.wikimedia.org/w/api.php');
+    url.searchParams.set('action', 'query');
+    url.searchParams.set('format', 'json');
+    url.searchParams.set('origin', '*');
+    url.searchParams.set('generator', 'geosearch');
+    url.searchParams.set('ggsbbox', `${ne.lat}|${sw.lng}|${sw.lat}|${ne.lng}`);
+    url.searchParams.set('ggsnamespace', '6');
+    url.searchParams.set('ggslimit', String(requestLimit));
+    url.searchParams.set('prop', 'imageinfo|coordinates');
+    url.searchParams.set('iiprop', 'url');
+    url.searchParams.set('iiurlwidth', '200');
+
+    photoStats.fetchRequests++;
+    publishPhotoStats();
 
     try {
-        console.log(`[WikimediaPhotos] Fetching geosearch (${FETCH_LIMIT} limit)`);
-        const searchRes = await fetch(searchUrl, { signal });
-        const text = await searchRes.text();
-        let searchData;
-        try {
-            searchData = JSON.parse(text);
-        } catch (err) {
-            console.error('[WikimediaPhotos] JSON Parse error.');
+        debugLog(`Fetching Commons photos (${requestLimit} limit)`);
+        const response = await fetch(url.toString(), { signal });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+        const data = await response.json();
+        if (data.error) {
+            photoStats.fetchFailures++;
+            publishPhotoStats();
+            console.error('[WikimediaPhotos] API Error:', data.error);
             return { type: 'FeatureCollection', features: [] };
         }
 
-        if (searchData.error) {
-            console.error('[WikimediaPhotos] API Error:', searchData.error);
-            return { type: 'FeatureCollection', features: [] };
-        }
+        const pages = Object.values(data.query?.pages || {});
+        const features = pages.map(page => {
+            const info = page.imageinfo?.[0];
+            const coordinate = page.coordinates?.[0];
+            const lon = Number(coordinate?.lon);
+            const lat = Number(coordinate?.lat);
+            const pageId = Number(page.pageid);
 
-        if (!searchData.query || !searchData.query.geosearch) {
-            return { type: 'FeatureCollection', features: [] };
-        }
-
-        const photos = searchData.query.geosearch;
-        console.log(`[WikimediaPhotos] Found ${photos.length} photos, fetching CDN URLs...`);
-
-        // Batch imageinfo calls to get CORS-safe CDN thumbnail URLs (max 50 per call)
-        const batchSize = 50;
-        const thumbnailData = new Map();
-
-        const fetchBatch = async (batch) => {
-            const titles = batch.map(p => p.title).join('|');
-            const infoUrl = `${baseUrl}&prop=imageinfo&iiprop=url&iiurlwidth=200&titles=${encodeURIComponent(titles)}`;
-            const infoRes = await fetch(infoUrl, { signal });
-            const infoData = await infoRes.json();
-            if (infoData.query && infoData.query.pages) {
-                Object.values(infoData.query.pages).forEach(page => {
-                    if (page.imageinfo && page.imageinfo[0]) {
-                        thumbnailData.set(page.title, page.imageinfo[0].thumburl);
-                    }
-                });
+            if (!info?.thumburl || !Number.isFinite(lon) || !Number.isFinite(lat) || !Number.isFinite(pageId)) {
+                return null;
             }
-        };
 
-        const batches = [];
-        for (let i = 0; i < photos.length; i += batchSize) {
-            batches.push(fetchBatch(photos.slice(i, i + batchSize)));
-        }
-        await Promise.all(batches);
+            return {
+                type: 'Feature',
+                geometry: { type: 'Point', coordinates: [lon, lat] },
+                properties: {
+                    pageId,
+                    title: page.title,
+                    thumbnailUrl: info.thumburl,
+                    thumbWidth: info.thumbwidth,
+                    thumbHeight: info.thumbheight,
+                    originalUrl: info.url
+                }
+            };
+        }).filter(Boolean);
 
-        const features = photos.map(p => ({
-            type: 'Feature',
-            geometry: { type: 'Point', coordinates: [p.lon, p.lat] },
-            properties: {
-                pageId: p.pageid,
-                title: p.title,
-                thumbnailUrl: thumbnailData.get(p.title) || ''
-            }
-        }));
+        photoStats.featuresFetched += features.length;
+        publishPhotoStats();
+        const saturated = pages.length >= requestLimit;
+        debugLog(`Fetched ${features.length} Commons photos${saturated ? ' (saturated)' : ''}`);
 
-        return { type: 'FeatureCollection', features };
+        return { type: 'FeatureCollection', features, meta: { saturated } };
     } catch (e) {
-        if (e.name === 'AbortError') throw e;
+        if (e.name === 'AbortError') {
+            photoStats.fetchAborts++;
+            publishPhotoStats();
+            throw e;
+        }
+        photoStats.fetchFailures++;
+        publishPhotoStats();
         console.warn('[WikimediaPhotos] Fetch failed:', e);
         return { type: 'FeatureCollection', features: [] };
     }
@@ -480,18 +579,19 @@ export function getPhotoThumbnailUrl(fileName, width = 400) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function addWikimediaLayers(mapInstance) {
+    const visibility = wikimediaPhotosEnabled ? 'visible' : 'none';
     if (!mapInstance.getSource(WIKIMEDIA_SOURCE_ID)) {
         mapInstance.addSource(WIKIMEDIA_SOURCE_ID, {
             type: 'geojson',
             data: { type: 'FeatureCollection', features: [] },
             cluster: true,
             clusterMaxZoom: 18,
-            clusterRadius: 48,
+            clusterRadius: 36,
             clusterProperties: {
                 'coverId': ['min', ['get', 'pageId']]
             }
         });
-        console.log('[WikimediaPhotos] Source added:', WIKIMEDIA_SOURCE_ID);
+        debugLog('Source added:', WIKIMEDIA_SOURCE_ID);
     }
 
     // 1. Invisible base layer to anchor queryRenderedFeatures
@@ -501,6 +601,7 @@ function addWikimediaLayers(mapInstance) {
             type: 'circle',
             source: WIKIMEDIA_SOURCE_ID,
             minzoom: MIN_ZOOM_FOR_THUMBNAILS,
+            layout: { visibility },
             paint: {
                 // Large enough to be queried reliably, but fully transparent
                 'circle-radius': 10,
@@ -519,6 +620,7 @@ function addWikimediaLayers(mapInstance) {
             source: WIKIMEDIA_SOURCE_ID,
             minzoom: MIN_ZOOM_FOR_PHOTOS,
             layout: {
+                visibility,
                 'icon-image': [
                     'concat', 'thumb-',
                     ['to-string', ['case', ['has', 'point_count'], ['get', 'coverId'], ['get', 'pageId']]]
@@ -538,6 +640,7 @@ function addWikimediaLayers(mapInstance) {
             source: WIKIMEDIA_SOURCE_ID,
             minzoom: MIN_ZOOM_FOR_PHOTOS,
             layout: {
+                visibility,
                 'icon-image': [
                     'concat', 'thumb-',
                     ['to-string', ['case', ['has', 'point_count'], ['get', 'coverId'], ['get', 'pageId']]]
@@ -737,6 +840,7 @@ export function initializeWikimediaPhotos(mapInstance, options = {}) {
     if (isInitialized) return;
     map = mapInstance;
     const { enabled = true } = options;
+    wikimediaPhotosEnabled = Boolean(enabled);
 
     const initialize = () => {
         addWikimediaLayers(map);
@@ -758,17 +862,11 @@ export function initializeWikimediaPhotos(mapInstance, options = {}) {
 export function restoreWikimediaLayers() {
     if (!map || !isInitialized) return;
     // Layers were destroyed by setStyle — re-add them
-    if (map.getSource(WIKIMEDIA_SOURCE_ID)) return; // already restored
-    addWikimediaLayers(map);
-    setupWikimediaEventListeners(map);
-    // Re-apply current visibility state
-    const wasEnabled = isWikimediaPhotosVisible !== undefined;
-    // Check the last known state by trying the base layer
-    const layer = map.getLayer('wikimedia-photos-base');
-    if (layer) {
-        // Refresh photos if zoom is sufficient
-        if (map.getZoom() >= MIN_ZOOM_FOR_PHOTOS) refreshPhotos();
+    if (!map.getSource(WIKIMEDIA_SOURCE_ID)) {
+        addWikimediaLayers(map);
+        setupWikimediaEventListeners(map);
     }
+    setWikimediaPhotosEnabled(wikimediaPhotosEnabled);
 }
 
 // ── Spatial cache helpers ──
@@ -794,11 +892,8 @@ function expandBounds(bounds, padding) {
     const e = bounds.getEast(), w = bounds.getWest();
     const latPad = (n - s) * padding;
     const lngPad = (e - w) * padding;
-    // Wikimedia geosearch limits bounding box to ~10km per side (~0.09° at mid-latitudes)
-    // Clamp total span to avoid API "area too large" errors
-    const MAX_SPAN = 0.18; // ~20km total span — stays within Wikimedia limits
-    const totalLat = Math.min((n - s) + 2 * latPad, MAX_SPAN);
-    const totalLng = Math.min((e - w) + 2 * lngPad, MAX_SPAN);
+    const totalLat = Math.min((n - s) + 2 * latPad, MAX_FETCH_SPAN_DEGREES);
+    const totalLng = Math.min((e - w) + 2 * lngPad, MAX_FETCH_SPAN_DEGREES);
     const centerLat = (n + s) / 2;
     const centerLng = (e + w) / 2;
     return new maplibregl.LngLatBounds(
@@ -807,12 +902,96 @@ function expandBounds(bounds, padding) {
     );
 }
 
+function getBoundsSpan(bounds) {
+    return {
+        lat: Math.abs(bounds.getNorth() - bounds.getSouth()),
+        lng: Math.abs(bounds.getEast() - bounds.getWest())
+    };
+}
+
+function getFetchSpanForZoom(zoom) {
+    if (zoom < 11.5) return MAX_FETCH_SPAN_DEGREES;
+    return Math.max(0.025, Math.min(MAX_FETCH_SPAN_DEGREES, 0.09 * Math.pow(2, 12 - zoom)));
+}
+
+function getFetchLimitForZoom(zoom) {
+    if (zoom < 10) return 100;
+    if (zoom < 12) return 250;
+    return MAX_FETCH_LIMIT;
+}
+
+function createFetchBoundsAround(center, span = MAX_FETCH_SPAN_DEGREES) {
+    const lat = Math.max(-85, Math.min(85, center.lat));
+    const lng = center.lng;
+    const half = span / 2;
+    return new maplibregl.LngLatBounds(
+        [lng - half, lat - half],
+        [lng + half, lat + half]
+    );
+}
+
+function getPhotoRequestBounds(mapInstance) {
+    const zoom = mapInstance.getZoom();
+    const container = mapInstance.getContainer();
+    const width = container.clientWidth;
+    const height = container.clientHeight;
+    const span = getFetchSpanForZoom(zoom);
+    const samplePoints = zoom < 9.5
+        ? [
+            [0.5, 0.5],
+            [0.28, 0.35], [0.72, 0.35],
+            [0.28, 0.65], [0.72, 0.65],
+            [0.5, 0.25], [0.5, 0.75]
+        ]
+        : [
+            [0.5, 0.5],
+            [0.25, 0.25], [0.5, 0.25], [0.75, 0.25],
+            [0.25, 0.5], [0.75, 0.5],
+            [0.25, 0.75], [0.5, 0.75], [0.75, 0.75]
+        ];
+
+    const boundsList = [];
+    for (const [xRatio, yRatio] of samplePoints) {
+        const center = mapInstance.unproject([width * xRatio, height * yRatio]);
+        if (!Number.isFinite(center.lng) || !Number.isFinite(center.lat)) continue;
+        const bounds = createFetchBoundsAround(center, span);
+        const duplicate = boundsList.some(existing => existing.contains(bounds.getCenter()));
+        if (!duplicate) boundsList.push(bounds);
+    }
+    return boundsList;
+}
+
 /** Returns true if the viewport is entirely within the last fetched bounds */
 function isViewportCovered(viewportBounds) {
-    if (!lastFetchBounds) return false;
+    if (fetchedAreas.length === 0) return false;
     const ne = viewportBounds.getNorthEast();
     const sw = viewportBounds.getSouthWest();
-    return lastFetchBounds.contains(ne) && lastFetchBounds.contains(sw);
+    const requestedSpan = getBoundsSpan(viewportBounds);
+    const requestedMaxSpan = Math.max(requestedSpan.lat, requestedSpan.lng);
+
+    return fetchedAreas.some(area => {
+        if (!area.bounds.contains(ne) || !area.bounds.contains(sw)) return false;
+        if (!area.saturated) return true;
+
+        // If Wikimedia returned the request limit, a tighter zoom-level request may
+        // reveal more photos in the same area. Do not let broad saturated fetches
+        // block narrower follow-up fetches.
+        const fetchedMaxSpan = Math.max(area.span.lat, area.span.lng);
+        return requestedMaxSpan >= fetchedMaxSpan * 0.75;
+    });
+}
+
+function rememberFetchedArea(bounds, collection) {
+    const span = getBoundsSpan(bounds);
+    fetchedAreas.push({
+        bounds,
+        span,
+        saturated: Boolean(collection?.meta?.saturated)
+    });
+    lastFetchBounds = bounds;
+    if (fetchedAreas.length > MAX_FETCHED_AREAS) {
+        fetchedAreas.splice(0, fetchedAreas.length - MAX_FETCHED_AREAS);
+    }
 }
 
 /** Remove features far from the current viewport to keep memory bounded */
@@ -830,9 +1009,11 @@ function pruneDistantFeatures(viewportBounds) {
 
 /** Reset the spatial cache (e.g. when disabling photos or destroying) */
 function resetSpatialCache() {
-    console.log('[WikimediaPhotos] resetSpatialCache called. Clearing all caches...');
+    debugLog('resetSpatialCache called. Clearing all caches...');
     cachedFeatures.clear();
     lastFetchBounds = null;
+    hasSyncedPhotoSource = false;
+    fetchedAreas.length = 0;
     // Clear loaded sprite images from MapLibre
     if (map) {
         for (const imageId of loadedImages) {
@@ -840,6 +1021,7 @@ function resetSpatialCache() {
         }
     }
     loadedImages.clear();
+    clearThumbnailQueue();
     lastSelectedIds.clear();
     if (fetchAbortController) {
         fetchAbortController.abort();
@@ -851,27 +1033,53 @@ async function refreshPhotos() {
     if (!map || map.getZoom() < MIN_ZOOM_FOR_PHOTOS) return;
     if (!isWikimediaPhotosVisible()) return;
 
-    // Use center-based bounds instead of map.getBounds() to avoid huge 3D tilt areas
-    const viewportBounds = getCenterBounds(map);
+    // Use small sampled bounds instead of map.getBounds() so low zoom can show
+    // more of the viewport without sending Wikimedia an oversized bbox.
+    const requestBoundsList = getPhotoRequestBounds(map);
+    const fetchLimit = getFetchLimitForZoom(map.getZoom());
+    const missingBounds = requestBoundsList
+        .filter(bounds => !isViewportCovered(bounds))
+        .slice(0, MAX_FETCH_AREAS_PER_REFRESH);
 
-    // Skip fetch if the current center area is fully within the last fetched area
-    if (isViewportCovered(viewportBounds)) {
+    if (missingBounds.length === 0) {
+        photoStats.cacheHits++;
+        publishPhotoStats();
         requestAnimationFrame(() => updateThumbnailImages(map));
         return;
     }
 
+    photoStats.cacheMisses++;
+    publishPhotoStats();
+
     // Cancel any in-flight request
     if (fetchAbortController) fetchAbortController.abort();
-    fetchAbortController = new AbortController();
-
-    const expandedBounds = expandBounds(viewportBounds, FETCH_BOUNDS_PADDING);
+    const requestController = new AbortController();
+    fetchAbortController = requestController;
 
     try {
-        const data = await fetchWikimediaPhotosInBounds(expandedBounds, fetchAbortController.signal);
+        const settled = await Promise.allSettled(
+            missingBounds.map(bounds => fetchWikimediaPhotosInBounds(bounds, requestController.signal, fetchLimit))
+        );
+        if (fetchAbortController !== requestController) return;
+
+        const aborted = settled.find(result => result.status === 'rejected' && result.reason?.name === 'AbortError');
+        if (aborted) throw aborted.reason;
+
+        const featureCollections = settled
+            .map((result, index) => {
+                if (result.status !== 'fulfilled') {
+                    console.warn('[WikimediaPhotos] Fetch failed:', result.reason);
+                    return null;
+                }
+                rememberFetchedArea(missingBounds[index], result.value);
+                return result.value;
+            })
+            .filter(Boolean);
 
         // Merge new features into the persistent cache
         let newCount = 0;
-        data.features.forEach(f => {
+        const fetchedFeatures = featureCollections.flatMap(collection => collection.features);
+        fetchedFeatures.forEach(f => {
             const key = f.properties.pageId;
             if (!cachedFeatures.has(key)) {
                 cachedFeatures.set(key, f);
@@ -881,22 +1089,25 @@ async function refreshPhotos() {
 
         // Prune if the cache is too large
         if (cachedFeatures.size > MAX_CACHED_FEATURES) {
-            pruneDistantFeatures(viewportBounds);
+            pruneDistantFeatures(getCenterBounds(map));
         }
 
         // Only update the source if new features were actually added
-        if (newCount > 0 || !lastFetchBounds) {
+        if (newCount > 0 || !hasSyncedPhotoSource) {
             const allFeatures = {
                 type: 'FeatureCollection',
                 features: Array.from(cachedFeatures.values())
             };
             const source = map.getSource(WIKIMEDIA_SOURCE_ID);
-            if (source) source.setData(allFeatures);
+            if (source) {
+                source.setData(allFeatures);
+                hasSyncedPhotoSource = true;
+                photoStats.sourceUpdates++;
+                publishPhotoStats();
+            }
         }
 
-        lastFetchBounds = expandedBounds;
-
-        console.log(`[WikimediaPhotos] refreshPhotos: Fetched ${data.features.length} features, cache now ${cachedFeatures.size}. New features: ${newCount}.`);
+        debugLog(`refreshPhotos: Fetched ${fetchedFeatures.length} features across ${missingBounds.length} areas, cache now ${cachedFeatures.size}. New features: ${newCount}.`);
 
         // Short delay for MapLibre to process the new source data, then update thumbnails
         setTimeout(() => {
@@ -905,6 +1116,10 @@ async function refreshPhotos() {
     } catch (e) {
         if (e.name === 'AbortError') return; // Pan cancelled this request, no problem
         console.warn('[WikimediaPhotos] Fetch failed:', e);
+    } finally {
+        if (fetchAbortController === requestController) {
+            fetchAbortController = null;
+        }
     }
 }
 
@@ -919,6 +1134,7 @@ function onMapMoveStart() {
         fetchAbortController.abort();
         fetchAbortController = null;
     }
+    clearThumbnailQueue();
 }
 
 /** Only fetch when the map finishes moving completely */
@@ -933,17 +1149,23 @@ function onMapMoveEnd() {
 }
 
 export function setWikimediaPhotosEnabled(enabled) {
+    wikimediaPhotosEnabled = Boolean(enabled);
     if (!map || !isInitialized) return;
-    const visibility = enabled ? 'visible' : 'none';
+    const visibility = wikimediaPhotosEnabled ? 'visible' : 'none';
     WIKIMEDIA_LAYERS.forEach(id => {
         if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', visibility);
     });
-    if (enabled && map.getZoom() >= MIN_ZOOM_FOR_PHOTOS) refreshPhotos();
-    else if (!enabled) {
+    if (wikimediaPhotosEnabled && map.getZoom() >= MIN_ZOOM_FOR_PHOTOS) refreshPhotos();
+    else if (!wikimediaPhotosEnabled) {
+        if (activePopup) {
+            activePopup.remove();
+            activePopup = null;
+        }
         // Clear data and spatial cache
         resetSpatialCache();
         const source = map.getSource(WIKIMEDIA_SOURCE_ID);
         if (source) source.setData({ type: 'FeatureCollection', features: [] });
+        hasSyncedPhotoSource = false;
         clearThumbnailImages();
     }
 }

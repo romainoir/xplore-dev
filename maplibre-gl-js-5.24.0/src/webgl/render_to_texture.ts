@@ -49,6 +49,8 @@ export class RenderToTexture {
      * not rendered to texture sit between layers which should rendered to texture. e.g. hillshading or symbols
      */
     _stacks: string[][];
+    _stackDrawsContours: boolean[];
+    _contourAboveLayerIds: Set<string>;
     /**
      * remember the previous processed layer to check if a new stack is needed
      */
@@ -81,6 +83,11 @@ export class RenderToTexture {
 
     prepareForRender(style: Style, zoom: number) {
         this._stacks = [];
+        this._stackDrawsContours = [];
+        const contourAboveLayerIds = typeof window !== 'undefined' ? (window as any)._xploreContourAboveLayerIds : null;
+        this._contourAboveLayerIds = new Set(Array.isArray(contourAboveLayerIds)
+            ? contourAboveLayerIds.filter((id: unknown) => typeof id === 'string') as string[]
+            : []);
         this._prevType = null;
         this._rttTiles = [];
         this._renderableTiles = this.terrain.tileManager.getRenderableTiles();
@@ -148,8 +155,16 @@ export class RenderToTexture {
 
         // remember background, fill, line & raster layer to render into a stack
         if (LAYERS_TO_TEXTURES[type]) {
+            const currentStack = this._stacks[this._stacks.length - 1];
+            const layerDrawsAboveContours = this._contourAboveLayerIds.has(layer.id);
+            const shouldSplitBeforeLayer = layerDrawsAboveContours &&
+                !!currentStack?.length &&
+                this._stackDrawsContours[this._stackDrawsContours.length - 1] !== false;
             // create a new stack if previous layer was not rendered to texture (f.e. symbols)
-            if (!this._prevType || !LAYERS_TO_TEXTURES[this._prevType]) this._stacks.push([]);
+            if (!this._prevType || !LAYERS_TO_TEXTURES[this._prevType] || shouldSplitBeforeLayer) {
+                this._stacks.push([]);
+                this._stackDrawsContours.push(!layerDrawsAboveContours);
+            }
             // push current render-to-texture layer to render-stack
             this._prevType = type;
             this._stacks[this._stacks.length - 1].push(layer.id);
@@ -161,10 +176,15 @@ export class RenderToTexture {
         if (LAYERS_TO_TEXTURES[this._prevType] || (LAYERS_TO_TEXTURES[type] && isLastLayer)) {
             this._prevType = type;
             const stack = this._stacks.length - 1, layers = this._stacks[stack] || [];
+            const terrainOptions: RenderOptions = {
+                ...options,
+                terrainRenderToTextureStack: stack,
+                terrainDrawsContours: this._stackDrawsContours[stack] !== false,
+            };
             for (const tile of this._renderableTiles) {
                 // if render pool is full draw current tiles to screen and free pool
                 if (this.pool.isFull()) {
-                    drawTerrain(this.painter, this.terrain, this._rttTiles, options);
+                    drawTerrain(this.painter, this.terrain, this._rttTiles, terrainOptions);
                     this._rttTiles = [];
                     this.pool.freeAllObjects();
                 }
@@ -195,7 +215,7 @@ export class RenderToTexture {
                     if (layer.source) tile.rttFingerprint[layer.source] = this._rttFingerprints[layer.source][tile.tileID.key];
                 }
             }
-            drawTerrain(this.painter, this.terrain, this._rttTiles, options);
+            drawTerrain(this.painter, this.terrain, this._rttTiles, terrainOptions);
             this._rttTiles = [];
             this.pool.freeAllObjects();
 

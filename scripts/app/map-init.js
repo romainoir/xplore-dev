@@ -9,6 +9,8 @@ import { initializeGeocoder } from '../map/geocoder-control.js';
 
 const XPLORE_OUTDOOR_STYLE_URL = './xplore_outdoor_hybrid-2.json?v=20260525-relief-wip';
 const CARTES_SPRITE_URL = new URL('../../data/cartes-sprite/sprite', import.meta.url).href;
+const DPR_STORAGE_KEY = 'xplore_dpr_enabled';
+const OPTIONAL_STYLE_LAYER_IDS = new Set(['Peak labels', 'Mountain peak labels', 'Volcano peak labels']);
 
 // ─── UI icon images data-icon-id → src ───
 const UI_ICON_SOURCES = Object.freeze({
@@ -91,6 +93,14 @@ function updatePeakLabelLayer(map, layerId) {
 export function updatePeakLabels(map) {
     updatePeakLabelLayer(map, 'Mountain peak labels');
     updatePeakLabelLayer(map, 'Volcano peak labels');
+}
+
+function getConfiguredPixelRatio() {
+    try {
+        return localStorage.getItem(DPR_STORAGE_KEY) === 'false' ? 1 : window.devicePixelRatio;
+    } catch (_) {
+        return window.devicePixelRatio;
+    }
 }
 
 // ─── Base style layer bucketing ───
@@ -195,13 +205,20 @@ export async function createMap() {
     versaStyle.sprite = CARTES_SPRITE_URL;
     versaStyle.sky = { 'sky-color': '#bcd0e6', 'horizon-color': '#e6effa', 'sky-horizon-blend': 0.5 };
     versaStyle.light = { 'anchor': 'map', 'position': [1.5, 90, 80] };
+    delete versaStyle.terrain;
+    if (Array.isArray(versaStyle.layers)) {
+        versaStyle.layers.forEach((layer) => {
+            if (!OPTIONAL_STYLE_LAYER_IDS.has(layer?.id)) return;
+            layer.layout = { ...(layer.layout || {}), visibility: 'none' };
+        });
+    }
 
     // Parse base style layers
     parseAndCacheBaseStyleLayers(versaStyle);
 
     const map = new maplibregl.Map({
         container: 'map',
-        pixelRatio: window.devicePixelRatio,
+        pixelRatio: getConfiguredPixelRatio(),
         hash: true,
         center: [7.6586, 45.9763],
         zoom: 11.7,

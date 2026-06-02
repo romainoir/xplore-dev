@@ -10,7 +10,7 @@
 
   <!-- MapLibre GL JS - Local fork (terrain analysis support) -->
   <link href="./maplibre-gl-js-5.24.0/src/css/maplibre-gl.css" rel="stylesheet" />
-  <script src="./scripts/map/maplibre-gl-dev.js?v=20260521-daylight-normal-z-relief"></script>
+  <script src="./scripts/map/maplibre-gl-dev.js?v=20260602-contours-below-overlays"></script>
 
   <!-- PMTiles v4 -->
   <script src="https://unpkg.com/pmtiles@4.3.0/dist/pmtiles.js"></script>
@@ -62,8 +62,8 @@
   <div id="map"></div>
 
   <!-- 2D / 3D toggle — repositioned below compass by JS -->
-  <button id="toggle3D" class="btn btn--icon-only map-action-btn toggle-3d" type="button" aria-pressed="true"
-    aria-label="Switch to 2D" title="Switch to 2D">
+  <button id="toggle3D" class="btn btn--icon-only map-action-btn toggle-3d" type="button" aria-pressed="false"
+    aria-label="Switch to 3D" title="Switch to 3D">
     <span class="toggle-3d__label">3D</span>
     <span class="sr-only">Toggle 2D/3D view</span>
   </button>
@@ -369,16 +369,16 @@
               <label for="lodMaxZoomSlider">Max Zoom Levels</label>
               <div class="settings-panel__slider-group">
                 <input type="range" id="lodMaxZoomSlider" class="settings-panel__slider" min="1" max="11" step="1"
-                  value="4" />
-                <span id="lodMaxZoomLabel" class="settings-panel__value">4</span>
+                  value="6" />
+                <span id="lodMaxZoomLabel" class="settings-panel__value">6</span>
               </div>
             </div>
             <div class="settings-panel__row">
               <label for="lodTileRatioSlider">Tile Count Ratio</label>
               <div class="settings-panel__slider-group">
                 <input type="range" id="lodTileRatioSlider" class="settings-panel__slider" min="1" max="10" step="0.5"
-                  value="1" />
-                <span id="lodTileRatioLabel" class="settings-panel__value">1.0</span>
+                  value="5" />
+                <span id="lodTileRatioLabel" class="settings-panel__value">5.0</span>
               </div>
             </div>
           </div>

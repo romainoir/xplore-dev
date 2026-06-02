@@ -13,8 +13,20 @@ const CONTOUR_SRC = 'contour-plugin-src';
 const LINE_MINOR = 'contour-line-minor';
 const LINE_MAJOR = 'contour-line-major';
 const LABEL_ID = 'contour-label';
+const CONTOUR_LAYER_IDS = Object.freeze([LINE_MINOR, LINE_MAJOR, LABEL_ID]);
+const PHOTO_LAYER_IDS = Object.freeze(['wikimedia-photos-base', 'wikimedia-thumbnails-small', 'wikimedia-thumbnails-large']);
+const ROUTE_LAYER_IDS = Object.freeze([
+    'route-hover-point', 'waypoint-hover-drag', 'waypoints', 'segment-markers',
+    'waypoints-hit-area', 'distance-markers', 'route-segment-hover', 'route-line', 'route-line-casing'
+]);
+const LABEL_NEAR_FADE_METERS = 500;
+const LABEL_FAR_FADE_METERS = 3000;
+const LABEL_FADE_SYNC_INTERVAL_MS = 120;
 
 let pluginLoaded = false;
+let labelDistancePaintSupported = true;
+const terrainListenerMaps = new WeakSet();
+const syncTimerMaps = new WeakMap();
 
 /** Darken an rgba color string by mixing toward black (matches shader's mix(color, black, f)) */
 function darkenColor(rgba, fraction) {
@@ -39,19 +51,143 @@ function loadPlugin() {
     });
 }
 
-/** Toggle line layers based on terrain state */
+function contoursEnabled() {
+    const state = window.imageryState?.get?.('contours');
+    if (!state) return true;
+    return state.enabled !== false && (state.opacity ?? 1) > 0;
+}
+
+function contourLabelBaseFilter() {
+    return ['>', ['get', 'level'], 0];
+}
+
+function centerPoint(map) {
+    const center = map.getCenter();
+    return {
+        type: 'Point',
+        coordinates: [center.lng, center.lat],
+    };
+}
+
+function labelZoomOpacity() {
+    return [
+        'interpolate', ['linear'], ['zoom'],
+        11, 0,
+        13, 1,
+        16, 1,
+    ];
+}
+
+function labelDistanceFade(point) {
+    return [
+        'interpolate', ['linear'], ['distance', point],
+        LABEL_NEAR_FADE_METERS, 1,
+        LABEL_FAR_FADE_METERS, 0,
+    ];
+}
+
+function applyLabelFade(map, hasRaisedTerrain) {
+    if (!map.getLayer(LABEL_ID)) return;
+
+    if (!hasRaisedTerrain) {
+        map.setFilter(LABEL_ID, contourLabelBaseFilter());
+        map.setPaintProperty(LABEL_ID, 'text-opacity', labelZoomOpacity());
+        map.setPaintProperty(LABEL_ID, 'text-halo-color', 'rgba(255, 255, 255, 0)');
+        map.setPaintProperty(LABEL_ID, 'text-halo-width', 0);
+        map.setPaintProperty(LABEL_ID, 'text-halo-blur', 0);
+        return;
+    }
+
+    const point = centerPoint(map);
+    try {
+        map.setPaintProperty(LABEL_ID, 'text-halo-color', 'rgba(255, 255, 255, 0)');
+        map.setPaintProperty(LABEL_ID, 'text-halo-width', 0);
+        map.setPaintProperty(LABEL_ID, 'text-halo-blur', 0);
+        map.setFilter(LABEL_ID, [
+            'all',
+            contourLabelBaseFilter(),
+            ['<=', ['distance', point], LABEL_FAR_FADE_METERS],
+        ]);
+        map.setPaintProperty(LABEL_ID, 'text-opacity', labelDistancePaintSupported
+            ? [
+                '*',
+                labelZoomOpacity(),
+                labelDistanceFade(point),
+            ]
+            : labelZoomOpacity());
+    } catch (err) {
+        labelDistancePaintSupported = false;
+        console.warn('[Contours] Distance-based label opacity unavailable, using distance filter only:', err);
+        map.setPaintProperty(LABEL_ID, 'text-opacity', labelZoomOpacity());
+    }
+}
+
+function bringContoursForward(map) {
+    const layers = map.getStyle()?.layers || [];
+    const contourIds = new Set(CONTOUR_LAYER_IDS);
+    const configuredAboveIds = Array.isArray(window._xploreContourAboveLayerIds)
+        ? window._xploreContourAboveLayerIds
+        : [];
+    const fallbackAboveIds = [
+        ...ROUTE_LAYER_IDS,
+        ...layers.filter(layer => layer.type === 'symbol' && !contourIds.has(layer.id)).map(layer => layer.id),
+        ...PHOTO_LAYER_IDS,
+    ];
+    const aboveIds = [...configuredAboveIds, ...fallbackAboveIds]
+        .filter((id, index, ids) => typeof id === 'string' && ids.indexOf(id) === index && map.getLayer(id) && !contourIds.has(id));
+    const layerOrder = layers.map(layer => layer.id);
+    const anchor = aboveIds
+        .map(id => ({ id, index: layerOrder.indexOf(id) }))
+        .filter(entry => entry.index >= 0)
+        .sort((a, b) => a.index - b.index)[0]?.id || null;
+    try {
+        CONTOUR_LAYER_IDS.forEach((id) => {
+            if (!map.getLayer(id)) return;
+            if (anchor && anchor !== id) map.moveLayer(id, anchor);
+            else map.moveLayer(id);
+        });
+    } catch (_) { }
+}
+
+/** Toggle plugin lines/labels based on app contour state and terrain mode. */
 function syncVisibility(map) {
     const mode = window.viewModeController?.getMode?.();
     const hasRaisedTerrain = mode === '3d';
-    const lineVis = hasRaisedTerrain ? 'none' : 'visible';
-    // Lines: hidden in 3D (shader draws them), visible in 2D
+    const enabled = contoursEnabled();
+    const lineVis = enabled && !hasRaisedTerrain ? 'visible' : 'none';
+    const labelVis = enabled ? 'visible' : 'none';
+    // Lines: visible only in flat 2D. In 3D, the terrain shader draws the lines.
     [LINE_MINOR, LINE_MAJOR].forEach(id => {
         if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', lineVis);
     });
-    // Labels: always visible
+    // Labels: vector text from maplibre-contour. Keep them as labels-only over the shader.
     if (map.getLayer(LABEL_ID)) {
-        map.setLayoutProperty(LABEL_ID, 'visibility', 'visible');
+        map.setLayoutProperty(LABEL_ID, 'visibility', labelVis);
+        applyLabelFade(map, hasRaisedTerrain);
     }
+    bringContoursForward(map);
+}
+
+function scheduleSyncVisibility(map) {
+    if (syncTimerMaps.has(map)) return;
+    const timer = window.setTimeout(() => {
+        syncTimerMaps.delete(map);
+        syncVisibility(map);
+    }, LABEL_FADE_SYNC_INTERVAL_MS);
+    syncTimerMaps.set(map, timer);
+}
+
+function bindSyncListeners(map) {
+    if (terrainListenerMaps.has(map)) return;
+    map.on('terrain', () => syncVisibility(map));
+    map.on('move', () => {
+        if (window.viewModeController?.getMode?.() === '3d') scheduleSyncVisibility(map);
+    });
+    window.addEventListener('xplore-contours-state-change', () => {
+        syncVisibility(map);
+        map.triggerRepaint?.();
+    });
+    terrainListenerMaps.add(map);
 }
 
 /**
@@ -107,10 +243,10 @@ export async function initContours(map) {
 
     // Read contour color from shared config (same source as the 3D shader)
     const cfg = window.contourConfig || {};
-    const contourColor = cfg.color || 'rgba(139, 90, 43, 0.2)';
+    const contourColor = cfg.color || 'rgba(72, 46, 24, 0.5)';
 
-    // Parse the rgba to derive a darker major-line color (shader does mix(color, black, 0.3))
-    const majorColor = darkenColor(contourColor, 0.3);
+    // Parse the rgba to derive a darker major-line color (shader does mix(color, black, 0.35)).
+    const majorColor = darkenColor(contourColor, 0.35);
 
     // ── Minor contour lines (every 10m) — visible in 2D only ──
     if (!map.getLayer(LINE_MINOR)) {
@@ -144,7 +280,7 @@ export async function initContours(map) {
             filter: ['>', ['get', 'level'], 0],
             paint: {
                 'line-color': majorColor,
-                'line-width': 1.5,
+                'line-width': 1.8,
                 'line-opacity': [
                     'interpolate', ['linear'], ['zoom'],
                     11, 0,
@@ -156,7 +292,7 @@ export async function initContours(map) {
         });
     }
 
-    // ── Labels on major contours — always visible (both 2D & 3D) ──
+    // ── Labels on major contours — visible in both 2D and 3D when contours are enabled ──
     if (!map.getLayer(LABEL_ID)) {
         map.addLayer({
             id: LABEL_ID,
@@ -172,19 +308,21 @@ export async function initContours(map) {
                 'text-anchor': 'center',
                 'symbol-spacing': 250,
                 'text-max-angle': 30,
-                'text-allow-overlap': false,
-                'text-ignore-placement': false,
-                //'text-rotation-alignment': 'auto',
-                //'text-pitch-alignment': 'viewport',
+                'text-allow-overlap': true,
+                'text-ignore-placement': true,
+                'text-rotation-alignment': 'viewport',
+                'text-pitch-alignment': 'viewport',
+                'symbol-z-order': 'viewport-y',
             },
             paint: {
                 'text-color': 'rgba(60, 40, 20, 0.85)',
-                'text-halo-color': 'rgba(255, 255, 255, 0.95)',
-                'text-halo-width': 2.5,
+                'text-halo-color': 'rgba(255, 255, 255, 0)',
+                'text-halo-width': 0,
+                'text-halo-blur': 0,
                 'text-opacity': [
                     'interpolate', ['linear'], ['zoom'],
                     11, 0,
-                    13, 0.85,
+                    13, 1,
                     16, 1,
                 ],
             },
@@ -192,9 +330,10 @@ export async function initContours(map) {
         });
     }
 
-    // Initial sync + listen for 2D ↔ 3D switches
+    // Initial sync + listen for 2D ↔ 3D switches. Register only once per map;
+    // style swaps re-run initContours but should not stack terrain listeners.
     syncVisibility(map);
-    map.on('terrain', () => syncVisibility(map));
+    bindSyncListeners(map);
 
     console.log('[Contours] Initialized (plugin, minor=10m, major=100m)');
 }

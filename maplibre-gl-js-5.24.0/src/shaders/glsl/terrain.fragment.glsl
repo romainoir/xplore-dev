@@ -515,6 +515,8 @@ void main() {
     vec4 surface_color = texture(u_texture, vec2(v_texture_pos.x, 1.0 - v_texture_pos.y));
     surface_color = mix(surface_color, vec4(1.0), clamp(u_shadow_white_base, 0.0, 1.0));
     fragColor = surface_color;
+    float contour_alpha = 0.0;
+    vec3 contour_overlay_color = vec3(0.0);
 
     // ── Distance-Based Fading Contour Lines ──
     if (u_contour_enabled > 0.5 && u_contour_interval > 0.1) {
@@ -544,16 +546,17 @@ void main() {
             // Density fade: prevent solid blocks on steep cliffs
             float density_fade = clamp(1.0 - (grad_mag / interval_minor) * 1.5, 0.0, 1.0);
 
-            // 1px wide lines with antialiasing
-            float alpha_minor = (1.0 - smoothstep(0.0, 1.0, pixel_dist_minor)) * density_fade;
-            float alpha_major = 1.0 - smoothstep(0.0, 1.0, pixel_dist_major);
+            // Wider antialiased major contours keep the labeled elevation line readable in 3D.
+            float alpha_minor = (1.0 - smoothstep(0.0, 1.25, pixel_dist_minor)) * density_fade;
+            float alpha_major = 1.0 - smoothstep(0.0, 1.85, pixel_dist_major);
 
-            float final_alpha = max(alpha_minor * 0.6, alpha_major * 0.85) * global_fade;
+            float final_alpha = max(alpha_minor * 0.70, alpha_major) * global_fade;
             // Un-premultiply alpha (MapLibre Color class premultiplies)
             vec3 base_color = u_contour_color.a > 0.001 ? u_contour_color.rgb / u_contour_color.a : u_contour_color.rgb;
-            vec3 color = mix(base_color, vec3(0.0), alpha_major * 0.15);
+            vec3 color = mix(base_color, vec3(0.0), alpha_major * 0.35);
 
-            fragColor = mix(fragColor, vec4(color, 1.0), final_alpha * u_contour_color.a);
+            contour_overlay_color = color;
+            contour_alpha = clamp(final_alpha * max(u_contour_color.a, 0.55), 0.0, 1.0);
         }
     }
 
@@ -699,6 +702,10 @@ void main() {
             float reliefAO = localReliefShadow * castPresence * 0.060 * reliefShadowStrength;
             fragColor.rgb *= 1.0 - reliefAO;
         }
+    }
+
+    if (contour_alpha > 0.001) {
+        fragColor = mix(fragColor, vec4(contour_overlay_color, 1.0), contour_alpha);
     }
 
     // Fog is a final atmospheric composite over terrain lighting. Keeping it

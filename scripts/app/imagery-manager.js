@@ -13,6 +13,7 @@ const IGN_ATTRIBUTION = '<a href="https://www.ign.fr/">© IGN</a>';
 const WMTS_PREVIEW_COORDS = Object.freeze({ z: 14, x: 8508, y: 5911 });
 export const DEM_SOURCE_MAX_ZOOM = 15;
 const COLOR_RELIEF_LAYER_ID = 'color-relief';
+const PEAK_OVERLAY_LAYER_IDS = new Set(['Peak labels', 'Mountain peak labels', 'Volcano peak labels']);
 const DOM_OWNED_SYMBOL_LAYER_IDS = new Set(['Peak labels']);
 
 function createIgnTileTemplate(layerName, format = 'image/png') {
@@ -34,7 +35,7 @@ function createTilePreviewUrl(template, coords = WMTS_PREVIEW_COORDS) {
 // ─── IMAGERY_OPTIONS ───
 export const IMAGERY_OPTIONS = Object.freeze([
     { id: 'shadow-v3', label: 'Shadows', type: 'shadow-layer', linkedLayerIds: ['shadow-v3-coarse'], previewImage: './data/icons_Xmap/shadow.png', defaultOpacity: 1.0, defaultVisible: false },
-    { id: 'daylight', label: 'Sunlight Hours', type: 'native-layer', layerId: 'daylight-native', previewImage: './data/icons_Xmap/daylight.png', defaultOpacity: 0.94, defaultVisible: false },
+    { id: 'daylight', label: 'Duration', type: 'native-layer', layerId: 'daylight-native', previewImage: './data/icons_Xmap/daylight.png', defaultOpacity: 0.94, defaultVisible: false },
     { id: 'sunrise-window', label: 'Sunrise', type: 'native-layer', layerId: 'sunrise-window-native', previewImage: './data/icons_Xmap/sunrise-menu.svg', defaultOpacity: 0.86, defaultVisible: false },
     { id: 'sunset-window', label: 'Sunset', type: 'native-layer', layerId: 'sunset-window-native', previewImage: './data/icons_Xmap/sunset-menu.svg', defaultOpacity: 0.86, defaultVisible: false },
     {
@@ -66,8 +67,8 @@ export const IMAGERY_OPTIONS = Object.freeze([
     { id: 'aspect', label: 'Orientation', type: 'native-layer', layerId: 'aspect-native', previewImage: './data/icons_Xmap/aspect.png', defaultOpacity: 1.0, defaultVisible: false },
     { id: 'slope', label: 'Slope', type: 'native-layer', layerId: 'slope-native', previewImage: './data/icons_Xmap/slope.png', defaultOpacity: 1.0, defaultVisible: false },
     { id: 'avalanche', label: 'Avalanche Zones', type: 'native-layer', layerId: 'avalanche-native', previewImage: './data/icons_Xmap/avalanche.png', defaultOpacity: 1.0, defaultVisible: false },
-    { id: 'snow', label: 'Snow', type: 'native-layer', layerId: 'snow-native', previewImage: './data/icons_Xmap/snow.png', defaultOpacity: 1.0, defaultVisible: false },
-    { id: 'snow-depth', label: 'Snow Depth (Alps)', sourceId: 'snow-depth', layerId: 'snow-depth', tileTemplate: 'https://p20.cosmos-project.ch/BfOlLXvmGpviW0YojaYiRqsT9NHEYdn88fpHZlr_map/gmaps/sd20alps@epsg3857/{z}/{x}/{y}.png', tileSize: 256, minZoom: 0, maxZoom: 12, attribution: '© Data from Exolab', defaultVisible: false, defaultOpacity: 1 },
+    { id: 'snow', label: 'Snow AI (WIP)', type: 'native-layer', layerId: 'snow-native', previewImage: './data/icons_Xmap/snow.png', defaultOpacity: 1.0, defaultVisible: false },
+    { id: 'snow-depth', label: 'Snow Depth', sourceId: 'snow-depth', layerId: 'snow-depth', tileTemplate: 'https://p20.cosmos-project.ch/BfOlLXvmGpviW0YojaYiRqsT9NHEYdn88fpHZlr_map/gmaps/sd20alps@epsg3857/{z}/{x}/{y}.png', tileSize: 256, minZoom: 0, maxZoom: 12, attribution: '© Data from Exolab', defaultVisible: false, defaultOpacity: 1 },
     { id: 'ign-scan', label: 'IGN Scan (Topo)', sourceId: 'ign-scan', layerId: 'ign-scan', tileTemplate: 'https://data.geopf.fr/private/wmts?apikey=ign_scan_ws&layer=GEOGRAPHICALGRIDSYSTEMS.MAPS&style=normal&tilematrixset=PM&Service=WMTS&Request=GetTile&Version=1.0.0&Format=image%2Fjpeg&TileMatrix={z}&TileCol={x}&TileRow={y}', tileSize: 256, minZoom: 0, maxZoom: 15, attribution: IGN_ATTRIBUTION, defaultVisible: false, defaultOpacity: 1 },
     { id: 'ign-cosia', label: 'IGN Kosia 2021-2023', sourceId: 'ign-cosia', layerId: 'ign-cosia', tileTemplate: createIgnTileTemplate('IGNF_COSIA_2021-2023', 'image/png'), tileSize: 256, attribution: IGN_ATTRIBUTION, defaultVisible: false, defaultOpacity: 1 },
     { id: 'ign-forest-inventory', label: 'IGN Forest Inventory', sourceId: 'ign-forest-inventory', layerId: 'ign-forest-inventory', tileTemplate: createIgnTileTemplate('LANDCOVER.FORESTINVENTORY.V2', 'image/png'), tileSize: 256, attribution: IGN_ATTRIBUTION, defaultVisible: false, defaultOpacity: 1 },
@@ -103,6 +104,8 @@ export const ROUTE_LAYER_ORDER_TOP_TO_BOTTOM = Object.freeze([
     'route-hover-point', 'waypoint-hover-drag', 'waypoints', 'segment-markers',
     'waypoints-hit-area', 'distance-markers', 'route-segment-hover', 'route-line', 'route-line-casing'
 ]);
+const CONTOUR_LAYER_IDS = Object.freeze(['contour-line-minor', 'contour-line-major', 'contour-label']);
+const PHOTO_LAYER_IDS = Object.freeze(['wikimedia-photos-base', 'wikimedia-thumbnails-small', 'wikimedia-thumbnails-large']);
 
 export const IMAGERY_OPTIONS_BY_ID = new Map(IMAGERY_OPTIONS.map(o => [o.id, o]));
 export const SUN_DURATION_ADDON_IDS = Object.freeze(['sunrise-window', 'sunset-window']);
@@ -120,6 +123,7 @@ export function setLayerSequenceOpacity(map, layerIds, alpha) {
     const isVisible = alpha > 0;
     const visibility = isVisible ? 'visible' : 'none';
     layerIds.forEach((id) => {
+        if (PEAK_OVERLAY_LAYER_IDS.has(id)) return;
         if (!map.getLayer(id)) return;
         try { map.setLayoutProperty(id, 'visibility', visibility); } catch (_) { }
         if (!isVisible) return;
@@ -220,12 +224,12 @@ export function createImageryManager(map, deps = {}) {
     const contourOption = IMAGERY_OPTIONS.find(o => o.id === 'contours');
     if (contourOption?.thresholds) window.contourThresholds = contourOption.thresholds;
     window.contourConfig = {
-        color: 'rgba(139, 90, 43, 0.2)',   // brown, 20% opacity
+        color: 'rgba(72, 46, 24, 0.5)',   // dark relief brown for readable shared contours
     };
 
     const SHADOW_TOOLBOX_IDS = ['shadow-v3', 'daylight', ...SUN_DURATION_ADDON_IDS];
-    const TERRAIN_TOOLBOX_IDS = ['aspect', 'slope', 'avalanche'];
-    const SNOW_TOOLBOX_IDS = ['snow', 'snow-depth'];
+    const TERRAIN_TOOLBOX_IDS = ['aspect', 'slope', 'avalanche', 'contours'];
+    const SNOW_TOOLBOX_IDS = ['snow-depth', 'snow'];
 
     function syncNativeHillshadeVisibilityForShadow(shadowActive) {
         if (typeof window !== 'undefined') {
@@ -293,6 +297,7 @@ export function createImageryManager(map, deps = {}) {
                 if (src.type === 'vector') vectorSourceIds.add(id);
             }
             (style.layers || []).forEach((layer) => {
+                if (PEAK_OVERLAY_LAYER_IDS.has(layer.id)) return;
                 if (layer.source && vectorSourceIds.has(layer.source)) {
                     map.setLayoutProperty(layer.id, 'visibility', visible ? 'visible' : 'none');
                 }
@@ -388,21 +393,36 @@ export function createImageryManager(map, deps = {}) {
         bringDebugNetworkToFront();
 
         // Move base map symbol layers (OSM labels etc.) to top — but NOT contour or wikimedia layers
-        const contourAndPhotoLayers = new Set([
-            'contour-line-minor', 'contour-line-major', 'contour-label',
-            'wikimedia-photos-base', 'wikimedia-thumbnails-small', 'wikimedia-thumbnails-large'
-        ]);
+        const contourAndPhotoLayers = new Set([...CONTOUR_LAYER_IDS, ...PHOTO_LAYER_IDS]);
         (map.getStyle().layers || []).filter(l => l.type === 'symbol' && !contourAndPhotoLayers.has(l.id)).forEach(l => {
             if (map.getLayer(l.id)) map.moveLayer(l.id);
         });
 
-        // Contour labels: move right after contour lines so they stay together
-        ['contour-line-minor', 'contour-line-major', 'contour-label'].forEach(id => {
-            if (map.getLayer(id)) map.moveLayer(id);
+        // Keep contours above basemap rasters but below routes, OSM overlays, map labels, and photos.
+        const orderedLayerIds = (map.getStyle().layers || []).map(layer => layer.id);
+        const symbolLayerIds = (map.getStyle().layers || [])
+            .filter(layer => layer.type === 'symbol' && !contourAndPhotoLayers.has(layer.id))
+            .map(layer => layer.id);
+        const contourAboveLayerIds = [
+            ...baseStyleOverlayLayerIds,
+            ...ROUTE_LAYER_ORDER_TOP_TO_BOTTOM,
+            ...symbolLayerIds,
+            ...PHOTO_LAYER_IDS,
+        ].filter((id, index, ids) => typeof id === 'string' && ids.indexOf(id) === index);
+        if (typeof window !== 'undefined') window._xploreContourAboveLayerIds = contourAboveLayerIds;
+        const contourAnchor = contourAboveLayerIds
+            .filter(id => map.getLayer(id))
+            .map(id => ({ id, index: orderedLayerIds.indexOf(id) }))
+            .filter(entry => entry.index >= 0)
+            .sort((a, b) => a.index - b.index)[0]?.id || null;
+        CONTOUR_LAYER_IDS.forEach(id => {
+            if (!map.getLayer(id)) return;
+            if (contourAnchor && contourAnchor !== id) map.moveLayer(id, contourAnchor);
+            else map.moveLayer(id);
         });
 
         // Wikimedia photos: always on top of everything
-        ['wikimedia-photos-base', 'wikimedia-thumbnails-small', 'wikimedia-thumbnails-large'].forEach(id => {
+        PHOTO_LAYER_IDS.forEach(id => {
             if (map.getLayer(id)) map.moveLayer(id);
         });
     }
@@ -443,7 +463,7 @@ export function createImageryManager(map, deps = {}) {
 
         // Dynamic background for Analysis Toggles
         [
-            { btnId: 'terrainToolboxToggle', layerIds: ['aspect', 'slope', 'avalanche'] },
+            { btnId: 'terrainToolboxToggle', layerIds: ['aspect', 'slope', 'avalanche', 'contours'] },
             { btnId: 'shadowToolboxToggle', layerIds: [...SUN_ANALYSIS_IDS] },
             { btnId: 'snowToolboxToggle', layerIds: ['snow', 'snow-depth'] }
         ].forEach(config => {
@@ -478,6 +498,16 @@ export function createImageryManager(map, deps = {}) {
             if (option.type === 'osm-background') { setLayerSequenceOpacity(map, baseStyleUnderlayLayerIds, visible ? opacity : 0); return; }
             if (option.type === 'vector-fills') { setLayerSequenceOpacity(map, baseStyleFillLayerIds, visible ? opacity : 0); return; }
             // Shader-based contours: state is read directly from window.imageryState by terra_program.ts
+            if (option.id === 'contours') {
+                if (typeof window !== 'undefined') {
+                    const event = typeof CustomEvent === 'function'
+                        ? new CustomEvent('xplore-contours-state-change', { detail: { visible } })
+                        : new Event('xplore-contours-state-change');
+                    window.dispatchEvent(event);
+                }
+                if (typeof map.triggerRepaint === 'function') map.triggerRepaint();
+                return;
+            }
             if (option.type === 'hillshade') return;
             if (option.type === 'wikimedia') { setWikimediaPhotosEnabled(visible); return; }
             if (option.type === 'color-relief') {

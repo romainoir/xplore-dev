@@ -80,6 +80,20 @@ const CARTES_PATTERN_IMAGE_IDS = new Set([
   'cartesapp-unknown_leaf',
 ]);
 const CARTES_RASTER_PIXEL_RATIO = 2;
+const OPTIONAL_BASE_STYLE_LAYER_IDS = new Set(['Peak labels', 'Mountain peak labels', 'Volcano peak labels']);
+const DEFAULT_PERFORMANCE_SETTINGS = Object.freeze({
+  verticalFov: 45,
+  lodMaxZoomLevels: 6,
+  lodTileCountRatio: 5,
+});
+
+function disableOptionalBaseStyleLayers(style) {
+  if (!style || !Array.isArray(style.layers)) return;
+  style.layers.forEach((layer) => {
+    if (!OPTIONAL_BASE_STYLE_LAYER_IDS.has(layer?.id)) return;
+    layer.layout = { ...(layer.layout || {}), visibility: 'none' };
+  });
+}
 
 function getCartesIconUrl(id) {
   if (CARTES_ICON_URLS.has(id)) return CARTES_ICON_URLS.get(id);
@@ -635,6 +649,7 @@ async function init() {
 
   // ── 8. Style image missing handler ──
   const pendingStyleImages = new Set();
+  let reapplyAllPathways = null;
   map.on('styleimagemissing', (e) => {
     if (map.hasImage(e.id)) return;
     const generatedImage = createGeneratedStyleImage(e.id);
@@ -679,6 +694,17 @@ async function init() {
       directionsManager.markRouteLayersDirty();
       directionsManager.moveRouteLayersToTop();
     }
+    const enforceStyleState = () => {
+      if (viewModeController && typeof viewModeController.applyCurrentMode === 'function') {
+        viewModeController.applyCurrentMode({ animate: false });
+      }
+      if (typeof reapplyAllPathways === 'function') {
+        reapplyAllPathways();
+      }
+    };
+    window.requestAnimationFrame(enforceStyleState);
+    window.setTimeout(enforceStyleState, 260);
+    window.setTimeout(enforceStyleState, 560);
   });
   map.once('style.load', () => applyHillshadeAppearance(map));
   map.once('style.load', () => {
@@ -1001,8 +1027,11 @@ async function init() {
   }
 
   if (fovSlider && fovLabel) {
+    if (!Number.isFinite(Number.parseInt(fovSlider.value, 10))) {
+      fovSlider.value = String(DEFAULT_PERFORMANCE_SETTINGS.verticalFov);
+    }
     const updateFov = () => {
-      const deg = parseInt(fovSlider.value, 10);
+      const deg = parseInt(fovSlider.value, 10) || DEFAULT_PERFORMANCE_SETTINGS.verticalFov;
       fovLabel.textContent = `${deg}°`;
       if (map && typeof map.setVerticalFieldOfView === 'function') map.setVerticalFieldOfView(deg);
     };
@@ -1024,8 +1053,12 @@ async function init() {
 
   const updateLodParams = () => {
     if (!map || typeof map.setSourceTileLodParams !== 'function') return;
-    const maxZoom = lodMaxZoomSlider ? parseInt(lodMaxZoomSlider.value, 10) : 5;
-    const tileRatio = lodTileRatioSlider ? parseFloat(lodTileRatioSlider.value) : 1;
+    const maxZoom = lodMaxZoomSlider
+      ? parseInt(lodMaxZoomSlider.value, 10) || DEFAULT_PERFORMANCE_SETTINGS.lodMaxZoomLevels
+      : DEFAULT_PERFORMANCE_SETTINGS.lodMaxZoomLevels;
+    const tileRatio = lodTileRatioSlider
+      ? parseFloat(lodTileRatioSlider.value) || DEFAULT_PERFORMANCE_SETTINGS.lodTileCountRatio
+      : DEFAULT_PERFORMANCE_SETTINGS.lodTileCountRatio;
     const tileManagers = map.style?.tileManagers;
     if (tileManagers) {
       Object.keys(tileManagers).forEach(sourceId => {
@@ -1153,6 +1186,12 @@ async function init() {
 
   const layersPanel = toolboxes.basemap.box;
   const layerPanelSections = {};
+  const getLayerPanelLabel = (label) => String(label || '').trim().replace(/\s+/g, '\n');
+  const setLayerPanelButtonLabel = (button, label, placement = 'top') => {
+    if (!button) return;
+    button.dataset.layerLabel = getLayerPanelLabel(label);
+    button.dataset.layerLabelPlacement = placement;
+  };
   const createLayerPanelSection = (id, title) => {
     const section = document.createElement('section');
     section.className = 'layer-side-panel__section';
@@ -1387,7 +1426,16 @@ async function init() {
       imagery.applyImageryLayerOrder();
     };
 
-    IMAGERY_OPTIONS.forEach((option) => {
+    const TOOLBOX_DISPLAY_ORDER = [
+      ...SHADOW_TOOLBOX_IDS,
+      'slope', 'aspect', 'avalanche', 'contours',
+      'snow-depth', 'snow',
+    ];
+    const toolboxOptions = TOOLBOX_DISPLAY_ORDER
+      .map(id => IMAGERY_OPTIONS.find(option => option.id === id))
+      .filter(Boolean);
+
+    toolboxOptions.forEach((option) => {
       if (option.hiddenControl) return;
       const isTerrainToolboxMember = TERRAIN_TOOLBOX_IDS.includes(option.id);
       const isSnowToolboxMember = SNOW_TOOLBOX_IDS.includes(option.id);
@@ -1406,6 +1454,7 @@ async function init() {
       toggleButton.setAttribute('aria-pressed', 'false');
       toggleButton.setAttribute('title', option.label);
       toggleButton.setAttribute('aria-label', option.label);
+      setLayerPanelButtonLabel(toggleButton, option.label, 'center');
 
       const previewUrl = typeof option.previewImage === 'string' && option.previewImage.length
         ? option.previewImage : imagery.createTilePreviewUrl(option.tileTemplate);
@@ -1469,8 +1518,6 @@ async function init() {
   // ═════════════════════════════════════════════════════════════════════
 
   // Forward reference — assigned in pathway section so basemap can re-apply pathway state
-  let reapplyAllPathways = null;
-
   {
     const basemapBox = toolboxes.basemap.optionsBox || toolboxes.basemap.box;
     const basemapToggle = toolboxes.basemap.toggle;
@@ -1494,7 +1541,7 @@ async function init() {
     const BASEMAP_OPTIONS = [
       {
         id: 'xplore-outdoor-hybrid-2',
-        label: 'Outdoor Relief',
+        label: 'Outdoor',
         isStyleSwap: true,
         styleUrl: './xplore_outdoor_hybrid-2.json?v=20260525-relief-wip',
         previewImage: './data/icons_Xmap/relief.png',
@@ -1502,7 +1549,7 @@ async function init() {
       },
       {
         id: 'xplore-outdoor-hybrid',
-        label: 'Xplore Outdoor',
+        label: 'Xplore',
         isStyleSwap: true,
         styleUrl: './xplore_outdoor_hybrid.json?v=20260523-color-relief-strong',
         previewImage: './data/icons_Xmap/outdoor.png',
@@ -1516,13 +1563,6 @@ async function init() {
         region: 'world',
       },
       {
-        id: 'ign-orthophotos',
-        label: 'Aerial',
-        layerId: 'ign-orthophotos',
-        tilePreview: true,
-        region: 'france',
-      },
-      {
         id: 'lidar-mnt',
         label: 'Lidar MNT',
         isLidar: true,
@@ -1531,9 +1571,23 @@ async function init() {
       },
       {
         id: 'lidar-mns',
-        label: 'Lidar MNS',
+        label: 'Lidar MNTS',
         isLidar: true,
         lidarMode: 'mns',
+        region: 'france',
+      },
+      {
+        id: 'ign-orthophotos',
+        label: 'Aerial',
+        layerId: 'ign-orthophotos',
+        tilePreview: true,
+        region: 'france',
+      },
+      {
+        id: 'ign-scan',
+        label: 'IGN Scan',
+        layerId: 'ign-scan',
+        previewImage: null,
         region: 'france',
       },
       {
@@ -1543,13 +1597,6 @@ async function init() {
         lidarMode: 'mnt',
         lidarForestOverlay: true,
         previewImage: './data/leaf.png',
-        region: 'france',
-      },
-      {
-        id: 'ign-scan',
-        label: 'IGN Scan',
-        layerId: 'ign-scan',
-        previewImage: null,
         region: 'france',
       },
     ];
@@ -1628,6 +1675,7 @@ async function init() {
     // Hide/show hillshade + terrain background + all non-overlay vector layers
     const TERRAIN_BG_LAYERS = ['color-relief', 'hillshade', 'hillshade2', 'terrain-bg', 'terrain'];
     const setVectorBaseVisible = (visible, reliefOptions = {}) => {
+      const baseVisibility = visible ? 'visible' : 'none';
       const colorReliefVisible = reliefOptions.colorReliefVisible ?? visible;
       const hillshadeVisible = reliefOptions.hillshadeVisible ?? visible;
       const terrainBgVisible = reliefOptions.terrainBgVisible ?? (visible || colorReliefVisible);
@@ -1652,7 +1700,7 @@ async function init() {
       const { fills = [], underlay = [] } = getBaseStyleLayerBuckets();
       [...fills, ...underlay].forEach(id => {
         if (map.getLayer(id)) {
-          try { map.setLayoutProperty(id, 'visibility', vis); } catch (_) { }
+          try { map.setLayoutProperty(id, 'visibility', baseVisibility); } catch (_) { }
         }
       });
     };
@@ -1689,6 +1737,7 @@ async function init() {
               // Deep clone to avoid mutating the cache
               const liveStyle = JSON.parse(JSON.stringify(style));
               injectStyleDefaults(liveStyle, sub);
+              disableOptionalBaseStyleLayers(liveStyle);
               parseAndCacheBaseStyleLayers(liveStyle);
               // Inject overlay defs so diff engine keeps DEM/terrain/hillshade intact
               injectOverlaysIntoStyle(liveStyle);
@@ -1720,19 +1769,13 @@ async function init() {
 
       activeBasemapId = basemapId;
 
-      // Contours: enabled on Vector and Lidar basemaps only
-      const showContours = Boolean(bm.isStyleSwap || bm.isLidar);
-      const contState = imagery.imageryState.get('contours');
-      if (contState) { contState.enabled = showContours; contState.opacity = 1; }
-
       imagery.applyImageryState();
       imagery.updateImageryControlStates();
       imagery.applyImageryLayerOrder();
       updateBasemapUI();
 
-      // Re-apply pathway state so Routes persist across non-vector basemap switches
-      // On Vector basemap, overlay is always shown (part of the full map)
-      if (!vectorBasemapActive && typeof reapplyAllPathways === 'function') reapplyAllPathways();
+      // Re-apply custom overlays so basemap/style swaps cannot restore optional POIs/photos.
+      if (typeof reapplyAllPathways === 'function') reapplyAllPathways();
     };
 
     const updateBasemapUI = () => {
@@ -1795,6 +1838,7 @@ async function init() {
         btn.dataset.basemapId = bm.id;
         btn.setAttribute('title', bm.label);
         btn.setAttribute('aria-label', bm.label);
+        setLayerPanelButtonLabel(btn, bm.label, bm.id === 'lidar-forest' ? 'top' : 'center');
 
         // Try to get a preview image
         const previewUrl = getBasemapPreviewUrl(bm);
@@ -1852,16 +1896,15 @@ async function init() {
 
     const PATHWAY_OPTIONS = [
       {
-        id: 'routes', label: 'Routes',
+        id: 'routes', label: 'Roads',
         type: 'osm-overlay',
         previewImage: './data/OSM_vector.png',
         defaultEnabled: true,
       },
       {
-        id: 'peaks', label: 'Summits',
+        id: 'peaks', label: 'POIs',
         type: 'peak-overlay',
         previewImage: './data/icons_Xmap/peak_principal.png',
-        defaultEnabled: true,
       },
       {
         id: 'wikimedia-photos', label: 'Photos',
@@ -1869,15 +1912,20 @@ async function init() {
         previewImage: './data/icons_Xmap/camera.png',
       },
       {
-        id: 'strava-winter', label: 'Ski',
-        layerId: 'strava-winter',
-        previewImage: './data/snowflake.png',
+        id: 'ski-rando', label: 'Backcountry',
+        layerId: 'ign-traces-hivernales',
+        previewImage: './data/backcountry.png',
+      },
+      {
+        id: 'strava-run', label: 'Run',
+        layerId: 'strava-run',
+        previewImage: './data/running.png',
         groupId: 'heatmap',
       },
       {
         id: 'strava-backcountry-ski', label: 'Backcountry',
         layerId: 'strava-backcountry-ski',
-        previewImage: './data/ski.png',
+        previewImage: './data/backcountry.png',
         groupId: 'heatmap',
       },
       {
@@ -1887,15 +1935,10 @@ async function init() {
         groupId: 'heatmap',
       },
       {
-        id: 'strava-run', label: 'Run',
-        layerId: 'strava-run',
-        previewImage: './data/running.png',
-        groupId: 'heatmap',
-      },
-      {
-        id: 'ski-rando', label: 'Ski Rando',
-        layerId: 'ign-traces-hivernales',
+        id: 'strava-winter', label: 'Ski',
+        layerId: 'strava-winter',
         previewImage: './data/ski.png',
+        groupId: 'heatmap',
       },
     ];
 
@@ -1916,9 +1959,14 @@ async function init() {
         window.xplorePeakLabelMarkers?.clear?.();
       }
     };
-    map.on('style.load', () => {
+    const syncPeakOverlayVisibility = () => {
       const peaksState = pathwayState.get('peaks');
-      window.setTimeout(() => applyPeakOverlayVisibility(peaksState?.enabled ?? true), 180);
+      applyPeakOverlayVisibility(peaksState?.enabled ?? false);
+    };
+    map.on('style.load', () => {
+      syncPeakOverlayVisibility();
+      window.setTimeout(syncPeakOverlayVisibility, 180);
+      window.setTimeout(syncPeakOverlayVisibility, 520);
     });
 
     const applyPathwayOption = (optionId) => {
@@ -1997,8 +2045,8 @@ async function init() {
         btn.type = 'button';
         btn.className = 'btn pathway-toolbox__toggle';
         btn.dataset.pathwayId = opt.id;
-        btn.setAttribute('title', opt.label);
         btn.setAttribute('aria-label', opt.label);
+        setLayerPanelButtonLabel(btn, opt.label, 'top');
 
         if (opt.previewImage) {
           const img = document.createElement('img');
@@ -2038,7 +2086,7 @@ async function init() {
         targetBox?.appendChild(row);
       });
 
-      updatePathwayUI();
+      reapplyAllPathways();
     }
   }
 

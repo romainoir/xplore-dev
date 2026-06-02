@@ -69,6 +69,8 @@ type PainterOptions = {
 export type RenderOptions = {
     isRenderingToTexture: boolean;
     isRenderingGlobe: boolean;
+    terrainRenderToTextureStack?: number;
+    terrainDrawsContours?: boolean;
 };
 
 type MercatorBounds = {
