@@ -195,6 +195,7 @@ function prepareHillshade(
 
             fbo = tile.fbo = context.createFramebuffer(tileSize, tileSize, true, false);
             fbo.colorAttachment.set(renderTexture.texture);
+            gl.bindTexture(gl.TEXTURE_2D, null);
         }
 
         context.bindFramebuffer.set(fbo.framebuffer);

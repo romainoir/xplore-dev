@@ -736,15 +736,19 @@ function prepareTerrainDerivativeTexture(painter: Painter, sourceTile?: Tile | n
 
         let fbo = sourceTile.fbo;
         if (!fbo) {
+            context.activeTexture.set(gl.TEXTURE0);
             const renderTexture = new Texture(context, { width: tileSize, height: tileSize, data: null }, gl.RGBA);
             renderTexture.bind(gl.LINEAR, gl.CLAMP_TO_EDGE);
 
             fbo = sourceTile.fbo = context.createFramebuffer(tileSize, tileSize, true, false);
             fbo.colorAttachment.set(renderTexture.texture);
+            gl.bindTexture(gl.TEXTURE_2D, null);
         }
 
         context.bindFramebuffer.set(fbo.framebuffer);
         context.viewport.set([0, 0, tileSize, tileSize]);
+        context.activeTexture.set(gl.TEXTURE1);
+        sourceTile.demTexture.bind(gl.NEAREST, gl.CLAMP_TO_EDGE);
 
         painter.useProgram('hillshadePrepare').draw(context, gl.TRIANGLES,
             DepthMode.disabled, StencilMode.disabled, ColorMode.unblended, CullFaceMode.disabled,
@@ -775,6 +779,17 @@ function getNeutralDerivativeTexture(painter: Painter): WebGLTexture | null {
     }
 
     return terrain._terrainNeutralDerivativeTexture.texture;
+}
+
+const TERRAIN_TEXTURE_UNIT_OFFSETS = [0, 8, 9, 10, 11, 12, 13, 14, 15];
+
+function unbindTerrainTextureUnits(context: Painter['context']) {
+    const gl = context.gl;
+    for (const unit of TERRAIN_TEXTURE_UNIT_OFFSETS) {
+        context.activeTexture.set(gl.TEXTURE0 + unit);
+        gl.bindTexture(gl.TEXTURE_2D, null);
+    }
+    context.activeTexture.set(gl.TEXTURE0);
 }
 
 function drawTerrain(painter: Painter, terrain: Terrain, tiles: Array<Tile>, renderOptions: RenderOptions) {
@@ -957,6 +972,7 @@ function drawTerrain(painter: Painter, terrain: Terrain, tiles: Array<Tile>, ren
             timestamp: performance.now()
         };
     }
+    unbindTerrainTextureUnits(context);
 }
 
 export {

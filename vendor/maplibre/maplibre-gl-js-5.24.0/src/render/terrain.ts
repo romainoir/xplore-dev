@@ -232,6 +232,26 @@ export class Terrain {
         delete (this as any)._shadowHiZBaseSize;
     }
 
+    _unbindFramebufferTextureUnits() {
+        const context = this.painter.context;
+        const gl = context.gl;
+        const previousActiveTexture = context.activeTexture.current || gl.TEXTURE0;
+        const maxTextureUnits = Math.min(16, gl.getParameter(gl.MAX_COMBINED_TEXTURE_IMAGE_UNITS) as number || 16);
+
+        for (let unit = 0; unit < maxTextureUnits; unit++) {
+            context.activeTexture.set(gl.TEXTURE0 + unit);
+            gl.bindTexture(gl.TEXTURE_2D, null);
+        }
+
+        context.activeTexture.set(previousActiveTexture);
+    }
+
+    _attachRenderTarget(framebuffer: Framebuffer, texture: Texture): Framebuffer {
+        this._unbindFramebufferTextureUnits();
+        framebuffer.colorAttachment.set(texture.texture);
+        return framebuffer;
+    }
+
     destroy() {
         if (this._fbo) this._fbo.destroy();
         if (this._fboCoordsTexture) this._fboCoordsTexture.destroy();
@@ -665,30 +685,26 @@ export class Terrain {
                 this._fboElevation = painter.context.createFramebuffer(elevationAtlasSize, elevationAtlasSize, true, false);
                 this._fboElevation.depthAttachment.set(painter.context.createRenderbuffer(painter.context.gl.DEPTH_COMPONENT16, elevationAtlasSize, elevationAtlasSize));
             }
-            this._fboElevation.colorAttachment.set(this._fboElevationTexture.texture);
-            return this._fboElevation;
+            return this._attachRenderTarget(this._fboElevation, this._fboElevationTexture);
         }
         if (texture === 'near_elevation') {
             if (!this._fboNearElevation) {
                 this._fboNearElevation = painter.context.createFramebuffer(nearAtlasSize, nearAtlasSize, true, false);
                 this._fboNearElevation.depthAttachment.set(painter.context.createRenderbuffer(painter.context.gl.DEPTH_COMPONENT16, nearAtlasSize, nearAtlasSize));
             }
-            this._fboNearElevation.colorAttachment.set(this._fboNearElevationTexture.texture);
-            return this._fboNearElevation;
+            return this._attachRenderTarget(this._fboNearElevation, this._fboNearElevationTexture);
         }
         if (texture === 'shadow') {
             if (!this._fboShadow) {
                 this._fboShadow = painter.context.createFramebuffer(shadowAtlasSize, shadowAtlasSize, false, false);
             }
-            this._fboShadow.colorAttachment.set(this._fboShadowTexture.texture);
-            return this._fboShadow;
+            return this._attachRenderTarget(this._fboShadow, this._fboShadowTexture);
         }
         if (texture === 'near_shadow') {
             if (!this._fboNearShadow) {
                 this._fboNearShadow = painter.context.createFramebuffer(nearAtlasSize, nearAtlasSize, false, false);
             }
-            this._fboNearShadow.colorAttachment.set(this._fboNearShadowTexture.texture);
-            return this._fboNearShadow;
+            return this._attachRenderTarget(this._fboNearShadow, this._fboNearShadowTexture);
         }
         if (texture === 'shadow_blur') {
             if (!this._fboShadowBlurTexture) {
@@ -698,8 +714,7 @@ export class Terrain {
             if (!this._fboShadowBlur) {
                 this._fboShadowBlur = painter.context.createFramebuffer(shadowMaskSize, shadowMaskSize, false, false);
             }
-            this._fboShadowBlur.colorAttachment.set(this._fboShadowBlurTexture.texture);
-            return this._fboShadowBlur;
+            return this._attachRenderTarget(this._fboShadowBlur, this._fboShadowBlurTexture);
         }
         if (texture === 'near_shadow_blur') {
             if (!this._fboNearShadowBlurTexture) {
@@ -709,83 +724,70 @@ export class Terrain {
             if (!this._fboNearShadowBlur) {
                 this._fboNearShadowBlur = painter.context.createFramebuffer(nearMaskSize, nearMaskSize, false, false);
             }
-            this._fboNearShadowBlur.colorAttachment.set(this._fboNearShadowBlurTexture.texture);
-            return this._fboNearShadowBlur;
+            return this._attachRenderTarget(this._fboNearShadowBlur, this._fboNearShadowBlurTexture);
         }
         if (texture === 'daylight') {
             if (!this._fboDaylight) {
                 this._fboDaylight = painter.context.createFramebuffer(baseAtlasSize, baseAtlasSize, false, false);
             }
-            this._fboDaylight.colorAttachment.set(this._fboDaylightTexture.texture);
-            return this._fboDaylight;
+            return this._attachRenderTarget(this._fboDaylight, this._fboDaylightTexture);
         }
         if (texture === 'near_daylight') {
             if (!this._fboNearDaylight) {
                 this._fboNearDaylight = painter.context.createFramebuffer(baseAtlasSize, baseAtlasSize, false, false);
             }
-            this._fboNearDaylight.colorAttachment.set(this._fboNearDaylightTexture.texture);
-            return this._fboNearDaylight;
+            return this._attachRenderTarget(this._fboNearDaylight, this._fboNearDaylightTexture);
         }
         if (texture === 'horizon0') {
             if (!this._fboHorizon0) {
                 this._fboHorizon0 = painter.context.createFramebuffer(horizonAtlasSize, horizonAtlasSize, false, false);
             }
-            this._fboHorizon0.colorAttachment.set(this._fboHorizon0Texture.texture);
-            return this._fboHorizon0;
+            return this._attachRenderTarget(this._fboHorizon0, this._fboHorizon0Texture);
         }
         if (texture === 'horizon1') {
             if (!this._fboHorizon1) {
                 this._fboHorizon1 = painter.context.createFramebuffer(horizonAtlasSize, horizonAtlasSize, false, false);
             }
-            this._fboHorizon1.colorAttachment.set(this._fboHorizon1Texture.texture);
-            return this._fboHorizon1;
+            return this._attachRenderTarget(this._fboHorizon1, this._fboHorizon1Texture);
         }
         if (texture === 'horizon2') {
             if (!this._fboHorizon2) {
                 this._fboHorizon2 = painter.context.createFramebuffer(horizonAtlasSize, horizonAtlasSize, false, false);
             }
-            this._fboHorizon2.colorAttachment.set(this._fboHorizon2Texture.texture);
-            return this._fboHorizon2;
+            return this._attachRenderTarget(this._fboHorizon2, this._fboHorizon2Texture);
         }
         if (texture === 'horizon3') {
             if (!this._fboHorizon3) {
                 this._fboHorizon3 = painter.context.createFramebuffer(horizonAtlasSize, horizonAtlasSize, false, false);
             }
-            this._fboHorizon3.colorAttachment.set(this._fboHorizon3Texture.texture);
-            return this._fboHorizon3;
+            return this._attachRenderTarget(this._fboHorizon3, this._fboHorizon3Texture);
         }
         if (texture === 'near_horizon0') {
             if (!this._fboNearHorizon0) {
                 this._fboNearHorizon0 = painter.context.createFramebuffer(horizonAtlasSize, horizonAtlasSize, false, false);
             }
-            this._fboNearHorizon0.colorAttachment.set(this._fboNearHorizon0Texture.texture);
-            return this._fboNearHorizon0;
+            return this._attachRenderTarget(this._fboNearHorizon0, this._fboNearHorizon0Texture);
         }
         if (texture === 'near_horizon1') {
             if (!this._fboNearHorizon1) {
                 this._fboNearHorizon1 = painter.context.createFramebuffer(horizonAtlasSize, horizonAtlasSize, false, false);
             }
-            this._fboNearHorizon1.colorAttachment.set(this._fboNearHorizon1Texture.texture);
-            return this._fboNearHorizon1;
+            return this._attachRenderTarget(this._fboNearHorizon1, this._fboNearHorizon1Texture);
         }
         if (texture === 'near_horizon2') {
             if (!this._fboNearHorizon2) {
                 this._fboNearHorizon2 = painter.context.createFramebuffer(horizonAtlasSize, horizonAtlasSize, false, false);
             }
-            this._fboNearHorizon2.colorAttachment.set(this._fboNearHorizon2Texture.texture);
-            return this._fboNearHorizon2;
+            return this._attachRenderTarget(this._fboNearHorizon2, this._fboNearHorizon2Texture);
         }
         if (texture === 'near_horizon3') {
             if (!this._fboNearHorizon3) {
                 this._fboNearHorizon3 = painter.context.createFramebuffer(horizonAtlasSize, horizonAtlasSize, false, false);
             }
-            this._fboNearHorizon3.colorAttachment.set(this._fboNearHorizon3Texture.texture);
-            return this._fboNearHorizon3;
+            return this._attachRenderTarget(this._fboNearHorizon3, this._fboNearHorizon3Texture);
         }
 
-        this._fbo.colorAttachment.set(texture === 'coords' ? this._fboCoordsTexture.texture :
-            this._fboDepthTexture.texture);
-        return this._fbo;
+        return this._attachRenderTarget(this._fbo, texture === 'coords' ? this._fboCoordsTexture : this._fboDepthTexture);
     }
 
     /**

@@ -7,12 +7,13 @@
  */
 
 // ─── Module imports ───
-import { createMap, getBaseStyleLayerBuckets, parseAndCacheBaseStyleLayers } from './map-init.js?v=20260525-relief-match';
+import { createMap, getBaseStyleLayerBuckets, parseAndCacheBaseStyleLayers, prepareBaseStyleForApp } from './map-init.js?v=20260525-relief-match';
 import { createImageryManager, IMAGERY_OPTIONS, LAYER_GROUP_BY_MEMBER_ID, SUN_DURATION_ADDON_IDS } from './imagery-manager.js?v=20260525-relief-match';
 import { applyOverlays, applyHillshadeAppearance, injectOverlaysIntoStyle } from './overlay-manager.js?v=20260525-relief-match';
 import { createRoutingOrchestrator } from './routing-orchestrator.js';
 import { createShadowController } from './shadow-controller.js';
 import { initShadowV3DebugOverlay } from './shadow-v3-debug-overlay.js?v=20260521-daylight-normal-z-relief';
+import { createLayerPanelSection, setLayerPanelButtonLabel } from './layer-panel-ui.js';
 import {
   initTerrainAnalysisConfig,
   setupTerrainHoverInfo,
@@ -48,6 +49,8 @@ const CARTES_ICON_URLS = new Map([
   ['cartesapp-bare_rock', new URL('../../data/vendor/cartes/icons/bare_rock.svg', import.meta.url).href],
   ['cartesapp-cliff', new URL('../../data/vendor/cartes/icons/cliff.svg', import.meta.url).href],
   ['cartesapp-scree', new URL('../../data/vendor/cartes/icons/scree.svg', import.meta.url).href],
+  ['cartesapp-station', new URL('../../data/vendor/cartes/icons/train.svg', import.meta.url).href],
+  ['cartesapp-halt', new URL('../../data/vendor/cartes/icons/railway.svg', import.meta.url).href],
   ['cartesapp-stone', new URL('../../data/vendor/cartes/icons/stone.svg', import.meta.url).href],
   ['cartesapp-triangle', new URL('../../data/vendor/cartes/icons/triangle.svg', import.meta.url).href],
 ]);
@@ -81,20 +84,11 @@ const CARTES_PATTERN_IMAGE_IDS = new Set([
   'cartesapp-unknown_leaf',
 ]);
 const CARTES_RASTER_PIXEL_RATIO = 2;
-const OPTIONAL_BASE_STYLE_LAYER_IDS = new Set(['Peak labels', 'Mountain peak labels', 'Volcano peak labels']);
 const DEFAULT_PERFORMANCE_SETTINGS = Object.freeze({
   verticalFov: 45,
   lodMaxZoomLevels: 6,
   lodTileCountRatio: 5,
 });
-
-function disableOptionalBaseStyleLayers(style) {
-  if (!style || !Array.isArray(style.layers)) return;
-  style.layers.forEach((layer) => {
-    if (!OPTIONAL_BASE_STYLE_LAYER_IDS.has(layer?.id)) return;
-    layer.layout = { ...(layer.layout || {}), visibility: 'none' };
-  });
-}
 
 function getCartesIconUrl(id) {
   if (CARTES_ICON_URLS.has(id)) return CARTES_ICON_URLS.get(id);
@@ -579,7 +573,7 @@ async function init() {
     defaultMode: VIEW_MODES.TWOD,
     defaultOrientation: DEFAULT_3D_ORIENTATION,
     terrainSourceId: 'terrainSource',
-    hdSources: ['terrainSource', 'hillshadeSource', 'reliefDem'],
+    hdSources: ['terrainSource', 'hillshadeSource', 'reliefDem', 'terrainDerivativeSource', 'terrainAnalysisSource'],
   });
 
   window.viewModeController = viewModeController;
@@ -593,6 +587,7 @@ async function init() {
     baseStyleOverlayLayerIds,
     baseStyleUnderlayLayerIds,
     baseStyleFillLayerIds,
+    getBaseStyleLayerBuckets,
     viewModeController,
     shadowController: shadowCtrl,
     updateAnalyticalLegends: () => renderAnalyticalLegends(map, imagery.imageryState, shadowCtrl.updateShadowTime),
@@ -1028,9 +1023,7 @@ async function init() {
   }
 
   if (fovSlider && fovLabel) {
-    if (!Number.isFinite(Number.parseInt(fovSlider.value, 10))) {
-      fovSlider.value = String(DEFAULT_PERFORMANCE_SETTINGS.verticalFov);
-    }
+    fovSlider.value = String(DEFAULT_PERFORMANCE_SETTINGS.verticalFov);
     const updateFov = () => {
       const deg = parseInt(fovSlider.value, 10) || DEFAULT_PERFORMANCE_SETTINGS.verticalFov;
       fovLabel.textContent = `${deg}°`;
@@ -1040,7 +1033,7 @@ async function init() {
     updateFov();
   }
 
-  const terrainDemSourceIds = new Set(['terrainSource', 'hillshadeSource', 'reliefDem']);
+  const terrainDemSourceIds = new Set(['terrainSource', 'hillshadeSource', 'reliefDem', 'terrainDerivativeSource', 'terrainAnalysisSource']);
   const clearTerrainDemLodOverrides = () => {
     const tileManagers = map?.style?.tileManagers;
     if (!tileManagers) return;
@@ -1072,6 +1065,8 @@ async function init() {
     if (lodTileRatioLabel) lodTileRatioLabel.textContent = tileRatio.toFixed(1);
   };
 
+  if (lodMaxZoomSlider) lodMaxZoomSlider.value = String(DEFAULT_PERFORMANCE_SETTINGS.lodMaxZoomLevels);
+  if (lodTileRatioSlider) lodTileRatioSlider.value = String(DEFAULT_PERFORMANCE_SETTINGS.lodTileCountRatio);
   if (lodMaxZoomSlider) lodMaxZoomSlider.addEventListener('input', updateLodParams);
   if (lodTileRatioSlider) lodTileRatioSlider.addEventListener('input', updateLodParams);
   updateLodParams();
@@ -1187,31 +1182,6 @@ async function init() {
 
   const layersPanel = toolboxes.basemap.box;
   const layerPanelSections = {};
-  const getLayerPanelLabel = (label) => String(label || '').trim().replace(/\s+/g, '\n');
-  const setLayerPanelButtonLabel = (button, label, placement = 'top') => {
-    if (!button) return;
-    button.dataset.layerLabel = getLayerPanelLabel(label);
-    button.dataset.layerLabelPlacement = placement;
-  };
-  const createLayerPanelSection = (id, title) => {
-    const section = document.createElement('section');
-    section.className = 'layer-side-panel__section';
-    section.dataset.layerSection = id;
-
-    const header = document.createElement('div');
-    header.className = 'layer-side-panel__section-header';
-
-    const heading = document.createElement('h3');
-    heading.className = 'layer-side-panel__section-title';
-    heading.textContent = title;
-    header.appendChild(heading);
-
-    const content = document.createElement('div');
-    content.className = 'layer-side-panel__section-content';
-    section.append(header, content);
-
-    return { section, content };
-  };
 
   if (layersPanel) {
     layersPanel.classList.add('layer-side-panel');
@@ -1738,7 +1708,7 @@ async function init() {
               // Deep clone to avoid mutating the cache
               const liveStyle = JSON.parse(JSON.stringify(style));
               injectStyleDefaults(liveStyle, sub);
-              disableOptionalBaseStyleLayers(liveStyle);
+              prepareBaseStyleForApp(liveStyle);
               parseAndCacheBaseStyleLayers(liveStyle);
               // Inject overlay defs so diff engine keeps DEM/terrain/hillshade intact
               injectOverlaysIntoStyle(liveStyle);

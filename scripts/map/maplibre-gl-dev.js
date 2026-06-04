@@ -63045,6 +63045,22 @@ class Terrain {
         delete this._shadowHiZFbos;
         delete this._shadowHiZBaseSize;
     }
+    _unbindFramebufferTextureUnits() {
+        const context = this.painter.context;
+        const gl = context.gl;
+        const previousActiveTexture = context.activeTexture.current || gl.TEXTURE0;
+        const maxTextureUnits = Math.min(16, gl.getParameter(gl.MAX_COMBINED_TEXTURE_IMAGE_UNITS) || 16);
+        for (let unit = 0; unit < maxTextureUnits; unit++) {
+            context.activeTexture.set(gl.TEXTURE0 + unit);
+            gl.bindTexture(gl.TEXTURE_2D, null);
+        }
+        context.activeTexture.set(previousActiveTexture);
+    }
+    _attachRenderTarget(framebuffer, texture) {
+        this._unbindFramebufferTextureUnits();
+        framebuffer.colorAttachment.set(texture.texture);
+        return framebuffer;
+    }
     destroy() {
         if (this._fbo)
             this._fbo.destroy();
@@ -63496,30 +63512,26 @@ class Terrain {
                 this._fboElevation = painter.context.createFramebuffer(elevationAtlasSize, elevationAtlasSize, true, false);
                 this._fboElevation.depthAttachment.set(painter.context.createRenderbuffer(painter.context.gl.DEPTH_COMPONENT16, elevationAtlasSize, elevationAtlasSize));
             }
-            this._fboElevation.colorAttachment.set(this._fboElevationTexture.texture);
-            return this._fboElevation;
+            return this._attachRenderTarget(this._fboElevation, this._fboElevationTexture);
         }
         if (texture === 'near_elevation') {
             if (!this._fboNearElevation) {
                 this._fboNearElevation = painter.context.createFramebuffer(nearAtlasSize, nearAtlasSize, true, false);
                 this._fboNearElevation.depthAttachment.set(painter.context.createRenderbuffer(painter.context.gl.DEPTH_COMPONENT16, nearAtlasSize, nearAtlasSize));
             }
-            this._fboNearElevation.colorAttachment.set(this._fboNearElevationTexture.texture);
-            return this._fboNearElevation;
+            return this._attachRenderTarget(this._fboNearElevation, this._fboNearElevationTexture);
         }
         if (texture === 'shadow') {
             if (!this._fboShadow) {
                 this._fboShadow = painter.context.createFramebuffer(shadowAtlasSize, shadowAtlasSize, false, false);
             }
-            this._fboShadow.colorAttachment.set(this._fboShadowTexture.texture);
-            return this._fboShadow;
+            return this._attachRenderTarget(this._fboShadow, this._fboShadowTexture);
         }
         if (texture === 'near_shadow') {
             if (!this._fboNearShadow) {
                 this._fboNearShadow = painter.context.createFramebuffer(nearAtlasSize, nearAtlasSize, false, false);
             }
-            this._fboNearShadow.colorAttachment.set(this._fboNearShadowTexture.texture);
-            return this._fboNearShadow;
+            return this._attachRenderTarget(this._fboNearShadow, this._fboNearShadowTexture);
         }
         if (texture === 'shadow_blur') {
             if (!this._fboShadowBlurTexture) {
@@ -63529,8 +63541,7 @@ class Terrain {
             if (!this._fboShadowBlur) {
                 this._fboShadowBlur = painter.context.createFramebuffer(shadowMaskSize, shadowMaskSize, false, false);
             }
-            this._fboShadowBlur.colorAttachment.set(this._fboShadowBlurTexture.texture);
-            return this._fboShadowBlur;
+            return this._attachRenderTarget(this._fboShadowBlur, this._fboShadowBlurTexture);
         }
         if (texture === 'near_shadow_blur') {
             if (!this._fboNearShadowBlurTexture) {
@@ -63540,82 +63551,69 @@ class Terrain {
             if (!this._fboNearShadowBlur) {
                 this._fboNearShadowBlur = painter.context.createFramebuffer(nearMaskSize, nearMaskSize, false, false);
             }
-            this._fboNearShadowBlur.colorAttachment.set(this._fboNearShadowBlurTexture.texture);
-            return this._fboNearShadowBlur;
+            return this._attachRenderTarget(this._fboNearShadowBlur, this._fboNearShadowBlurTexture);
         }
         if (texture === 'daylight') {
             if (!this._fboDaylight) {
                 this._fboDaylight = painter.context.createFramebuffer(baseAtlasSize, baseAtlasSize, false, false);
             }
-            this._fboDaylight.colorAttachment.set(this._fboDaylightTexture.texture);
-            return this._fboDaylight;
+            return this._attachRenderTarget(this._fboDaylight, this._fboDaylightTexture);
         }
         if (texture === 'near_daylight') {
             if (!this._fboNearDaylight) {
                 this._fboNearDaylight = painter.context.createFramebuffer(baseAtlasSize, baseAtlasSize, false, false);
             }
-            this._fboNearDaylight.colorAttachment.set(this._fboNearDaylightTexture.texture);
-            return this._fboNearDaylight;
+            return this._attachRenderTarget(this._fboNearDaylight, this._fboNearDaylightTexture);
         }
         if (texture === 'horizon0') {
             if (!this._fboHorizon0) {
                 this._fboHorizon0 = painter.context.createFramebuffer(horizonAtlasSize, horizonAtlasSize, false, false);
             }
-            this._fboHorizon0.colorAttachment.set(this._fboHorizon0Texture.texture);
-            return this._fboHorizon0;
+            return this._attachRenderTarget(this._fboHorizon0, this._fboHorizon0Texture);
         }
         if (texture === 'horizon1') {
             if (!this._fboHorizon1) {
                 this._fboHorizon1 = painter.context.createFramebuffer(horizonAtlasSize, horizonAtlasSize, false, false);
             }
-            this._fboHorizon1.colorAttachment.set(this._fboHorizon1Texture.texture);
-            return this._fboHorizon1;
+            return this._attachRenderTarget(this._fboHorizon1, this._fboHorizon1Texture);
         }
         if (texture === 'horizon2') {
             if (!this._fboHorizon2) {
                 this._fboHorizon2 = painter.context.createFramebuffer(horizonAtlasSize, horizonAtlasSize, false, false);
             }
-            this._fboHorizon2.colorAttachment.set(this._fboHorizon2Texture.texture);
-            return this._fboHorizon2;
+            return this._attachRenderTarget(this._fboHorizon2, this._fboHorizon2Texture);
         }
         if (texture === 'horizon3') {
             if (!this._fboHorizon3) {
                 this._fboHorizon3 = painter.context.createFramebuffer(horizonAtlasSize, horizonAtlasSize, false, false);
             }
-            this._fboHorizon3.colorAttachment.set(this._fboHorizon3Texture.texture);
-            return this._fboHorizon3;
+            return this._attachRenderTarget(this._fboHorizon3, this._fboHorizon3Texture);
         }
         if (texture === 'near_horizon0') {
             if (!this._fboNearHorizon0) {
                 this._fboNearHorizon0 = painter.context.createFramebuffer(horizonAtlasSize, horizonAtlasSize, false, false);
             }
-            this._fboNearHorizon0.colorAttachment.set(this._fboNearHorizon0Texture.texture);
-            return this._fboNearHorizon0;
+            return this._attachRenderTarget(this._fboNearHorizon0, this._fboNearHorizon0Texture);
         }
         if (texture === 'near_horizon1') {
             if (!this._fboNearHorizon1) {
                 this._fboNearHorizon1 = painter.context.createFramebuffer(horizonAtlasSize, horizonAtlasSize, false, false);
             }
-            this._fboNearHorizon1.colorAttachment.set(this._fboNearHorizon1Texture.texture);
-            return this._fboNearHorizon1;
+            return this._attachRenderTarget(this._fboNearHorizon1, this._fboNearHorizon1Texture);
         }
         if (texture === 'near_horizon2') {
             if (!this._fboNearHorizon2) {
                 this._fboNearHorizon2 = painter.context.createFramebuffer(horizonAtlasSize, horizonAtlasSize, false, false);
             }
-            this._fboNearHorizon2.colorAttachment.set(this._fboNearHorizon2Texture.texture);
-            return this._fboNearHorizon2;
+            return this._attachRenderTarget(this._fboNearHorizon2, this._fboNearHorizon2Texture);
         }
         if (texture === 'near_horizon3') {
             if (!this._fboNearHorizon3) {
                 this._fboNearHorizon3 = painter.context.createFramebuffer(horizonAtlasSize, horizonAtlasSize, false, false);
             }
-            this._fboNearHorizon3.colorAttachment.set(this._fboNearHorizon3Texture.texture);
-            return this._fboNearHorizon3;
+            return this._attachRenderTarget(this._fboNearHorizon3, this._fboNearHorizon3Texture);
         }
-        this._fbo.colorAttachment.set(texture === 'coords' ? this._fboCoordsTexture.texture :
-            this._fboDepthTexture.texture);
-        return this._fbo;
+        return this._attachRenderTarget(this._fbo, texture === 'coords' ? this._fboCoordsTexture : this._fboDepthTexture);
     }
     /**
      * create coords texture, needed to grab coordinates from canvas
@@ -66836,7 +66834,19 @@ function renderHillshade(painter, tileManager, layer, coords, stencilModes, dept
         gl.bindTexture(gl.TEXTURE_2D, fbo.colorAttachment.get());
         // Bind raw DEM to texture unit 1 (for snow high-precision elevation)
         context.activeTexture.set(gl.TEXTURE1);
-        if (tile.demTexture) {
+        if ((layer.id === 'snow' || layer.id === 'snow-native') && tile.dem && tile.dem.data) {
+            const pixelData = tile.dem.getPixels();
+            context.pixelStoreUnpackPremultiplyAlpha.set(false);
+            if (!tile.snowRawDemTexture) {
+                tile.snowRawDemTexture = new symbol_layout.Texture(context, pixelData, gl.RGBA, { premultiply: false });
+            }
+            else if (tile.snowRawDemSource !== tile.dem) {
+                tile.snowRawDemTexture.update(pixelData, { premultiply: false });
+            }
+            tile.snowRawDemSource = tile.dem;
+            tile.snowRawDemTexture.bind(gl.NEAREST, gl.CLAMP_TO_EDGE);
+        }
+        else if (tile.demTexture) {
             tile.demTexture.bind(gl.NEAREST, gl.CLAMP_TO_EDGE);
         }
         const uniformValues = hillshadeUniformValues(painter, tile, layer);
@@ -66898,6 +66908,7 @@ function prepareHillshade(painter, tileManager, tileIDs, layer, depthMode, stenc
             renderTexture.bind(gl.LINEAR, gl.CLAMP_TO_EDGE);
             fbo = tile.fbo = context.createFramebuffer(tileSize, tileSize, true, false);
             fbo.colorAttachment.set(renderTexture.texture);
+            gl.bindTexture(gl.TEXTURE_2D, null);
         }
         context.bindFramebuffer.set(fbo.framebuffer);
         context.viewport.set([0, 0, tileSize, tileSize]);
@@ -66918,6 +66929,8 @@ function prepareHillshade(painter, tileManager, tileIDs, layer, depthMode, stenc
             timestamp: performance.now()
         };
     }
+    context.bindFramebuffer.set(null);
+    context.viewport.set([0, 0, painter.width, painter.height]);
 }
 
 function drawColorRelief(painter, tileManager, layer, tileIDs, renderOptions) {
@@ -69791,13 +69804,17 @@ function prepareTerrainDerivativeTexture(painter, sourceTile) {
         }
         let fbo = sourceTile.fbo;
         if (!fbo) {
+            context.activeTexture.set(gl.TEXTURE0);
             const renderTexture = new symbol_layout.Texture(context, { width: tileSize, height: tileSize, data: null }, gl.RGBA);
             renderTexture.bind(gl.LINEAR, gl.CLAMP_TO_EDGE);
             fbo = sourceTile.fbo = context.createFramebuffer(tileSize, tileSize, true, false);
             fbo.colorAttachment.set(renderTexture.texture);
+            gl.bindTexture(gl.TEXTURE_2D, null);
         }
         context.bindFramebuffer.set(fbo.framebuffer);
         context.viewport.set([0, 0, tileSize, tileSize]);
+        context.activeTexture.set(gl.TEXTURE1);
+        sourceTile.demTexture.bind(gl.NEAREST, gl.CLAMP_TO_EDGE);
         painter.useProgram('hillshadePrepare').draw(context, gl.TRIANGLES, DepthMode.disabled, StencilMode.disabled, ColorMode.unblended, CullFaceMode.disabled, hillshadeUniformPrepareValues(sourceTile.tileID, dem), null, null, 'terrain-derivative', painter.rasterBoundsBuffer, painter.quadTriangleIndexBuffer, painter.rasterBoundsSegments);
         sourceTile.needsHillshadePrepare = false;
         context.bindFramebuffer.set(null);
@@ -69818,6 +69835,15 @@ function getNeutralDerivativeTexture(painter) {
         terrain._terrainNeutralDerivativeTexture.bind(gl.LINEAR, gl.CLAMP_TO_EDGE);
     }
     return terrain._terrainNeutralDerivativeTexture.texture;
+}
+const TERRAIN_TEXTURE_UNIT_OFFSETS = [0, 8, 9, 10, 11, 12, 13, 14, 15];
+function unbindTerrainTextureUnits(context) {
+    const gl = context.gl;
+    for (const unit of TERRAIN_TEXTURE_UNIT_OFFSETS) {
+        context.activeTexture.set(gl.TEXTURE0 + unit);
+        gl.bindTexture(gl.TEXTURE_2D, null);
+    }
+    context.activeTexture.set(gl.TEXTURE0);
 }
 function drawTerrain(painter, terrain, tiles, renderOptions) {
     var _a, _b, _c, _d, _e, _f, _g, _h;
@@ -69993,6 +70019,7 @@ function drawTerrain(painter, terrain, tiles, renderOptions) {
             timestamp: performance.now()
         };
     }
+    unbindTerrainTextureUnits(context);
 }
 
 function getMesh(context, sky) {
@@ -75458,7 +75485,18 @@ class RenderPool {
         }
         fbo.depthAttachment.set(this._context.createRenderbuffer(this._context.gl.DEPTH_STENCIL, this._tileSize, this._tileSize));
         fbo.colorAttachment.set(texture.texture);
+        this._unbindTexture2DUnits();
         return { id, fbo, texture, stamp: -1, inUse: false };
+    }
+    _unbindTexture2DUnits() {
+        const gl = this._context.gl;
+        const previousActiveTexture = this._context.activeTexture.current || gl.TEXTURE0;
+        const maxTextureUnits = Math.min(16, gl.getParameter(gl.MAX_COMBINED_TEXTURE_IMAGE_UNITS) || 16);
+        for (let unit = 0; unit < maxTextureUnits; unit++) {
+            this._context.activeTexture.set(gl.TEXTURE0 + unit);
+            gl.bindTexture(gl.TEXTURE_2D, null);
+        }
+        this._context.activeTexture.set(previousActiveTexture);
     }
     getObjectForId(id) {
         return this._objects[id];
@@ -75588,12 +75626,54 @@ class RenderToTexture {
      * @param renderOptions - flags describing how to render the layer
      * @returns if true layer is rendered to texture, otherwise false
      */
+    _renderStack(stack, options) {
+        const painter = this.painter;
+        const layers = this._stacks[stack] || [];
+        const terrainOptions = Object.assign(Object.assign({}, options), { terrainRenderToTextureStack: stack, terrainDrawsContours: this._stackDrawsContours[stack] !== false });
+        for (const tile of this._renderableTiles) {
+            // if render pool is full draw current tiles to screen and free pool
+            if (this.pool.isFull()) {
+                drawTerrain(this.painter, this.terrain, this._rttTiles, terrainOptions);
+                this._rttTiles = [];
+                this.pool.freeAllObjects();
+            }
+            this._rttTiles.push(tile);
+            // check for cached PoolObject
+            if (tile.rtt[stack]) {
+                const obj = this.pool.getObjectForId(tile.rtt[stack].id);
+                if (obj.stamp === tile.rtt[stack].stamp) {
+                    this.pool.useObject(obj);
+                    continue;
+                }
+            }
+            // get free PoolObject
+            const obj = this.pool.getOrCreateFreeObject();
+            this.pool.useObject(obj);
+            this.pool.stampObject(obj);
+            tile.rtt[stack] = { id: obj.id, stamp: obj.stamp };
+            // prepare PoolObject for rendering
+            painter.context.bindFramebuffer.set(obj.fbo.framebuffer);
+            painter.context.clear({ color: symbol_layout.Color.transparent, stencil: 0 });
+            painter.currentStencilSource = undefined;
+            for (const layerId of layers) {
+                const layer = painter.style._layers[layerId];
+                const coords = layer.source ? this._coordsAscending[layer.source][tile.tileID.key] : [tile.tileID];
+                painter.context.viewport.set([0, 0, obj.fbo.width, obj.fbo.height]);
+                painter._renderTileClippingMasks(layer, coords, true);
+                painter.renderLayer(painter, painter.style.tileManagers[layer.source], layer, coords, options);
+                if (layer.source)
+                    tile.rttFingerprint[layer.source] = this._rttFingerprints[layer.source][tile.tileID.key];
+            }
+        }
+        drawTerrain(this.painter, this.terrain, this._rttTiles, terrainOptions);
+        this._rttTiles = [];
+        this.pool.freeAllObjects();
+    }
     renderLayer(layer, renderOptions) {
         if (layer.isHidden(this.painter.transform.zoom))
             return false;
         const options = Object.assign(Object.assign({}, renderOptions), { isRenderingToTexture: true });
         const type = layer.type;
-        const painter = this.painter;
         const isLastLayer = this._renderableLayerIds[this._renderableLayerIds.length - 1] === layer.id;
         // remember background, fill, line & raster layer to render into a stack
         if (LAYERS_TO_TEXTURES[type]) {
@@ -75602,6 +75682,9 @@ class RenderToTexture {
             const shouldSplitBeforeLayer = layerDrawsAboveContours &&
                 !!(currentStack === null || currentStack === void 0 ? void 0 : currentStack.length) &&
                 this._stackDrawsContours[this._stackDrawsContours.length - 1] !== false;
+            if (shouldSplitBeforeLayer) {
+                this._renderStack(this._stacks.length - 1, options);
+            }
             // create a new stack if previous layer was not rendered to texture (f.e. symbols)
             if (!this._prevType || !LAYERS_TO_TEXTURES[this._prevType] || shouldSplitBeforeLayer) {
                 this._stacks.push([]);
@@ -75617,46 +75700,7 @@ class RenderToTexture {
         // in case a stack is finished render all collected stack-layers into a texture
         if (LAYERS_TO_TEXTURES[this._prevType] || (LAYERS_TO_TEXTURES[type] && isLastLayer)) {
             this._prevType = type;
-            const stack = this._stacks.length - 1, layers = this._stacks[stack] || [];
-            const terrainOptions = Object.assign(Object.assign({}, options), { terrainRenderToTextureStack: stack, terrainDrawsContours: this._stackDrawsContours[stack] !== false });
-            for (const tile of this._renderableTiles) {
-                // if render pool is full draw current tiles to screen and free pool
-                if (this.pool.isFull()) {
-                    drawTerrain(this.painter, this.terrain, this._rttTiles, terrainOptions);
-                    this._rttTiles = [];
-                    this.pool.freeAllObjects();
-                }
-                this._rttTiles.push(tile);
-                // check for cached PoolObject
-                if (tile.rtt[stack]) {
-                    const obj = this.pool.getObjectForId(tile.rtt[stack].id);
-                    if (obj.stamp === tile.rtt[stack].stamp) {
-                        this.pool.useObject(obj);
-                        continue;
-                    }
-                }
-                // get free PoolObject
-                const obj = this.pool.getOrCreateFreeObject();
-                this.pool.useObject(obj);
-                this.pool.stampObject(obj);
-                tile.rtt[stack] = { id: obj.id, stamp: obj.stamp };
-                // prepare PoolObject for rendering
-                painter.context.bindFramebuffer.set(obj.fbo.framebuffer);
-                painter.context.clear({ color: symbol_layout.Color.transparent, stencil: 0 });
-                painter.currentStencilSource = undefined;
-                for (const layerId of layers) {
-                    const layer = painter.style._layers[layerId];
-                    const coords = layer.source ? this._coordsAscending[layer.source][tile.tileID.key] : [tile.tileID];
-                    painter.context.viewport.set([0, 0, obj.fbo.width, obj.fbo.height]);
-                    painter._renderTileClippingMasks(layer, coords, true);
-                    painter.renderLayer(painter, painter.style.tileManagers[layer.source], layer, coords, options);
-                    if (layer.source)
-                        tile.rttFingerprint[layer.source] = this._rttFingerprints[layer.source][tile.tileID.key];
-                }
-            }
-            drawTerrain(this.painter, this.terrain, this._rttTiles, terrainOptions);
-            this._rttTiles = [];
-            this.pool.freeAllObjects();
+            this._renderStack(this._stacks.length - 1, options);
             return LAYERS_TO_TEXTURES[type];
         }
         return false;

@@ -10,7 +10,9 @@ import { initializeGeocoder } from '../map/geocoder-control.js';
 const XPLORE_OUTDOOR_STYLE_URL = './styles/map-styles/xplore_outdoor_hybrid-2.json?v=20260525-relief-wip';
 const CARTES_SPRITE_URL = new URL('../../data/vendor/cartes/sprite/sprite', import.meta.url).href;
 const DPR_STORAGE_KEY = 'xplore_dpr_enabled';
+const MAPLIBRE_WORKER_COUNT_STORAGE_KEY = 'xplore_maplibre_worker_count';
 const OPTIONAL_STYLE_LAYER_IDS = new Set(['Peak labels', 'Mountain peak labels', 'Volcano peak labels']);
+const UNSUPPORTED_OPENMAPTILES_SOURCE_LAYERS = new Set(['route']);
 
 // ─── UI icon images data-icon-id → src ───
 const UI_ICON_SOURCES = Object.freeze({
@@ -101,6 +103,51 @@ function getConfiguredPixelRatio() {
     } catch (_) {
         return window.devicePixelRatio;
     }
+}
+
+function getConfiguredWorkerCount() {
+    try {
+        const stored = Number.parseInt(localStorage.getItem(MAPLIBRE_WORKER_COUNT_STORAGE_KEY) || '', 10);
+        if (Number.isFinite(stored) && stored > 0) return Math.max(1, Math.min(8, stored));
+    } catch (_) { }
+    const cores = (typeof navigator !== 'undefined' && Number.isFinite(navigator.hardwareConcurrency))
+        ? navigator.hardwareConcurrency
+        : 4;
+    if (cores >= 8) return 4;
+    if (cores >= 4) return 3;
+    return 2;
+}
+
+export function configureMapLibreWorkers() {
+    if (typeof maplibregl === 'undefined') return null;
+    const workerCount = getConfiguredWorkerCount();
+    try {
+        if (typeof maplibregl.setWorkerCount === 'function') {
+            maplibregl.setWorkerCount(workerCount);
+        } else {
+            maplibregl.workerCount = workerCount;
+        }
+        if (typeof window !== 'undefined') window.xploreMaplibreWorkerCount = workerCount;
+        return workerCount;
+    } catch (error) {
+        console.warn('[MapInit] Unable to configure MapLibre worker count', error);
+        return null;
+    }
+}
+
+export function prepareBaseStyleForApp(style) {
+    if (!style || !Array.isArray(style.layers)) return style;
+    style.layers = style.layers.filter((layer) => {
+        if (!layer || typeof layer.id !== 'string') return false;
+        const source = String(layer.source || '');
+        const sourceLayer = String(layer['source-layer'] || '');
+        return !(source === 'openmaptiles' && UNSUPPORTED_OPENMAPTILES_SOURCE_LAYERS.has(sourceLayer));
+    });
+    style.layers.forEach((layer) => {
+        if (!OPTIONAL_STYLE_LAYER_IDS.has(layer?.id)) return;
+        layer.layout = { ...(layer.layout || {}), visibility: 'none' };
+    });
+    return style;
 }
 
 // ─── Base style layer bucketing ───
@@ -198,6 +245,7 @@ export function parseAndCacheBaseStyleLayers(style) {
 
 export async function createMap() {
     unregisterLegacyServiceWorker();
+    configureMapLibreWorkers();
 
     // Fetch the local vector style used by the app.
     const versaStyle = await fetch(XPLORE_OUTDOOR_STYLE_URL, { cache: 'no-store' }).then(r => r.json());
@@ -206,12 +254,7 @@ export async function createMap() {
     versaStyle.sky = { 'sky-color': '#bcd0e6', 'horizon-color': '#e6effa', 'sky-horizon-blend': 0.5 };
     versaStyle.light = { 'anchor': 'map', 'position': [1.5, 90, 80] };
     delete versaStyle.terrain;
-    if (Array.isArray(versaStyle.layers)) {
-        versaStyle.layers.forEach((layer) => {
-            if (!OPTIONAL_STYLE_LAYER_IDS.has(layer?.id)) return;
-            layer.layout = { ...(layer.layout || {}), visibility: 'none' };
-        });
-    }
+    prepareBaseStyleForApp(versaStyle);
 
     // Parse base style layers
     parseAndCacheBaseStyleLayers(versaStyle);

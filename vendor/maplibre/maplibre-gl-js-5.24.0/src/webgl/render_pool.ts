@@ -47,7 +47,21 @@ export class RenderPool {
         }
         fbo.depthAttachment.set(this._context.createRenderbuffer(this._context.gl.DEPTH_STENCIL, this._tileSize, this._tileSize));
         fbo.colorAttachment.set(texture.texture);
+        this._unbindTexture2DUnits();
         return {id, fbo, texture, stamp: -1, inUse: false};
+    }
+
+    private _unbindTexture2DUnits() {
+        const gl = this._context.gl;
+        const previousActiveTexture = this._context.activeTexture.current || gl.TEXTURE0;
+        const maxTextureUnits = Math.min(16, gl.getParameter(gl.MAX_COMBINED_TEXTURE_IMAGE_UNITS) as number || 16);
+
+        for (let unit = 0; unit < maxTextureUnits; unit++) {
+            this._context.activeTexture.set(gl.TEXTURE0 + unit);
+            gl.bindTexture(gl.TEXTURE_2D, null);
+        }
+
+        this._context.activeTexture.set(previousActiveTexture);
     }
 
     public getObjectForId(id: number): PoolObject {

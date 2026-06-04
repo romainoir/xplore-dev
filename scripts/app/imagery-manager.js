@@ -8,12 +8,17 @@ import {
 } from '../config/map-config.js';
 import { LAYER_ICON_PATHS } from '../config/layer-assets.js';
 import { setWikimediaPhotosEnabled } from '../map/wikimedia-photos.js';
+import {
+    BASEMAP_IMAGERY_OPTION_IDS,
+    COLOR_RELIEF_LAYER_ID,
+    ROUTE_LAYER_ORDER_TOP_TO_BOTTOM,
+    applyLayerStackOrder,
+} from './layer-stack-manager.js';
 
 // ─── Attribution constants ───
 const IGN_ATTRIBUTION = '<a href="https://www.ign.fr/">© IGN</a>';
 const WMTS_PREVIEW_COORDS = Object.freeze({ z: 14, x: 8508, y: 5911 });
 export const DEM_SOURCE_MAX_ZOOM = 15;
-const COLOR_RELIEF_LAYER_ID = 'color-relief';
 const PEAK_OVERLAY_LAYER_IDS = new Set(['Peak labels', 'Mountain peak labels', 'Volcano peak labels']);
 const DOM_OWNED_SYMBOL_LAYER_IDS = new Set(['Peak labels']);
 
@@ -101,12 +106,7 @@ LAYER_GROUPS.forEach(group => {
     group.members.forEach(memberId => LAYER_GROUP_BY_MEMBER_ID.set(memberId, group));
 });
 
-export const ROUTE_LAYER_ORDER_TOP_TO_BOTTOM = Object.freeze([
-    'route-hover-point', 'waypoint-hover-drag', 'waypoints', 'segment-markers',
-    'waypoints-hit-area', 'distance-markers', 'route-segment-hover', 'route-line', 'route-line-casing'
-]);
-const CONTOUR_LAYER_IDS = Object.freeze(['contour-line-minor', 'contour-line-major', 'contour-label']);
-const PHOTO_LAYER_IDS = Object.freeze(['wikimedia-photos-base', 'wikimedia-thumbnails-small', 'wikimedia-thumbnails-large']);
+export { ROUTE_LAYER_ORDER_TOP_TO_BOTTOM };
 
 export const IMAGERY_OPTIONS_BY_ID = new Map(IMAGERY_OPTIONS.map(o => [o.id, o]));
 export const SUN_DURATION_ADDON_IDS = Object.freeze(['sunrise-window', 'sunset-window']);
@@ -154,43 +154,6 @@ export function setLayerSequenceOpacity(map, layerIds, alpha) {
     });
 }
 
-function getLayerSourceLayer(layer) {
-    return String(layer?.sourceLayer || layer?.['source-layer'] || '').toLowerCase();
-}
-
-function isReliefBaseLayer(layer) {
-    if (!layer || layer.type === 'symbol' || layer.type === 'background') return false;
-    const sourceLayer = getLayerSourceLayer(layer);
-    if (sourceLayer.includes('route') || sourceLayer.includes('transport') || sourceLayer.includes('road')) return false;
-    if (sourceLayer.includes('building') || sourceLayer.includes('boundary')) return false;
-    return ['landcover', 'landuse', 'water', 'park', 'aeroway', 'mountain_peak']
-        .some(prefix => sourceLayer.startsWith(prefix));
-}
-
-function moveBaseReliefBelowHillshade(map, layerIds = []) {
-    const reliefOverlayAnchor = map.getLayer(COLOR_RELIEF_LAYER_ID)
-        ? COLOR_RELIEF_LAYER_ID
-        : null;
-    const hillshadeAnchor = map.getLayer('hillshade2')
-        ? 'hillshade2'
-        : (map.getLayer('hillshade') ? 'hillshade' : null);
-    const baseAnchor = reliefOverlayAnchor || hillshadeAnchor;
-    if (!baseAnchor) return;
-    const seen = new Set();
-    layerIds.forEach((id) => {
-        if (!id || seen.has(id) || id === baseAnchor || id === hillshadeAnchor || !map.getLayer(id)) return;
-        seen.add(id);
-        if (!isReliefBaseLayer(map.getLayer(id))) return;
-        try { map.moveLayer(id, baseAnchor); } catch (_) { }
-    });
-    if (reliefOverlayAnchor && map.getLayer('hillshade2')) {
-        try { map.moveLayer(reliefOverlayAnchor, 'hillshade2'); } catch (_) { }
-    }
-    if (map.getLayer('hillshade2') && map.getLayer('hillshade')) {
-        try { map.moveLayer('hillshade2', 'hillshade'); } catch (_) { }
-    }
-}
-
 /**
  * Create the imagery manager — call after map is created.
  * @param {maplibregl.Map} map
@@ -206,7 +169,17 @@ export function createImageryManager(map, deps = {}) {
         updateAnalyticalLegends = () => { },
         viewModeController = null,
         shadowController = null,
+        getBaseStyleLayerBuckets = null,
     } = deps;
+
+    function currentBaseStyleBuckets() {
+        const liveBuckets = typeof getBaseStyleLayerBuckets === 'function' ? getBaseStyleLayerBuckets() : null;
+        return {
+            overlay: Array.isArray(liveBuckets?.overlay) ? liveBuckets.overlay : baseStyleOverlayLayerIds,
+            underlay: Array.isArray(liveBuckets?.underlay) ? liveBuckets.underlay : baseStyleUnderlayLayerIds,
+            fills: Array.isArray(liveBuckets?.fills) ? liveBuckets.fills : baseStyleFillLayerIds,
+        };
+    }
 
     // ─── State ───
     const imageryState = new Map();
@@ -316,29 +289,17 @@ export function createImageryManager(map, deps = {}) {
 
     function applyImageryLayerOrder() {
         if (!map || typeof map.moveLayer !== 'function') return;
-        const style = typeof map.getStyle === 'function' ? map.getStyle() : null;
-        const layers = style?.layers;
-        if (!Array.isArray(layers)) return;
-        let topLabelId = null;
-        for (let i = layers.length - 1; i >= 0; i--) {
-            if (layers[i]?.type === 'symbol') { topLabelId = layers[i].id; break; }
-        }
-        // Basemap imagery IDs that should render BELOW terrain analysis
-        const basemapIds = new Set([
-            'osm-background', 'vector-fills', 'white-background',
-            'ign-scan', 'ign-cosia', 'ign-forest-inventory', 'ign-orthophotos', 'eox-s2',
-            'ign-lidar-hd-mns-shadow', 'ign-lidar-hd-mnt-shadow'
-        ]);
-
+        const basemapIds = new Set(BASEMAP_IMAGERY_OPTION_IDS);
+        const baseBuckets = currentBaseStyleBuckets();
         const basemapEntries = [];
         const overlayEntries = [];
         imageryOrder.forEach((id) => {
             if (id === COLOR_RELIEF_LAYER_ID) return;
             let layerSequence = [];
             if (id === 'osm-features') {
-                layerSequence = baseStyleOverlayLayerIds.filter(l => { const layer = map.getLayer(l); return layer && layer.type !== 'symbol'; });
+                layerSequence = baseBuckets.overlay.filter(l => { const layer = map.getLayer(l); return layer && layer.type !== 'symbol'; });
             } else if (id === 'osm-background') {
-                layerSequence = baseStyleUnderlayLayerIds.filter(l => map.getLayer(l));
+                layerSequence = baseBuckets.underlay.filter(l => map.getLayer(l));
             } else {
                 const option = IMAGERY_OPTIONS_BY_ID.get(id);
                 if (option) {
@@ -353,78 +314,13 @@ export function createImageryManager(map, deps = {}) {
                 else overlayEntries.push({ layerSequence });
             }
         });
-
-        // 1. Basemap imagery (ortho, satellite, IGN scan, etc.) — lowest
-        for (let i = basemapEntries.length - 1; i >= 0; i--) {
-            const seq = basemapEntries[i].layerSequence;
-            for (let j = 0; j < seq.length; j++) {
-                if (seq[j] && seq[j] !== topLabelId) map.moveLayer(seq[j], topLabelId);
-            }
-        }
-
-        // 2. Terrain analysis & snow layers — above basemaps
-        const terrainNativeLayers = ['normalmap', 'snow-native', 'snow-depth', 'aspect-native', 'slope-native', 'avalanche-native', 'shadow-v3-coarse', 'daylight-native', 'sunrise-window-native', 'sunset-window-native'];
-        if (topLabelId) {
-            terrainNativeLayers.forEach(layerId => { if (map.getLayer(layerId)) map.moveLayer(layerId, topLabelId); });
-        }
-
-        // 3. Footpath overlays (OSM features, contours, heatmaps, wikimedia) — above terrain
-        for (let i = overlayEntries.length - 1; i >= 0; i--) {
-            const seq = overlayEntries[i].layerSequence;
-            for (let j = 0; j < seq.length; j++) {
-                if (seq[j] && seq[j] !== topLabelId) map.moveLayer(seq[j], topLabelId);
-            }
-        }
-
-        moveBaseReliefBelowHillshade(map, [
-            ...baseStyleFillLayerIds,
-            ...baseStyleUnderlayLayerIds,
-            ...baseStyleOverlayLayerIds,
-        ]);
-
-        const routeLayers = ROUTE_LAYER_ORDER_TOP_TO_BOTTOM.filter(layerId => map.getLayer(layerId));
-        let previousTopLayerId = null;
-        for (let i = 0; i < routeLayers.length; i++) {
-            if (!routeLayers[i]) continue;
-            if (!previousTopLayerId) { map.moveLayer(routeLayers[i]); }
-            else if (routeLayers[i] !== previousTopLayerId) { map.moveLayer(routeLayers[i], previousTopLayerId); }
-            previousTopLayerId = routeLayers[i];
-        }
-
-        bringDebugNetworkToFront();
-
-        // Move base map symbol layers (OSM labels etc.) to top — but NOT contour or wikimedia layers
-        const contourAndPhotoLayers = new Set([...CONTOUR_LAYER_IDS, ...PHOTO_LAYER_IDS]);
-        (map.getStyle().layers || []).filter(l => l.type === 'symbol' && !contourAndPhotoLayers.has(l.id)).forEach(l => {
-            if (map.getLayer(l.id)) map.moveLayer(l.id);
-        });
-
-        // Keep contours above basemap rasters but below routes, OSM overlays, map labels, and photos.
-        const orderedLayerIds = (map.getStyle().layers || []).map(layer => layer.id);
-        const symbolLayerIds = (map.getStyle().layers || [])
-            .filter(layer => layer.type === 'symbol' && !contourAndPhotoLayers.has(layer.id))
-            .map(layer => layer.id);
-        const contourAboveLayerIds = [
-            ...baseStyleOverlayLayerIds,
-            ...ROUTE_LAYER_ORDER_TOP_TO_BOTTOM,
-            ...symbolLayerIds,
-            ...PHOTO_LAYER_IDS,
-        ].filter((id, index, ids) => typeof id === 'string' && ids.indexOf(id) === index);
-        if (typeof window !== 'undefined') window._xploreContourAboveLayerIds = contourAboveLayerIds;
-        const contourAnchor = contourAboveLayerIds
-            .filter(id => map.getLayer(id))
-            .map(id => ({ id, index: orderedLayerIds.indexOf(id) }))
-            .filter(entry => entry.index >= 0)
-            .sort((a, b) => a.index - b.index)[0]?.id || null;
-        CONTOUR_LAYER_IDS.forEach(id => {
-            if (!map.getLayer(id)) return;
-            if (contourAnchor && contourAnchor !== id) map.moveLayer(id, contourAnchor);
-            else map.moveLayer(id);
-        });
-
-        // Wikimedia photos: always on top of everything
-        PHOTO_LAYER_IDS.forEach(id => {
-            if (map.getLayer(id)) map.moveLayer(id);
+        applyLayerStackOrder(map, {
+            basemapLayerSequences: basemapEntries.map(entry => entry.layerSequence),
+            overlayLayerSequences: overlayEntries.map(entry => entry.layerSequence),
+            baseStyleOverlayLayerIds: baseBuckets.overlay,
+            baseStyleUnderlayLayerIds: baseBuckets.underlay,
+            baseStyleFillLayerIds: baseBuckets.fills,
+            bringDebugNetworkToFront,
         });
     }
 
@@ -483,6 +379,7 @@ export function createImageryManager(map, deps = {}) {
 
     function applyImageryState() {
         let sunAnalysisRequiresTerrain = false;
+        const baseBuckets = currentBaseStyleBuckets();
         const activeSunDurationId = SUN_DURATION_MODE_IDS.find(id => {
             const state = imageryState.get(id);
             return Boolean(state?.enabled && clampOpacity(state.opacity ?? 0) > 0);
@@ -495,9 +392,9 @@ export function createImageryManager(map, deps = {}) {
             if (SUN_ANALYSIS_IDS.includes(option.id) && visible) {
                 sunAnalysisRequiresTerrain = true;
             }
-            if (option.type === 'osm-overlay') { setLayerSequenceOpacity(map, baseStyleOverlayLayerIds, visible ? opacity : 0); return; }
-            if (option.type === 'osm-background') { setLayerSequenceOpacity(map, baseStyleUnderlayLayerIds, visible ? opacity : 0); return; }
-            if (option.type === 'vector-fills') { setLayerSequenceOpacity(map, baseStyleFillLayerIds, visible ? opacity : 0); return; }
+            if (option.type === 'osm-overlay') { setLayerSequenceOpacity(map, baseBuckets.overlay, visible ? opacity : 0); return; }
+            if (option.type === 'osm-background') { setLayerSequenceOpacity(map, baseBuckets.underlay, visible ? opacity : 0); return; }
+            if (option.type === 'vector-fills') { setLayerSequenceOpacity(map, baseBuckets.fills, visible ? opacity : 0); return; }
             // Shader-based contours: state is read directly from window.imageryState by terra_program.ts
             if (option.id === 'contours') {
                 if (typeof window !== 'undefined') {

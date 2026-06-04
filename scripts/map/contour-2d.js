@@ -9,22 +9,20 @@
  * Uses the same DEM tile URL as the terrain source (Mapterhorn, terrarium).
  */
 
+import {
+    CONTOUR_LAYER_IDS,
+    positionContourLayers,
+} from '../app/layer-stack-manager.js';
+
 const CONTOUR_SRC = 'contour-plugin-src';
 const LINE_MINOR = 'contour-line-minor';
 const LINE_MAJOR = 'contour-line-major';
 const LABEL_ID = 'contour-label';
-const CONTOUR_LAYER_IDS = Object.freeze([LINE_MINOR, LINE_MAJOR, LABEL_ID]);
-const PHOTO_LAYER_IDS = Object.freeze(['wikimedia-photos-base', 'wikimedia-thumbnails-small', 'wikimedia-thumbnails-large']);
-const ROUTE_LAYER_IDS = Object.freeze([
-    'route-hover-point', 'waypoint-hover-drag', 'waypoints', 'segment-markers',
-    'waypoints-hit-area', 'distance-markers', 'route-segment-hover', 'route-line', 'route-line-casing'
-]);
 const LABEL_NEAR_FADE_METERS = 500;
 const LABEL_FAR_FADE_METERS = 3000;
 const LABEL_FADE_SYNC_INTERVAL_MS = 120;
 
 let pluginLoaded = false;
-let labelDistancePaintSupported = true;
 const terrainListenerMaps = new WeakSet();
 const syncTimerMaps = new WeakMap();
 
@@ -78,14 +76,6 @@ function labelZoomOpacity() {
     ];
 }
 
-function labelDistanceFade(point) {
-    return [
-        'interpolate', ['linear'], ['distance', point],
-        LABEL_NEAR_FADE_METERS, 1,
-        LABEL_FAR_FADE_METERS, 0,
-    ];
-}
-
 function applyLabelFade(map, hasRaisedTerrain) {
     if (!map.getLayer(LABEL_ID)) return;
 
@@ -108,44 +98,16 @@ function applyLabelFade(map, hasRaisedTerrain) {
             contourLabelBaseFilter(),
             ['<=', ['distance', point], LABEL_FAR_FADE_METERS],
         ]);
-        map.setPaintProperty(LABEL_ID, 'text-opacity', labelDistancePaintSupported
-            ? [
-                '*',
-                labelZoomOpacity(),
-                labelDistanceFade(point),
-            ]
-            : labelZoomOpacity());
+        map.setPaintProperty(LABEL_ID, 'text-opacity', labelZoomOpacity());
     } catch (err) {
-        labelDistancePaintSupported = false;
         console.warn('[Contours] Distance-based label opacity unavailable, using distance filter only:', err);
         map.setPaintProperty(LABEL_ID, 'text-opacity', labelZoomOpacity());
     }
 }
 
 function bringContoursForward(map) {
-    const layers = map.getStyle()?.layers || [];
-    const contourIds = new Set(CONTOUR_LAYER_IDS);
-    const configuredAboveIds = Array.isArray(window._xploreContourAboveLayerIds)
-        ? window._xploreContourAboveLayerIds
-        : [];
-    const fallbackAboveIds = [
-        ...ROUTE_LAYER_IDS,
-        ...layers.filter(layer => layer.type === 'symbol' && !contourIds.has(layer.id)).map(layer => layer.id),
-        ...PHOTO_LAYER_IDS,
-    ];
-    const aboveIds = [...configuredAboveIds, ...fallbackAboveIds]
-        .filter((id, index, ids) => typeof id === 'string' && ids.indexOf(id) === index && map.getLayer(id) && !contourIds.has(id));
-    const layerOrder = layers.map(layer => layer.id);
-    const anchor = aboveIds
-        .map(id => ({ id, index: layerOrder.indexOf(id) }))
-        .filter(entry => entry.index >= 0)
-        .sort((a, b) => a.index - b.index)[0]?.id || null;
     try {
-        CONTOUR_LAYER_IDS.forEach((id) => {
-            if (!map.getLayer(id)) return;
-            if (anchor && anchor !== id) map.moveLayer(id, anchor);
-            else map.moveLayer(id);
-        });
+        positionContourLayers(map);
     } catch (_) { }
 }
 
