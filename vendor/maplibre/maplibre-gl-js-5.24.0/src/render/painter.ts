@@ -38,6 +38,7 @@ import type {DepthRangeType, DepthMaskType, DepthFuncType} from '../webgl/types'
 import type {ResolvedImage} from '@maplibre/maplibre-gl-style-spec';
 import type {IRenderToTexture} from './render_to_texture_interface';
 import type {ProjectionData} from '../geo/projection/projection_data';
+import type {Framebuffer} from '../webgl/framebuffer';
 import {coveringTiles} from '../geo/projection/covering_tiles';
 import {isSymbolStyleLayer} from '../style/style_layer/symbol_style_layer';
 import {isCircleStyleLayer} from '../style/style_layer/circle_style_layer';
@@ -71,6 +72,11 @@ export type RenderOptions = {
     isRenderingGlobe: boolean;
     terrainRenderToTextureStack?: number;
     terrainDrawsContours?: boolean;
+};
+
+export type RTTObject = {
+    texture: Texture;
+    size: number;
 };
 
 type MercatorBounds = {
@@ -115,6 +121,12 @@ export class Painter {
     _tileTextures: {
         [_: number]: Texture[];
     };
+    _rttObjectRecyclePool: RTTObject[];
+    _rttSharedFbo: {
+        fbo: Framebuffer;
+        depthRenderbuffer: WebGLRenderbuffer;
+        size: number;
+    } | null;
     numSublayers: number;
     depthEpsilon: number;
     emptyProgramConfiguration: ProgramConfiguration;
@@ -165,6 +177,8 @@ export class Painter {
         this.context = new Context(gl);
         this.transform = transform;
         this._tileTextures = {};
+        this._rttObjectRecyclePool = [];
+        this._rttSharedFbo = null;
         this.terrainFacilitator = {depthDirty: true, coordsDirty: false, matrix: mat4.identity(new Float64Array(16) as any), renderTime: 0};
 
         this.setup();
@@ -900,6 +914,55 @@ export class Painter {
         return textures && textures.length > 0 ? textures.pop() : null;
     }
 
+    acquireRTT(size: number): RTTObject {
+        const gl = this.context.gl;
+        const obj = this._rttObjectRecyclePool.pop();
+        if (obj) {
+            if (obj.size !== size) {
+                gl.bindTexture(gl.TEXTURE_2D, obj.texture.texture);
+                gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, size, size, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+                obj.texture.size = [size, size];
+                obj.size = size;
+            }
+            return obj;
+        }
+
+        const texture = new Texture(this.context, {width: size, height: size, data: null}, gl.RGBA);
+        texture.bind(gl.LINEAR, gl.CLAMP_TO_EDGE);
+        if (this.context.extTextureFilterAnisotropic) {
+            gl.texParameterf(gl.TEXTURE_2D, this.context.extTextureFilterAnisotropic.TEXTURE_MAX_ANISOTROPY_EXT, this.context.extTextureFilterAnisotropicMax);
+        }
+        return {texture, size};
+    }
+
+    bindRTT(obj: RTTObject): void {
+        const gl = this.context.gl;
+        const size = obj.size;
+
+        if (!this._rttSharedFbo) {
+            const fbo = this.context.createFramebuffer(size, size, true, true);
+            const depthRenderbuffer = this.context.createRenderbuffer(gl.DEPTH_STENCIL, size, size);
+            fbo.depthAttachment.set(depthRenderbuffer);
+            this._rttSharedFbo = {fbo, depthRenderbuffer, size};
+        }
+
+        if (this._rttSharedFbo.size !== size) {
+            this.context.bindRenderbuffer.set(this._rttSharedFbo.depthRenderbuffer);
+            gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_STENCIL, size, size);
+            this.context.bindRenderbuffer.set(null);
+            this._rttSharedFbo.fbo.width = size;
+            this._rttSharedFbo.fbo.height = size;
+            this._rttSharedFbo.size = size;
+        }
+
+        this._rttSharedFbo.fbo.colorAttachment.set(obj.texture.texture);
+        this.context.bindFramebuffer.set(this._rttSharedFbo.fbo.framebuffer);
+    }
+
+    releaseRTT(obj: RTTObject): void {
+        this._rttObjectRecyclePool.push(obj);
+    }
+
     /**
      * Checks whether a pattern image is needed, and if it is, whether it is not loaded.
      *
@@ -1003,6 +1066,19 @@ export class Painter {
                 }
             }
             this._tileTextures = {};
+        }
+
+        for (const obj of this._rttObjectRecyclePool) {
+            obj.texture.destroy();
+        }
+        this._rttObjectRecyclePool = [];
+
+        if (this._rttSharedFbo) {
+            this._rttSharedFbo.fbo.colorAttachment.set(null);
+            this._rttSharedFbo.fbo.depthAttachment.set(null);
+            this.context.gl.deleteRenderbuffer(this._rttSharedFbo.depthRenderbuffer);
+            this.context.gl.deleteFramebuffer(this._rttSharedFbo.fbo.framebuffer);
+            this._rttSharedFbo = null;
         }
 
         if (this.tileExtentBuffer) this.tileExtentBuffer.destroy();

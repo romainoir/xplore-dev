@@ -14,6 +14,7 @@ import { createRoutingOrchestrator } from './routing-orchestrator.js';
 import { createShadowController } from './shadow-controller.js';
 import { initShadowV3DebugOverlay } from './shadow-v3-debug-overlay.js?v=20260521-daylight-normal-z-relief';
 import { createLayerPanelSection, setLayerPanelButtonLabel } from './layer-panel-ui.js';
+import { initPerformanceAudit, installWorkerAudit, shouldAutoStartPerformanceAudit } from './performance-audit.js';
 import {
   initTerrainAnalysisConfig,
   setupTerrainHoverInfo,
@@ -40,6 +41,8 @@ import {
   DEFAULT_3D_ORIENTATION,
 } from '../config/map-config.js';
 import { LAYER_ICON_PATHS } from '../config/layer-assets.js';
+
+installWorkerAudit();
 
 const TRANSPARENT_IMAGE = Object.freeze({ width: 1, height: 1, data: new Uint8Array([0, 0, 0, 0]) });
 const CARTES_SPRITE_URL = new URL('../../data/vendor/cartes/sprite/sprite', import.meta.url).href;
@@ -554,6 +557,7 @@ function styleUsesNotoFonts(style) {
 async function init() {
   // ── 1. Create Map ──
   const { map } = await createMap();
+  initPerformanceAudit(map, { autoStart: shouldAutoStartPerformanceAudit() });
   const shadowV3DebugOverlay = initShadowV3DebugOverlay(map);
   window.ShadowV3DebugOverlay = shadowV3DebugOverlay;
 

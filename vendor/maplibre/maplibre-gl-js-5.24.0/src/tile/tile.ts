@@ -33,7 +33,7 @@ import type {ExpiryData} from '../util/ajax';
 import type {QueryRenderedFeaturesOptionsStrict, QuerySourceFeatureOptionsStrict} from '../source/query_features';
 import type {DashEntry} from '../render/line_atlas';
 import type {VectorTileLayerLike} from '@maplibre/vt-pbf';
-import type {Painter} from '../render/painter';
+import type {Painter, RTTObject} from '../render/painter';
 /**
  * The tile's state, can be:
  *
@@ -119,7 +119,7 @@ export class Tile {
     hasSymbolBuckets: boolean;
     hasRTLText: boolean;
     dependencies: any;
-    rtt: Array<{id: number; stamp: number}>;
+    rttObjects: Array<RTTObject | undefined>;
     rttFingerprint: {[sourceId:string]: string};
 
     /**
@@ -137,7 +137,7 @@ export class Tile {
         this.hasSymbolBuckets = false;
         this.hasRTLText = false;
         this.dependencies = {};
-        this.rtt = [];
+        this.rttObjects = [];
         this.rttFingerprint = {};
 
         // Counts the number of times a response was already expired when
@@ -203,6 +203,34 @@ export class Tile {
             this.horizonFBO.destroy();
             this.horizonFBO = null;
         }
+    }
+
+    /**
+     * @internal
+     * Returns the cached render-to-texture object for this terrain stack.
+     */
+    getRTT(stack: number): RTTObject | undefined {
+        return this.rttObjects[stack];
+    }
+
+    /**
+     * @internal
+     * Allocates and stores a render-to-texture object for this terrain stack.
+     */
+    acquireRTT(painter: Painter, stack: number, size: number): RTTObject {
+        return this.rttObjects[stack] = painter.acquireRTT(size);
+    }
+
+    /**
+     * @internal
+     * Returns cached render-to-texture objects to the painter recycle pool.
+     */
+    releaseRTT(painter: Painter) {
+        if (this.rttObjects.length === 0) return;
+        for (const obj of this.rttObjects) {
+            if (obj) painter.releaseRTT(obj);
+        }
+        this.rttObjects.length = 0;
     }
 
     /**

@@ -5,10 +5,9 @@ import {type OverscaledTileID} from '../tile/tile_id';
 import {drawTerrain} from './draw/draw_terrain';
 import {type Style} from '../style/style';
 import {type Terrain} from '../render/terrain';
-import {RenderPool} from './render_pool';
 import {type Texture} from './texture';
 import type {StyleLayer} from '../style/style_layer';
-import {ImageSource} from '../source/image_source';
+import {ImageSource, type CanonicalTileRange} from '../source/image_source';
 
 /**
  * lookup table which layers should rendered to texture
@@ -23,6 +22,18 @@ const LAYERS_TO_TEXTURES: Record<string, boolean> = {
     daylight: true
 };
 
+function getTerrainTileRangesSignature(terrainTileRanges: {[zoom: string]: CanonicalTileRange} | null): string {
+    if (!terrainTileRanges) return '';
+
+    return Object.keys(terrainTileRanges)
+        .sort((a, b) => Number(a) - Number(b))
+        .map((zoom) => {
+            const range = terrainTileRanges[zoom];
+            return `${zoom}:${range.minTileXWrapped},${range.maxTileXWrapped},${range.minTileY},${range.maxTileY},${range.minWrap},${range.maxWrap}`;
+        })
+        .join('|');
+}
+
 /**
  * @internal
  * A helper class to help define what should be rendered to texture and how
@@ -30,12 +41,13 @@ const LAYERS_TO_TEXTURES: Record<string, boolean> = {
 export class RenderToTexture {
     painter: Painter;
     terrain: Terrain;
-    pool: RenderPool;
+    rttSize: number;
     /**
      * coordsAscending contains a list of all tiles which should be rendered for one render-to-texture tile
      * e.g. render 4 raster-tiles with size 256px to the 512px render-to-texture tile
      */
     _coordsAscending: {[_: string]: {[_:string]: OverscaledTileID[]}};
+    _coordsAscendingCache: {[_: string]: {key: string; coords: {[_: string]: OverscaledTileID[]}}};
     /**
      * fingerprint string representing the unique state of source tiles and revision
      * for a given render-to-texture tile. Used to detect changes and trigger re-rendering.
@@ -70,15 +82,12 @@ export class RenderToTexture {
     constructor(painter: Painter, terrain: Terrain) {
         this.painter = painter;
         this.terrain = terrain;
-        this.pool = new RenderPool(painter.context, 30, terrain.tileManager.tileSize * terrain.qualityFactor);
-    }
-
-    destruct() {
-        this.pool.destruct();
+        this.rttSize = terrain.tileManager.tileSize * terrain.qualityFactor;
+        this._coordsAscendingCache = {};
     }
 
     getTexture(tile: Tile): Texture {
-        return this.pool.getObjectForId(tile.rtt[this._stacks.length - 1].id).texture;
+        return tile.getRTT(this._stacks.length - 1).texture;
     }
 
     prepareForRender(style: Style, zoom: number) {
@@ -93,29 +102,47 @@ export class RenderToTexture {
         this._renderableTiles = this.terrain.tileManager.getRenderableTiles();
         this._renderableLayerIds = style._order.filter(id => !style._layers[id].isHidden(zoom));
 
+        const rttSourceIds = new Set<string>();
+        for (const id of this._renderableLayerIds) {
+            const layer = style._layers[id];
+            if (LAYERS_TO_TEXTURES[layer.type] && layer.source) rttSourceIds.add(layer.source);
+        }
+
         this._coordsAscending = {};
-        for (const id in style.tileManagers) {
-            this._coordsAscending[id] = {};
-            const tileIDs = style.tileManagers[id].getVisibleCoordinates();
-            const source = style.tileManagers[id].getSource();
+        const terrainTilesSignature = this._renderableTiles.map(tile => tile.tileID.key).join(',');
+        for (const id of rttSourceIds) {
+            const tileManager = style.tileManagers[id];
+            if (!tileManager) continue;
+            const tileIDs = tileManager.getVisibleCoordinates();
+            const source = tileManager.getSource();
             const terrainTileRanges = source instanceof ImageSource ? source.terrainTileRanges : null;
+            const cacheKey = `${terrainTilesSignature}#${tileIDs.map(tileID => tileID.key).join(',')}#${getTerrainTileRangesSignature(terrainTileRanges)}`;
+            const cached = this._coordsAscendingCache[id];
+            if (cached?.key === cacheKey) {
+                this._coordsAscending[id] = cached.coords;
+                continue;
+            }
+
+            const coordsAscending: {[_: string]: OverscaledTileID[]} = {};
             for (const tileID of tileIDs) {
                 const keys = this.terrain.tileManager.getTerrainCoords(tileID, terrainTileRanges);
                 for (const key in keys) {
-                    this._coordsAscending[id][key] ||= [];
-                    this._coordsAscending[id][key].push(keys[key]);
+                    coordsAscending[key] ||= [];
+                    coordsAscending[key].push(keys[key]);
                 }
             }
 
+            this._coordsAscending[id] = coordsAscending;
+            this._coordsAscendingCache[id] = {key: cacheKey, coords: coordsAscending};
         }
 
         this._rttFingerprints = {};
-        for (const id of style._order) {
+        for (const id of this._renderableLayerIds) {
             const layer = style._layers[id];
             const source = layer.source;
             const shouldRenderToTexture = LAYERS_TO_TEXTURES[layer.type];
 
-            if (shouldRenderToTexture && !this._rttFingerprints[source]) {
+            if (source && shouldRenderToTexture && !this._rttFingerprints[source] && this._coordsAscending[source]) {
                 this._rttFingerprints[source] = {};
                 const revision = style.tileManagers[source]?.getState().revision ?? 0;
                 for (const key in this._coordsAscending[source])
@@ -129,7 +156,7 @@ export class RenderToTexture {
                 // rerender if there are different coords to render than in the last rendering
                 // or if the source revision has changed
                 const fingerprint = this._rttFingerprints[source][tile.tileID.key];
-                if (fingerprint && fingerprint !== tile.rttFingerprint[source]) tile.rtt = [];
+                if (fingerprint && fingerprint !== tile.rttFingerprint[source]) tile.releaseRTT(this.painter);
             }
         }
     }
@@ -154,34 +181,16 @@ export class RenderToTexture {
             terrainDrawsContours: this._stackDrawsContours[stack] !== false,
         };
         for (const tile of this._renderableTiles) {
-            // if render pool is full draw current tiles to screen and free pool
-            if (this.pool.isFull()) {
-                drawTerrain(this.painter, this.terrain, this._rttTiles, terrainOptions);
-                this._rttTiles = [];
-                this.pool.freeAllObjects();
-            }
             this._rttTiles.push(tile);
-            // check for cached PoolObject
-            if (tile.rtt[stack]) {
-                const obj = this.pool.getObjectForId(tile.rtt[stack].id);
-                if (obj.stamp === tile.rtt[stack].stamp) {
-                    this.pool.useObject(obj);
-                    continue;
-                }
-            }
-            // get free PoolObject
-            const obj = this.pool.getOrCreateFreeObject();
-            this.pool.useObject(obj);
-            this.pool.stampObject(obj);
-            tile.rtt[stack] = {id: obj.id, stamp: obj.stamp};
-            // prepare PoolObject for rendering
-            painter.context.bindFramebuffer.set(obj.fbo.framebuffer);
+            if (tile.getRTT(stack)) continue;
+            const obj = tile.acquireRTT(painter, stack, this.rttSize);
+            painter.bindRTT(obj);
             painter.context.clear({color: Color.transparent, stencil: 0});
             painter.currentStencilSource = undefined;
             for (const layerId of layers) {
                 const layer = painter.style._layers[layerId];
                 const coords = layer.source ? this._coordsAscending[layer.source][tile.tileID.key] : [tile.tileID];
-                painter.context.viewport.set([0, 0, obj.fbo.width, obj.fbo.height]);
+                painter.context.viewport.set([0, 0, this.rttSize, this.rttSize]);
                 painter._renderTileClippingMasks(layer, coords, true);
                 painter.renderLayer(painter, painter.style.tileManagers[layer.source], layer, coords, options);
                 if (layer.source) tile.rttFingerprint[layer.source] = this._rttFingerprints[layer.source][tile.tileID.key];
@@ -189,7 +198,6 @@ export class RenderToTexture {
         }
         drawTerrain(this.painter, this.terrain, this._rttTiles, terrainOptions);
         this._rttTiles = [];
-        this.pool.freeAllObjects();
     }
 
     renderLayer(layer: StyleLayer, renderOptions: RenderOptions): boolean {

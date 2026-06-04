@@ -50076,7 +50076,7 @@ class Tile {
         this.hasSymbolBuckets = false;
         this.hasRTLText = false;
         this.dependencies = {};
-        this.rtt = [];
+        this.rttObjects = [];
         this.rttFingerprint = {};
         // Counts the number of times a response was already expired when
         // received. We're using this to add a delay when making a new request
@@ -50133,6 +50133,21 @@ class Tile {
             this.horizonFBO.destroy();
             this.horizonFBO = null;
         }
+    }
+    getRTT(stack) {
+        return this.rttObjects[stack];
+    }
+    acquireRTT(painter, stack, size) {
+        return this.rttObjects[stack] = painter.acquireRTT(size);
+    }
+    releaseRTT(painter) {
+        if (this.rttObjects.length === 0)
+            return;
+        for (const obj of this.rttObjects) {
+            if (obj)
+                painter.releaseRTT(obj);
+        }
+        this.rttObjects.length = 0;
     }
     /**
      * Given a data object with a 'buffers' property, load it into
@@ -51485,12 +51500,16 @@ class TileManager extends symbol_layout.Evented {
      * the map is more important.
      */
     updateCacheSize(transform) {
-        const widthInTiles = Math.ceil(transform.width / this._source.tileSize) + 1;
-        const heightInTiles = Math.ceil(transform.height / this._source.tileSize) + 1;
+        const tileSize = this.usedForTerrain && this.tileSize ? this.tileSize : this._source.tileSize;
+        const widthInTiles = Math.ceil(transform.width / tileSize) + 1;
+        const heightInTiles = Math.ceil(transform.height / tileSize) + 1;
         const approxTilesInView = widthInTiles * heightInTiles;
         const commonZoomRange = this._maxTileCacheZoomLevels === null ?
             symbol_layout.config.MAX_TILE_CACHE_ZOOM_LEVELS : this._maxTileCacheZoomLevels;
-        const viewDependentMaxSize = Math.floor(approxTilesInView * commonZoomRange);
+        const pitch = Math.max(0, Math.min(85, transform.pitch || 0));
+        const pitchMultiplier = pitch > 0 ? 1 + Math.min(3, pitch / 30) : 1;
+        const terrainMultiplier = this.usedForTerrain ? 2 : 1;
+        const viewDependentMaxSize = Math.floor(approxTilesInView * commonZoomRange * pitchMultiplier * terrainMultiplier);
         const maxSize = typeof this._maxTileCacheSize === 'number' ?
             Math.min(this._maxTileCacheSize, viewDependentMaxSize) : viewDependentMaxSize;
         this._outOfViewCache.setMaxSize(maxSize);
@@ -62659,6 +62678,7 @@ class TerrainTileManager extends symbol_layout.Evented {
         tileManager.tileSize = this.tileSize;
     }
     destruct() {
+        this.releaseAllRTT();
         this.tileManager.usedForTerrain = false;
         this.tileManager.tileSize = null;
     }
@@ -62681,6 +62701,7 @@ class TerrainTileManager extends symbol_layout.Evented {
         this.tileSize = tileSize;
         this.tileManager.tileSize = tileSize;
         this._sourceTileCache = {};
+        this.releaseAllRTT();
         this._tiles = {};
         this._renderableTilesKeys = [];
         this._lastTilesetChange = now();
@@ -62720,20 +62741,40 @@ class TerrainTileManager extends symbol_layout.Evented {
         }
         // free unused tiles
         for (const key in this._tiles) {
-            if (!keys[key])
+            if (!keys[key]) {
+                this._tiles[key].releaseRTT(this.tileManager.map.painter);
                 delete this._tiles[key];
+            }
         }
     }
     /**
-     * Free render to texture cache
-     * @param tileID - optional, free only corresponding to tileID.
+     * Release cached render-to-texture objects related to a tile ID.
+     * @param tileID - release cache for this tile ID and overlapping descendants/parents.
      */
-    freeRtt(tileID) {
+    releaseRTT(tileID) {
         for (const key in this._tiles) {
             const tile = this._tiles[key];
             if (!tileID || tile.tileID.equals(tileID) || tile.tileID.isChildOf(tileID) || tileID.isChildOf(tile.tileID))
-                tile.rtt = [];
+                tile.releaseRTT(this.tileManager.map.painter);
         }
+    }
+    /**
+     * Release all render-to-texture cache objects.
+     */
+    releaseAllRTT() {
+        for (const key in this._tiles) {
+            this._tiles[key].releaseRTT(this.tileManager.map.painter);
+        }
+    }
+    /**
+     * Compatibility wrapper for existing local call sites.
+     * @param tileID - optional, release only corresponding to tileID.
+     */
+    freeRtt(tileID) {
+        if (tileID)
+            this.releaseRTT(tileID);
+        else
+            this.releaseAllRTT();
     }
     /**
      * get a list of tiles, which are loaded and should be rendered in the current scene
@@ -70191,6 +70232,8 @@ class Painter {
         this.context = new Context(gl);
         this.transform = transform;
         this._tileTextures = {};
+        this._rttObjectRecyclePool = [];
+        this._rttSharedFbo = null;
         this.terrainFacilitator = { depthDirty: true, coordsDirty: false, matrix: symbol_layout.identity(new Float64Array(16)), renderTime: 0 };
         this.setup();
         // Within each layer there are multiple distinct z-planes that can be drawn to.
@@ -70824,6 +70867,48 @@ class Painter {
         const textures = this._tileTextures[size];
         return textures && textures.length > 0 ? textures.pop() : null;
     }
+    acquireRTT(size) {
+        const gl = this.context.gl;
+        const obj = this._rttObjectRecyclePool.pop();
+        if (obj) {
+            if (obj.size !== size) {
+                gl.bindTexture(gl.TEXTURE_2D, obj.texture.texture);
+                gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, size, size, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+                obj.texture.size = [size, size];
+                obj.size = size;
+            }
+            return obj;
+        }
+        const texture = new symbol_layout.Texture(this.context, { width: size, height: size, data: null }, gl.RGBA);
+        texture.bind(gl.LINEAR, gl.CLAMP_TO_EDGE);
+        if (this.context.extTextureFilterAnisotropic) {
+            gl.texParameterf(gl.TEXTURE_2D, this.context.extTextureFilterAnisotropic.TEXTURE_MAX_ANISOTROPY_EXT, this.context.extTextureFilterAnisotropicMax);
+        }
+        return { texture, size };
+    }
+    bindRTT(obj) {
+        const gl = this.context.gl;
+        const size = obj.size;
+        if (!this._rttSharedFbo) {
+            const fbo = this.context.createFramebuffer(size, size, true, true);
+            const depthRenderbuffer = this.context.createRenderbuffer(gl.DEPTH_STENCIL, size, size);
+            fbo.depthAttachment.set(depthRenderbuffer);
+            this._rttSharedFbo = { fbo, depthRenderbuffer, size };
+        }
+        if (this._rttSharedFbo.size !== size) {
+            this.context.bindRenderbuffer.set(this._rttSharedFbo.depthRenderbuffer);
+            gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_STENCIL, size, size);
+            this.context.bindRenderbuffer.set(null);
+            this._rttSharedFbo.fbo.width = size;
+            this._rttSharedFbo.fbo.height = size;
+            this._rttSharedFbo.size = size;
+        }
+        this._rttSharedFbo.fbo.colorAttachment.set(obj.texture.texture);
+        this.context.bindFramebuffer.set(this._rttSharedFbo.fbo.framebuffer);
+    }
+    releaseRTT(obj) {
+        this._rttObjectRecyclePool.push(obj);
+    }
     /**
      * Checks whether a pattern image is needed, and if it is, whether it is not loaded.
      *
@@ -70910,6 +70995,17 @@ class Painter {
                 }
             }
             this._tileTextures = {};
+        }
+        for (const obj of this._rttObjectRecyclePool) {
+            obj.texture.destroy();
+        }
+        this._rttObjectRecyclePool = [];
+        if (this._rttSharedFbo) {
+            this._rttSharedFbo.fbo.colorAttachment.set(null);
+            this._rttSharedFbo.fbo.depthAttachment.set(null);
+            this.context.gl.deleteRenderbuffer(this._rttSharedFbo.depthRenderbuffer);
+            this.context.gl.deleteFramebuffer(this._rttSharedFbo.fbo.framebuffer);
+            this._rttSharedFbo = null;
         }
         if (this.tileExtentBuffer)
             this.tileExtentBuffer.destroy();
@@ -75549,6 +75645,17 @@ const LAYERS_TO_TEXTURES = {
     'color-relief': true,
     daylight: true
 };
+function getTerrainTileRangesSignature(terrainTileRanges) {
+    if (!terrainTileRanges)
+        return '';
+    return Object.keys(terrainTileRanges)
+        .sort((a, b) => Number(a) - Number(b))
+        .map((zoom) => {
+        const range = terrainTileRanges[zoom];
+        return `${zoom}:${range.minTileXWrapped},${range.maxTileXWrapped},${range.minTileY},${range.maxTileY},${range.minWrap},${range.maxWrap}`;
+    })
+        .join('|');
+}
 /**
  * @internal
  * A helper class to help define what should be rendered to texture and how
@@ -75557,13 +75664,11 @@ class RenderToTexture {
     constructor(painter, terrain) {
         this.painter = painter;
         this.terrain = terrain;
-        this.pool = new RenderPool(painter.context, 30, terrain.tileManager.tileSize * terrain.qualityFactor);
-    }
-    destruct() {
-        this.pool.destruct();
+        this.rttSize = terrain.tileManager.tileSize * terrain.qualityFactor;
+        this._coordsAscendingCache = {};
     }
     getTexture(tile) {
-        return this.pool.getObjectForId(tile.rtt[this._stacks.length - 1].id).texture;
+        return tile.getRTT(this._stacks.length - 1).texture;
     }
     prepareForRender(style, zoom) {
         var _a, _b;
@@ -75578,26 +75683,44 @@ class RenderToTexture {
         this._rttTiles = [];
         this._renderableTiles = this.terrain.tileManager.getRenderableTiles();
         this._renderableLayerIds = style._order.filter(id => !style._layers[id].isHidden(zoom));
+        const rttSourceIds = new Set();
+        for (const id of this._renderableLayerIds) {
+            const layer = style._layers[id];
+            if (LAYERS_TO_TEXTURES[layer.type] && layer.source)
+                rttSourceIds.add(layer.source);
+        }
         this._coordsAscending = {};
-        for (const id in style.tileManagers) {
-            this._coordsAscending[id] = {};
-            const tileIDs = style.tileManagers[id].getVisibleCoordinates();
-            const source = style.tileManagers[id].getSource();
+        const terrainTilesSignature = this._renderableTiles.map(tile => tile.tileID.key).join(',');
+        for (const id of rttSourceIds) {
+            const tileManager = style.tileManagers[id];
+            if (!tileManager)
+                continue;
+            const tileIDs = tileManager.getVisibleCoordinates();
+            const source = tileManager.getSource();
             const terrainTileRanges = source instanceof ImageSource ? source.terrainTileRanges : null;
+            const cacheKey = `${terrainTilesSignature}#${tileIDs.map(tileID => tileID.key).join(',')}#${getTerrainTileRangesSignature(terrainTileRanges)}`;
+            const cached = this._coordsAscendingCache[id];
+            if ((cached === null || cached === void 0 ? void 0 : cached.key) === cacheKey) {
+                this._coordsAscending[id] = cached.coords;
+                continue;
+            }
+            const coordsAscending = {};
             for (const tileID of tileIDs) {
                 const keys = this.terrain.tileManager.getTerrainCoords(tileID, terrainTileRanges);
                 for (const key in keys) {
-                    (_c = this._coordsAscending[id])[key] || (_c[key] = []);
-                    this._coordsAscending[id][key].push(keys[key]);
+                    coordsAscending[key] || (coordsAscending[key] = []);
+                    coordsAscending[key].push(keys[key]);
                 }
             }
+            this._coordsAscending[id] = coordsAscending;
+            this._coordsAscendingCache[id] = { key: cacheKey, coords: coordsAscending };
         }
         this._rttFingerprints = {};
-        for (const id of style._order) {
+        for (const id of this._renderableLayerIds) {
             const layer = style._layers[id];
             const source = layer.source;
             const shouldRenderToTexture = LAYERS_TO_TEXTURES[layer.type];
-            if (shouldRenderToTexture && !this._rttFingerprints[source]) {
+            if (source && shouldRenderToTexture && !this._rttFingerprints[source] && this._coordsAscending[source]) {
                 this._rttFingerprints[source] = {};
                 const revision = (_b = (_a = style.tileManagers[source]) === null || _a === void 0 ? void 0 : _a.getState().revision) !== null && _b !== void 0 ? _b : 0;
                 for (const key in this._coordsAscending[source])
@@ -75611,7 +75734,7 @@ class RenderToTexture {
                 // or if the source revision has changed
                 const fingerprint = this._rttFingerprints[source][tile.tileID.key];
                 if (fingerprint && fingerprint !== tile.rttFingerprint[source])
-                    tile.rtt = [];
+                    tile.releaseRTT(this.painter);
             }
         }
     }
@@ -75631,34 +75754,17 @@ class RenderToTexture {
         const layers = this._stacks[stack] || [];
         const terrainOptions = Object.assign(Object.assign({}, options), { terrainRenderToTextureStack: stack, terrainDrawsContours: this._stackDrawsContours[stack] !== false });
         for (const tile of this._renderableTiles) {
-            // if render pool is full draw current tiles to screen and free pool
-            if (this.pool.isFull()) {
-                drawTerrain(this.painter, this.terrain, this._rttTiles, terrainOptions);
-                this._rttTiles = [];
-                this.pool.freeAllObjects();
-            }
             this._rttTiles.push(tile);
-            // check for cached PoolObject
-            if (tile.rtt[stack]) {
-                const obj = this.pool.getObjectForId(tile.rtt[stack].id);
-                if (obj.stamp === tile.rtt[stack].stamp) {
-                    this.pool.useObject(obj);
-                    continue;
-                }
-            }
-            // get free PoolObject
-            const obj = this.pool.getOrCreateFreeObject();
-            this.pool.useObject(obj);
-            this.pool.stampObject(obj);
-            tile.rtt[stack] = { id: obj.id, stamp: obj.stamp };
-            // prepare PoolObject for rendering
-            painter.context.bindFramebuffer.set(obj.fbo.framebuffer);
+            if (tile.getRTT(stack))
+                continue;
+            const obj = tile.acquireRTT(painter, stack, this.rttSize);
+            painter.bindRTT(obj);
             painter.context.clear({ color: symbol_layout.Color.transparent, stencil: 0 });
             painter.currentStencilSource = undefined;
             for (const layerId of layers) {
                 const layer = painter.style._layers[layerId];
                 const coords = layer.source ? this._coordsAscending[layer.source][tile.tileID.key] : [tile.tileID];
-                painter.context.viewport.set([0, 0, obj.fbo.width, obj.fbo.height]);
+                painter.context.viewport.set([0, 0, this.rttSize, this.rttSize]);
                 painter._renderTileClippingMasks(layer, coords, true);
                 painter.renderLayer(painter, painter.style.tileManagers[layer.source], layer, coords, options);
                 if (layer.source)
@@ -75667,7 +75773,6 @@ class RenderToTexture {
         }
         drawTerrain(this.painter, this.terrain, this._rttTiles, terrainOptions);
         this._rttTiles = [];
-        this.pool.freeAllObjects();
     }
     renderLayer(layer, renderOptions) {
         if (layer.isHidden(this.painter.transform.zoom))
@@ -77221,8 +77326,6 @@ let Map$1 = class Map extends Camera {
                 this.terrain.destroy();
             }
             this.terrain = null;
-            if (this.painter.renderToTexture)
-                this.painter.renderToTexture.destruct();
             this.painter.renderToTexture = null;
             this.transform.setMinElevationForCurrentTile(0);
             if (this._centerClampedToGround) {
@@ -77254,7 +77357,7 @@ let Map$1 = class Map extends Camera {
             this._terrainDataCallback = e => {
                 var _a;
                 if (e.dataType === 'style') {
-                    this.terrain.tileManager.freeRtt();
+                    this.terrain.tileManager.releaseAllRTT();
                 }
                 else if (e.dataType === 'source' && e.tile) {
                     if (e.sourceId === options.source && !this._elevationFreeze) {
@@ -77264,10 +77367,10 @@ let Map$1 = class Map extends Camera {
                         }
                     }
                     if (((_a = e.source) === null || _a === void 0 ? void 0 : _a.type) === 'image') {
-                        this.terrain.tileManager.freeRtt();
+                        this.terrain.tileManager.releaseAllRTT();
                     }
                     else {
-                        this.terrain.tileManager.freeRtt(e.tile.tileID);
+                        this.terrain.tileManager.releaseRTT(e.tile.tileID);
                     }
                 }
             };

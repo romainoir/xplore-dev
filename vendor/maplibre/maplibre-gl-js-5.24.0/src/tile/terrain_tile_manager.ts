@@ -79,6 +79,7 @@ export class TerrainTileManager extends Evented {
     destruct() {
         this.tileManager.usedForTerrain = false;
         this.tileManager.tileSize = null;
+        this.releaseAllRTT();
     }
 
     getSource(): Source {
@@ -103,6 +104,7 @@ export class TerrainTileManager extends Evented {
         this.tileSize = tileSize;
         this.tileManager.tileSize = tileSize;
         this._sourceTileCache = {};
+        this.releaseAllRTT();
         this._tiles = {};
         this._renderableTilesKeys = [];
         this._lastTilesetChange = now();
@@ -144,20 +146,39 @@ export class TerrainTileManager extends Evented {
         }
         // free unused tiles
         for (const key in this._tiles) {
-            if (!keys[key]) delete this._tiles[key];
+            if (!keys[key]) {
+                this._tiles[key].releaseRTT(this.tileManager.map.painter);
+                delete this._tiles[key];
+            }
         }
     }
 
     /**
-     * Free render to texture cache
-     * @param tileID - optional, free only corresponding to tileID.
+     * Release RTT objects for `tileID` and its ancestors/descendants.
      */
-    freeRtt(tileID?: OverscaledTileID) {
+    releaseRTT(tileID: OverscaledTileID) {
         for (const key in this._tiles) {
             const tile = this._tiles[key];
-            if (!tileID || tile.tileID.equals(tileID) || tile.tileID.isChildOf(tileID) || tileID.isChildOf(tile.tileID))
-                tile.rtt = [];
+            if (tile.tileID.equals(tileID) || tile.tileID.isChildOf(tileID) || tileID.isChildOf(tile.tileID))
+                tile.releaseRTT(this.tileManager.map.painter);
         }
+    }
+
+    /**
+     * Release RTT objects for all terrain tiles.
+     */
+    releaseAllRTT() {
+        for (const key in this._tiles) {
+            this._tiles[key].releaseRTT(this.tileManager.map.painter);
+        }
+    }
+
+    /**
+     * Backward-compatible wrapper for local callers still using the old name.
+     */
+    freeRtt(tileID?: OverscaledTileID) {
+        if (tileID) this.releaseRTT(tileID);
+        else this.releaseAllRTT();
     }
 
     /**

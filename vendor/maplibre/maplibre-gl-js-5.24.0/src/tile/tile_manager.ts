@@ -446,12 +446,16 @@ export class TileManager extends Evented {
      * the map is more important.
      */
     updateCacheSize(transform: IReadonlyTransform) {
-        const widthInTiles = Math.ceil(transform.width / this._source.tileSize) + 1;
-        const heightInTiles = Math.ceil(transform.height / this._source.tileSize) + 1;
+        const tileSize = this.usedForTerrain && this.tileSize ? this.tileSize : this._source.tileSize;
+        const widthInTiles = Math.ceil(transform.width / tileSize) + 1;
+        const heightInTiles = Math.ceil(transform.height / tileSize) + 1;
         const approxTilesInView = widthInTiles * heightInTiles;
         const commonZoomRange = this._maxTileCacheZoomLevels === null ?
             config.MAX_TILE_CACHE_ZOOM_LEVELS : this._maxTileCacheZoomLevels;
-        const viewDependentMaxSize = Math.floor(approxTilesInView * commonZoomRange);
+        const pitch = Math.max(0, Math.min(85, transform.pitch || 0));
+        const pitchMultiplier = pitch > 0 ? 1 + Math.min(3, pitch / 30) : 1;
+        const terrainMultiplier = this.usedForTerrain ? 2 : 1;
+        const viewDependentMaxSize = Math.floor(approxTilesInView * commonZoomRange * pitchMultiplier * terrainMultiplier);
         const maxSize = typeof this._maxTileCacheSize === 'number' ?
             Math.min(this._maxTileCacheSize, viewDependentMaxSize) : viewDependentMaxSize;
 

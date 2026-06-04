@@ -6,6 +6,7 @@ import {
     TILE_FADE_DURATION,
 } from '../config/map-config.js';
 import { initializeGeocoder } from '../map/geocoder-control.js';
+import { shouldCollectMapResourceTiming } from './performance-audit.js';
 
 const XPLORE_OUTDOOR_STYLE_URL = './styles/map-styles/xplore_outdoor_hybrid-2.json?v=20260525-relief-wip';
 const CARTES_SPRITE_URL = new URL('../../data/vendor/cartes/sprite/sprite', import.meta.url).href;
@@ -273,8 +274,11 @@ export async function createMap() {
         maxPitch: 85,
         antialias: true,
         fadeDuration: TILE_FADE_DURATION,
-        maxTileCacheSize: 500,
+        // 3D camera rotation needs a wider out-of-view tile cache, especially for 256px raster imagery.
+        maxTileCacheSize: 2400,
+        maxTileCacheZoomLevels: 8,
         refreshExpiredTiles: false,
+        collectResourceTiming: shouldCollectMapResourceTiming(),
         attributionControl: false
     });
 

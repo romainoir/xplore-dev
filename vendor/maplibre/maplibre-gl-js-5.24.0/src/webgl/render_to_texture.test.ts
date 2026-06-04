@@ -63,15 +63,23 @@ describe('render to texture', () => {
     } as any as SymbolStyleLayer;
 
     let layersDrawn = 0;
+    const createRTTObject = () => ({
+        texture: {destroy: vi.fn(), texture: {}} as any,
+        size: 512
+    });
     const painter = {
         layersDrawn: 0,
         context: new Context(gl),
         transform: {zoom: 10, calculatePosMatrix: () => {}, getProjectionData(_a) {}, calculateFogMatrix: () => {}},
+        options: {moving: false, rotating: false},
         colorModeForRenderPass: () => ColorMode.alphaBlended,
         getDepthModeFor3D: () => DepthMode.disabled,
         useProgram: () => ({draw: () => { layersDrawn++; }}),
         _renderTileClippingMasks: vi.fn(),
         renderLayer: vi.fn(),
+        acquireRTT: vi.fn(() => createRTTObject()),
+        bindRTT: vi.fn(),
+        releaseRTT: vi.fn(),
         drawFunctions: {
             terrainDepth: vi.fn(),
             terrainCoords: vi.fn(),
@@ -89,7 +97,7 @@ describe('render to texture', () => {
     const style = {
         tileManagers: {
             'maine': {
-                getVisibleCoordinates: () => [tile.tileID],
+                getVisibleCoordinates: vi.fn(() => [tile.tileID]),
                 getSource: () => ({}),
                 getState: vi.fn().mockReturnValue({revision: 0})
             }
@@ -121,8 +129,10 @@ describe('render to texture', () => {
     painter.renderToTexture = rtt;
 
     beforeEach(() => {
-        tile.rtt = [];
+        tile.rttObjects = [];
         tile.rttFingerprint = {};
+        (style.tileManagers['maine'].getVisibleCoordinates as Mock).mockReturnValue([tile.tileID]);
+        (style.tileManagers['maine'].getState as Mock).mockReturnValue({revision: 0});
     });
 
     test('should call painter with overlay tiles for terrain tile', () => {
@@ -148,24 +158,25 @@ describe('render to texture', () => {
         rtt.prepareForRender(style, 0);
 
         tile.rttFingerprint = {maine: '923#0'};
-        tile.rtt = [{id: 1, stamp: 123}];
+        tile.rttObjects = [createRTTObject()];
 
         const otherTileID = new OverscaledTileID(3, 0, 2, 2, 2);
+        (style.tileManagers['maine'].getVisibleCoordinates as Mock).mockReturnValueOnce([otherTileID]);
         (terrain.tileManager.getTerrainCoords as Mock).mockReturnValueOnce({[tile.tileID.key]: otherTileID});
 
         rtt.prepareForRender(style, 0);
 
-        expect(tile.rtt.length).toBe(0);
+        expect(tile.rttObjects.length).toBe(0);
     });
 
     test('should not clear tile cache if state remains same', () => {
         rtt.prepareForRender(style, 0);
         tile.rttFingerprint = {maine: '923#0'};
-        tile.rtt = [{id: 1, stamp: 123}];
+        tile.rttObjects = [createRTTObject()];
 
         rtt.prepareForRender(style, 0);
 
-        expect(tile.rtt.length).toBe(1);
+        expect(tile.rttObjects.length).toBe(1);
     });
 
     test('should render text after a line by not adding the text to the stack', () => {
@@ -214,14 +225,14 @@ describe('render to texture', () => {
         const state = {revision: 0};
         (style.tileManagers['maine'].getState as Mock).mockReturnValue(state);
 
-        tile.rtt = [{id: 1, stamp: 123}];
+        tile.rttObjects = [createRTTObject()];
         tile.rttFingerprint = {maine: '923#0'};
 
         rtt.prepareForRender(style, 0);
-        expect(tile.rtt.length).toBe(1);
+        expect(tile.rttObjects.length).toBe(1);
 
         state.revision = 1;
         rtt.prepareForRender(style, 0);
-        expect(tile.rtt.length).toBe(0);
+        expect(tile.rttObjects.length).toBe(0);
     });
 });
